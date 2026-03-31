@@ -4,111 +4,125 @@
 
 ---
 
-<a name="中文"></a>
-## 中文
-
-**基于 Claude Code 源码重构的开源实现。**
-
-目前提供 Python 版本，Go 版本正在构建中。
-
-### 项目状态
-
-- ✅ **150+ 命令** 已移植
-- ✅ **100+ 工具** 已移植
-- ✅ **28+ 子系统** 运行时
-- ✅ **40+ 测试用例**
-
-### 快速开始
-
-```bash
-# 克隆仓库
-git clone https://github.com/GPT-AGI/Clawd-Codex.git
-cd Clawd-Codex
-
-# 查看移植摘要
-python3 -m src.main summary
-
-# 运行测试
-python3 -m unittest discover -s tests -v
-```
-
-### 路线图
-
-| 阶段 | 状态 |
-|------|------|
-| Python 核心运行时 | ✅ 完成 |
-| 命令/工具镜像系统 | ✅ 完成 |
-| 会话管理与持久化 | ✅ 完成 |
-| **Go 版本** | 🚧 构建中 |
-| 中英文双语教学版 | 📋 计划中 |
-| 24小时自动迭代系统 | 📋 计划中 |
-
-### 参与贡献
-
-欢迎提交 PR！
-
-1. Fork → 修改 → Submit PR
-2. 我们会尽快审核并合并
-
-### 免责声明
-
-- 本项目是对 Claude Code 源码的独立学习和重构实现
-- 本项目不隶属于 Anthropic，未被其认可或维护
-- 我们尊重原始创作者的知识产权
-
----
-
 <a name="english"></a>
 ## English
 
-**Open-source reimplementation based on Claude Code source.**
+**A complete reimplementation of Claude Code source.**
 
-Python version available now. Go version in progress.
+This project is a **full-scale port and reconstruction** of Claude Code, maximizing fidelity to the original while introducing improvements. Python version is available now, with Go version in active development.
+
+### Highlights
+
+- **Complete Port** — Every command, tool, and subsystem rebuilt from the ground up
+- **Maximum Fidelity** — Preserving the original architecture while optimizing implementations
+- **Continuous Improvement** — Enhanced with better error handling, testing, and documentation
 
 ### Project Status
 
-- ✅ **150+ Commands** ported
-- ✅ **100+ Tools** ported
-- ✅ **28+ Subsystems** runtime
-- ✅ **40+ Test cases**
+| Component | Status | Count |
+|-----------|--------|-------|
+| Commands | ✅ Ported | 150+ |
+| Tools | ✅ Ported | 100+ |
+| Subsystems | ✅ Ported | 28+ |
+| Test Cases | ✅ Passing | 40+ |
+
+### Roadmap
+
+| Milestone | Status |
+|-----------|--------|
+| Python complete reimplementation | ✅ Done |
+| Full test coverage | ✅ Done |
+| Session management & persistence | ✅ Done |
+| **Go version (full port)** | 🚧 In Progress |
+| Bilingual tutorial edition | 📋 Planned |
+| 24/7 auto-iteration system | 📋 Planned |
 
 ### Quick Start
 
 ```bash
-# Clone the repo
 git clone https://github.com/GPT-AGI/Clawd-Codex.git
 cd Clawd-Codex
 
-# View porting summary
+# View reimplementation summary
 python3 -m src.main summary
+
+# List all ported commands
+python3 -m src.main commands --limit 20
 
 # Run tests
 python3 -m unittest discover -s tests -v
 ```
 
-### Roadmap
-
-| Stage | Status |
-|-------|--------|
-| Python core runtime | ✅ Done |
-| Command/Tool mirror system | ✅ Done |
-| Session management & persistence | ✅ Done |
-| **Go version** | 🚧 In progress |
-| Bilingual tutorial edition | 📋 Planned |
-| 24/7 auto-iteration system | 📋 Planned |
-
 ### Contributing
 
-PRs welcome!
-
-1. Fork → Modify → Submit PR
-2. We'll review and merge ASAP
+PRs welcome! We're building the most complete open-source Claude Code reimplementation together.
 
 ### Disclaimer
 
-- This is an independent learning and reimplementation of Claude Code source
+- Independent reimplementation of Claude Code source for learning purposes
 - Not affiliated with, endorsed by, or maintained by Anthropic
 - We respect the original creators' intellectual property
+
+---
+
+<a name="中文"></a>
+## 中文
+
+**Claude Code 源码的完整重构实现。**
+
+本项目是对 Claude Code 的**全量移植和重建**，在最大程度还原原始实现的同时引入改进。Python 版本现已可用，Go 版本正在积极开发中。
+
+### 亮点
+
+- **完整移植** — 每个命令、工具和子系统均从底层重建
+- **最大程度还原** — 保留原始架构的同时优化实现
+- **持续改进** — 增强错误处理、测试覆盖和文档
+
+### 项目状态
+
+| 组件 | 状态 | 数量 |
+|------|------|------|
+| 命令 | ✅ 已移植 | 150+ |
+| 工具 | ✅ 已移植 | 100+ |
+| 子系统 | ✅ 已移植 | 28+ |
+| 测试用例 | ✅ 通过 | 40+ |
+
+### 路线图
+
+| 里程碑 | 状态 |
+|--------|------|
+| Python 完整重构 | ✅ 完成 |
+| 完整测试覆盖 | ✅ 完成 |
+| 会话管理与持久化 | ✅ 完成 |
+| **Go 版本（完整移植）** | 🚧 开发中 |
+| 中英文双语教学版 | 📋 计划中 |
+| 24小时自动迭代系统 | 📋 计划中 |
+
+### 快速开始
+
+```bash
+git clone https://github.com/GPT-AGI/Clawd-Codex.git
+cd Clawd-Codex
+
+# 查看重构摘要
+python3 -m src.main summary
+
+# 列出所有已移植命令
+python3 -m src.main commands --limit 20
+
+# 运行测试
+python3 -m unittest discover -s tests -v
+```
+
+### 参与贡献
+
+欢迎提交 PR！我们正在共同构建最完整的 Claude Code 开源重构实现。
+
+### 免责声明
+
+- 对 Claude Code 源码的独立重构实现，用于学习目的
+- 不隶属于 Anthropic，未被其认可或维护
+- 我们尊重原始创作者的知识产权
 
 ---
 
