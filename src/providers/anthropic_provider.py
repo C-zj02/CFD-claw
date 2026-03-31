@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Generator, Optional
+from typing import Generator, Optional
 
 import anthropic
 
