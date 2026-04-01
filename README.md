@@ -143,14 +143,12 @@ python -m src.cli --help   # Show help
 
 ### Example Session
 
-```
+```text
 >>> Write a hello world in Python
 
 Assistant: Sure! Here's a simple Python hello world:
 
-```python
-print("Hello, World!")
-```
+    print("Hello, World!")
 
 >>> /save
 Session saved: 20260401_120000
@@ -183,7 +181,7 @@ Session saved: 20260401_120000
 
 ## 📦 Project Structure
 
-```
+```text
 Clawd-Codex/
 ├── src/
 │   ├── cli.py           # CLI entry
