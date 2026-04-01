@@ -1,5 +1,7 @@
 <div align="center">
 
+**English** | [中文](README_CN.md)
+
 # 🚀 Clawd Codex
 
 **A Complete Python Reimplementation Based on Real Claude Code Source**
