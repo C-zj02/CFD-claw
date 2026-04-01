@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Generator, Optional
+from typing import Any, Generator, Optional, Union
 
 from zhipuai import ZhipuAI
 
@@ -30,15 +30,36 @@ class GLMProvider(BaseProvider):
         # Initialize client
         self.client = ZhipuAI(api_key=api_key)
 
+    def _convert_messages(
+        self,
+        messages: Union[list[ChatMessage], list[dict]]
+    ) -> list[dict]:
+        """Convert messages to GLM format.
+
+        Args:
+            messages: List of ChatMessage objects or dict messages
+
+        Returns:
+            List of dict messages in GLM format
+        """
+        if not messages:
+            return []
+
+        # Handle both ChatMessage objects and dict messages
+        if isinstance(messages[0], dict):
+            return messages
+        else:
+            return [msg.to_dict() for msg in messages]
+
     def chat(
         self,
-        messages: list[ChatMessage] | list[dict],
+        messages: Union[list[ChatMessage], list[dict]],
         **kwargs
     ) -> ChatResponse:
         """Synchronous chat completion.
 
         Args:
-            messages: List of chat messages (ChatMessage objects or dicts)
+            messages: List of chat messages (ChatMessage or dict)
             **kwargs: Additional parameters
 
         Returns:
@@ -46,11 +67,8 @@ class GLMProvider(BaseProvider):
         """
         model = self._get_model(**kwargs)
 
-        # Convert messages - handle both ChatMessage objects and dicts
-        if messages and isinstance(messages[0], dict):
-            glm_messages = messages
-        else:
-            glm_messages = [msg.to_dict() for msg in messages]
+        # Convert messages
+        glm_messages = self._convert_messages(messages)
 
         # Make API call
         response = self.client.chat.completions.create(
@@ -81,13 +99,13 @@ class GLMProvider(BaseProvider):
 
     def chat_stream(
         self,
-        messages: list[ChatMessage] | list[dict],
+        messages: Union[list[ChatMessage], list[dict]],
         **kwargs
     ) -> Generator[str, None, None]:
         """Streaming chat completion.
 
         Args:
-            messages: List of chat messages (ChatMessage objects or dicts)
+            messages: List of chat messages (ChatMessage or dict)
             **kwargs: Additional parameters
 
         Yields:
@@ -95,11 +113,8 @@ class GLMProvider(BaseProvider):
         """
         model = self._get_model(**kwargs)
 
-        # Convert messages - handle both ChatMessage objects and dicts
-        if messages and isinstance(messages[0], dict):
-            glm_messages = messages
-        else:
-            glm_messages = [msg.to_dict() for msg in messages]
+        # Convert messages
+        glm_messages = self._convert_messages(messages)
 
         # Stream API call
         response = self.client.chat.completions.create(
