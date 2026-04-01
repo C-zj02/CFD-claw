@@ -1,0 +1,52 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "clawd-codex"
+version = "0.1.0"
+description = "A complete Python reimplementation of Claude Code CLI - Drop-in replacement experience"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+authors = [
+    {name = "Clawd Codex Team", email = "team@example.com"}
+]
+keywords = ["claude", "cli", "ai", "llm", "anthropic", "openai", "glm"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+dependencies = [
+    "anthropic",
+    "openai",
+    "zhipuai",
+    "python-dotenv",
+    "rich",
+    "prompt-toolkit",
+]
+
+[project.optional-dependencies]
+dev = [
+    "build>=1.0.0",
+    "twine>=5.0.0",
+    "pytest>=8.0.0",
+]
+
+[project.scripts]
+clawd = "src.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/GPT-AGI/Clawd-Codex"
+Repository = "https://github.com/GPT-AGI/Clawd-Codex"
+Documentation = "https://github.com/GPT-AGI/Clawd-Codex#readme"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]

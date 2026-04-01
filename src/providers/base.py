@@ -1,0 +1,105 @@
+"""Base provider abstract class for LLM providers."""
+
+from __future__ import annotations
+
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from typing import Any, Generator, Optional
+
+
+@dataclass
+class ChatMessage:
+    """Represents a chat message."""
+
+    role: str
+    content: str
+
+    def to_dict(self) -> dict[str, str]:
+        """Convert to dictionary."""
+        return {"role": self.role, "content": self.content}
+
+
+@dataclass
+class ChatResponse:
+    """Represents a chat response."""
+
+    content: str
+    model: str
+    usage: dict[str, Any]
+    finish_reason: str
+    reasoning_content: Optional[str] = None
+
+
+class BaseProvider(ABC):
+    """Base class for LLM providers."""
+
+    def __init__(
+        self,
+        api_key: str,
+        base_url: Optional[str] = None,
+        model: Optional[str] = None
+    ):
+        """Initialize provider.
+
+        Args:
+            api_key: API key for authentication
+            base_url: Base URL for API endpoint
+            model: Default model to use
+        """
+        self.api_key = api_key
+        self.base_url = base_url
+        self.model = model
+
+    @abstractmethod
+    def chat(
+        self,
+        messages: list[ChatMessage],
+        **kwargs
+    ) -> ChatResponse:
+        """Synchronous chat completion.
+
+        Args:
+            messages: List of chat messages
+            **kwargs: Additional provider-specific parameters
+
+        Returns:
+            Chat response
+        """
+        pass
+
+    @abstractmethod
+    def chat_stream(
+        self,
+        messages: list[ChatMessage],
+        **kwargs
+    ) -> Generator[str, None, None]:
+        """Streaming chat completion.
+
+        Args:
+            messages: List of chat messages
+            **kwargs: Additional provider-specific parameters
+
+        Yields:
+            Chunks of response content
+        """
+        pass
+
+    @abstractmethod
+    def get_available_models(self) -> list[str]:
+        """Get list of available models.
+
+        Returns:
+            List of model names
+        """
+        pass
+
+    def _get_model(self, **kwargs) -> str:
+        """Get model from kwargs or use default.
+
+        Args:
+            **kwargs: Keyword arguments that may contain 'model'
+
+        Returns:
+            Model name to use
+        """
+        return kwargs.get("model", self.model)
