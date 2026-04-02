@@ -224,9 +224,6 @@ python -m src.cli --help   # Show help
 | `/clear`     | Clear history         |
 | `/exit`      | Exit REPL             |
 
-### Example Session
-
-![Example Session](assets/clawd-code-cli.png)
 
 ***
 
@@ -569,9 +566,6 @@ python -m src.cli --help   # 显示帮助
 | `/clear`     | 清空历史    |
 | `/exit`      | 退出 REPL |
 
-### 示例会话
-
-![示例会话](assets/clawd-code-cli.png)
 
 ***
 
