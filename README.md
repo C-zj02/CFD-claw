@@ -8,12 +8,13 @@
 
 *From TypeScript Source → Rebuilt in Python with ❤️*
 
-***
+---
 
-[!\[GitHub stars\](https://img.shields.io/github/stars/GPT-AGI/Clawd-Codex?style=for-the-badge\&logo=github\&color=yellow null)](https://github.com/GPT-AGI/Clawd-Codex/stargazers)
-[!\[GitHub forks\](https://img.shields.io/github/forks/GPT-AGI/Clawd-Codex?style=for-the-badge\&logo=github\&color=blue null)](https://github.com/GPT-AGI/Clawd-Codex/network/members)
-[!\[License: MIT\](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge null)](https://opensource.org/licenses/MIT)
-[!\[Python 3.10+\](https://img.shields.io/badge/python-3.10+-blue.svg?style=for-the-badge\&logo=python\&logoColor=white null)](https://www.python.org/downloads/)
+[![GitHub stars](https://img.shields.io/github/stars/GPT-AGI/Clawd-Codex?style=for-the-badge&logo=github&color=yellow)](https://github.com/GPT-AGI/Clawd-Codex/stargazers)
+[![GitHub forks](https://img.shields.io/github/forks/GPT-AGI/Clawd-Codex?style=for-the-badge&logo=github&color=blue)](https://github.com/GPT-AGI/Clawd-Codex/network/members)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/downloads/)
+
 
 **🔥 Active Development • New Features Weekly 🔥**
 
