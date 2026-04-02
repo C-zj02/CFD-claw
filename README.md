@@ -15,11 +15,12 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/downloads/)
 
+
 **🔥 Active Development • New Features Weekly 🔥**
 
 </div>
 
----
+***
 
 ## 🎯 What is This?
 
@@ -31,7 +32,7 @@
 
 <div align="center">
 
-![Clawd Codex CLI in Action](assets/clawd-code-cli.png)
+!\[Clawd Codex CLI in Action]\(assets/clawd-code-cli.png null)
 
 **Real CLI • Real Usage • Real Community**
 
@@ -46,7 +47,17 @@
 
 **🚀 Try it now! Fork it, modify it, make it yours! Pull requests welcome!**
 
----
+***
+
+## ⭐ Star History
+
+<a href="https://www.star-history.com/?repos=GPT-AGI%2FClawd-Codex&type=date&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/image?repos=GPT-AGI/Clawd-Codex&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/image?repos=GPT-AGI/Clawd-Codex&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/image?repos=GPT-AGI/Clawd-Codex&type=date&legend=top-left" />
+ </picture>
+</a>
 
 ## ✨ Features
 
@@ -77,18 +88,17 @@ clawd --version    # Check version
 clawd config       # View settings
 ```
 
----
+***
 
 ## 📊 Status
 
-| Component | Status | Count |
-|-----------|--------|-------|
-| Commands | ✅ Complete | 150+ |
-| Tools | ✅ Complete | 100+ |
-| Test Coverage | ✅ 90%+ | 75+ tests |
-| Documentation | ✅ Complete | 10+ docs |
+| Component     | Status     | Count     |
+| ------------- | ---------- | --------- |
+| Commands      | ✅ Complete | 150+      |
+| Tools         | ✅ Complete | 100+      |
+| Test Coverage | ✅ 90%+     | 75+ tests |
+| Documentation | ✅ Complete | 10+ docs  |
 
----
 
 ## 🚀 Quick Start
 
@@ -110,12 +120,12 @@ uv pip install -r requirements.txt
 
 #### Option 1: Interactive (Recommended)
 
-
 ```bash
 python -m src.cli login
 ```
 
 This flow will:
+
 1. ask you to choose a provider: anthropic / openai / glm
 2. ask for that provider's API key
 3. optionally save a custom base URL
@@ -147,8 +157,6 @@ The configuration file is saved in in `~/.clawd/config.json`. Example structure:
 }
 ```
 
-
-
 ### Run
 
 ```bash
@@ -158,35 +166,26 @@ python -m src.cli --help   # Show help
 
 **That's it!** Start chatting with AI in 3 steps.
 
----
+***
 
 ## 💡 Usage
 
 ### REPL Commands
 
-| Command | Description |
-|---------|-------------|
-| `/help` | Show all commands |
-| `/save` | Save session |
-| `/load <id>` | Load session |
+| Command      | Description           |
+| ------------ | --------------------- |
+| `/help`      | Show all commands     |
+| `/save`      | Save session          |
+| `/load <id>` | Load session          |
 | `/multiline` | Toggle multiline mode |
-| `/clear` | Clear history |
-| `/exit` | Exit REPL |
+| `/clear`     | Clear history         |
+| `/exit`      | Exit REPL             |
 
 ### Example Session
 
-```text
->>> Write a hello world in Python
+![Example Session](assets/clawd-code-cli.png)
 
-Assistant: Sure! Here's a simple Python hello world:
-
-    print("Hello, World!")
-
->>> /save
-Session saved: 20260401_120000
-```
-
----
+***
 
 ## 🎓 Why Clawd Codex?
 
@@ -209,7 +208,7 @@ Session saved: 20260401_120000
 - **Rich REPL** — Tab completion, syntax highlighting
 - **Session persistence** — Never lose your work
 
----
+***
 
 ## 📦 Project Structure
 
@@ -225,7 +224,7 @@ Clawd-Codex/
 └── docs/                # Complete docs
 ```
 
----
+***
 
 ## 🗺️ Roadmap
 
@@ -237,7 +236,7 @@ Clawd-Codex/
 - [ ] PyPI package
 - [ ] Go version
 
----
+***
 
 ## 🤝 Contributing
 
@@ -251,16 +250,16 @@ python -m pytest tests/ -v
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
----
+***
 
 ## 📖 Documentation
 
-- **[SETUP_GUIDE.md](SETUP_GUIDE.md)** — Detailed installation
+- **[SETUP\_GUIDE.md](SETUP_GUIDE.md)** — Detailed installation
 - **[CONTRIBUTING.md](CONTRIBUTING.md)** — Development guide
 - **[TESTING.md](TESTING.md)** — Testing guide
 - **[CHANGELOG.md](CHANGELOG.md)** — Version history
 
----
+***
 
 ## ⚡ Performance
 
@@ -268,23 +267,24 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 - **Memory**: < 50MB
 - **Response**: Streaming (real-time)
 
----
+***
 
 ## 🔒 Security
 
 ✅ **Security Audited**
+
 - No sensitive data in Git
 - API keys encrypted in config
 - `.env` files ignored
 - Safe for production
 
----
+***
 
 ## 📄 License
 
 MIT License — See [LICENSE](LICENSE)
 
----
+***
 
 ## 🙏 Acknowledgments
 
@@ -292,7 +292,7 @@ MIT License — See [LICENSE](LICENSE)
 - Independent educational project
 - Not affiliated with Anthropic
 
----
+***
 
 <div align="center">
 
@@ -306,9 +306,9 @@ If you find this useful, please **star** ⭐ the repo!
 
 </div>
 
----
+***
 
----
+***
 
 # 中文版
 
@@ -322,18 +322,18 @@ If you find this useful, please **star** ⭐ the repo!
 
 *从 TypeScript 源码 → 用 Python 重建 ❤️*
 
----
+***
 
-[![GitHub stars](https://img.shields.io/github/stars/GPT-AGI/Clawd-Codex?style=for-the-badge&logo=github&color=yellow)](https://github.com/GPT-AGI/Clawd-Codex/stargazers)
-[![GitHub forks](https://img.shields.io/github/forks/GPT-AGI/Clawd-Codex?style=for-the-badge&logo=github&color=blue)](https://github.com/GPT-AGI/Clawd-Codex/network/members)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/downloads/)
+[!\[GitHub stars\](https://img.shields.io/github/stars/GPT-AGI/Clawd-Codex?style=for-the-badge\&logo=github\&color=yellow null)](https://github.com/GPT-AGI/Clawd-Codex/stargazers)
+[!\[GitHub forks\](https://img.shields.io/github/forks/GPT-AGI/Clawd-Codex?style=for-the-badge\&logo=github\&color=blue null)](https://github.com/GPT-AGI/Clawd-Codex/network/members)
+[!\[License: MIT\](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge null)](https://opensource.org/licenses/MIT)
+[!\[Python 3.10+\](https://img.shields.io/badge/python-3.10+-blue.svg?style=for-the-badge\&logo=python\&logoColor=white null)](https://www.python.org/downloads/)
 
 **🔥 活跃开发中 • 每周更新新功能 🔥**
 
 </div>
 
----
+***
 
 ## 🎯 这是什么？
 
@@ -345,7 +345,7 @@ If you find this useful, please **star** ⭐ the repo!
 
 <div align="center">
 
-![Clawd Codex CLI 实际运行](assets/clawd-code-cli.png)
+!\[Clawd Codex CLI 实际运行]\(assets/clawd-code-cli.png null)
 
 **真实的 CLI • 真实的使用 • 真实的社区**
 
@@ -360,7 +360,7 @@ If you find this useful, please **star** ⭐ the repo!
 
 **🚀 立即试用！Fork 它、修改它、让它成为你的！欢迎提交 Pull Request！**
 
----
+***
 
 ## ✨ 特性
 
@@ -391,18 +391,22 @@ clawd --version    # 检查版本
 clawd config       # 查看设置
 ```
 
----
+***
 
 ## 📊 状态
 
-| 组件 | 状态 | 数量 |
-|------|------|------|
-| 命令 | ✅ 完成 | 150+ |
-| 工具 | ✅ 完成 | 100+ |
+| 组件    | 状态     | 数量     |
+| ----- | ------ | ------ |
+| 命令    | ✅ 完成   | 150+   |
+| 工具    | ✅ 完成   | 100+   |
 | 测试覆盖率 | ✅ 90%+ | 75+ 测试 |
-| 文档 | ✅ 完成 | 10+ 文档 |
+| 文档    | ✅ 完成   | 10+ 文档 |
 
----
+## ⭐ Star 历史
+
+[![Star History Chart](https://api.star-history.com/svg?repos=GPT-AGI/Clawd-Codex&type=Date)](https://star-history.com/#GPT-AGI/Clawd-Codex&Date)
+
+***
 
 ## 🚀 快速开始
 
@@ -416,21 +420,49 @@ cd Clawd-Codex
 uv venv --python 3.11
 source .venv/bin/activate
 
-# 安装依赖
-pip install anthropic openai zhipuai python-dotenv rich prompt-toolkit
+# 安装
+uv pip install -r requirements.txt
 ```
 
 ### 配置
 
+#### 方式 1：交互式（推荐）
+
 ```bash
-# 方式 1：交互式（推荐）
 python -m src.cli login
+```
 
-# 方式 2：环境变量
-export GLM_API_KEY="your-key"
+这个流程会：
 
-# 方式 3：.env 文件
-echo 'GLM_API_KEY=your-key' > .env
+1. 让你选择 provider：anthropic / openai / glm
+2. 让你输入该 provider 的 API key
+3. 可选：保存自定义 base URL
+4. 可选：保存默认 model
+5. 将该 provider 设为默认
+
+配置文件会保存在 `~/.clawd/config.json`。示例结构：
+
+```json
+{
+  "default_provider": "glm",
+  "providers": {
+    "anthropic": {
+      "api_key": "base64-encoded-key",
+      "base_url": "https://api.anthropic.com",
+      "default_model": "claude-sonnet-4-20250514"
+    },
+    "openai": {
+      "api_key": "base64-encoded-key",
+      "base_url": "https://api.openai.com/v1",
+      "default_model": "gpt-4"
+    },
+    "glm": {
+      "api_key": "base64-encoded-key",
+      "base_url": "https://open.bigmodel.cn/api/paas/v4",
+      "default_model": "glm-4.5"
+    }
+  }
+}
 ```
 
 ### 运行
@@ -442,35 +474,26 @@ python -m src.cli --help   # 显示帮助
 
 **就这样！** 3 步开始与 AI 对话。
 
----
+***
 
 ## 💡 使用
 
 ### REPL 命令
 
-| 命令 | 描述 |
-|------|------|
-| `/help` | 显示所有命令 |
-| `/save` | 保存会话 |
-| `/load <id>` | 加载会话 |
-| `/multiline` | 切换多行模式 |
-| `/clear` | 清空历史 |
-| `/exit` | 退出 REPL |
+| 命令           | 描述      |
+| ------------ | ------- |
+| `/help`      | 显示所有命令  |
+| `/save`      | 保存会话    |
+| `/load <id>` | 加载会话    |
+| `/multiline` | 切换多行模式  |
+| `/clear`     | 清空历史    |
+| `/exit`      | 退出 REPL |
 
 ### 示例会话
 
-```text
->>> 用 Python 写一个 hello world
+![示例会话](assets/clawd-code-cli.png)
 
-Assistant: 当然！这是一个简单的 Python hello world：
-
-    print("Hello, World!")
-
->>> /save
-会话已保存：20260401_120000
-```
-
----
+***
 
 ## 🎓 为什么选择 Clawd Codex？
 
@@ -493,7 +516,7 @@ Assistant: 当然！这是一个简单的 Python hello world：
 - **丰富的 REPL** — Tab 补全、语法高亮
 - **会话持久化** — 永不丢失你的工作
 
----
+***
 
 ## 📦 项目结构
 
@@ -509,7 +532,7 @@ Clawd-Codex/
 └── docs/                # 完整文档
 ```
 
----
+***
 
 ## 🗺️ 路线图
 
@@ -521,7 +544,7 @@ Clawd-Codex/
 - [ ] PyPI 包
 - [ ] Go 版本
 
----
+***
 
 ## 🤝 贡献
 
@@ -535,16 +558,16 @@ python -m pytest tests/ -v
 
 查看 [CONTRIBUTING.md](CONTRIBUTING.md) 了解指南。
 
----
+***
 
 ## 📖 文档
 
-- **[SETUP_GUIDE.md](SETUP_GUIDE.md)** — 详细安装说明
+- **[SETUP\_GUIDE.md](SETUP_GUIDE.md)** — 详细安装说明
 - **[CONTRIBUTING.md](CONTRIBUTING.md)** — 开发指南
 - **[TESTING.md](TESTING.md)** — 测试指南
 - **[CHANGELOG.md](CHANGELOG.md)** — 版本历史
 
----
+***
 
 ## ⚡ 性能
 
@@ -552,23 +575,24 @@ python -m pytest tests/ -v
 - **内存占用**：< 50MB
 - **响应**：流式传输（实时）
 
----
+***
 
 ## 🔒 安全
 
 ✅ **已通过安全审计**
+
 - Git 中无敏感数据
 - API 密钥在配置中加密
 - `.env` 文件被忽略
 - 生产环境安全
 
----
+***
 
 ## 📄 许可证
 
 MIT 许可证 — 查看 [LICENSE](LICENSE)
 
----
+***
 
 ## 🙏 致谢
 
@@ -576,7 +600,7 @@ MIT 许可证 — 查看 [LICENSE](LICENSE)
 - 独立的教育项目
 - 未隶属于 Anthropic
 
----
+***
 
 <div align="center">
 
@@ -590,7 +614,7 @@ MIT 许可证 — 查看 [LICENSE](LICENSE)
 
 </div>
 
----
+***
 
 # Français
 
@@ -604,18 +628,18 @@ MIT 许可证 — 查看 [LICENSE](LICENSE)
 
 *Du code source TypeScript → Reconstruit en Python avec ❤️*
 
----
+***
 
-[![GitHub stars](https://img.shields.io/github/stars/GPT-AGI/Clawd-Codex?style=for-the-badge&logo=github&color=yellow)](https://github.com/GPT-AGI/Clawd-Codex/stargazers)
-[![GitHub forks](https://img.shields.io/github/forks/GPT-AGI/Clawd-Codex?style=for-the-badge&logo=github&color=blue)](https://github.com/GPT-AGI/Clawd-Codex/network/members)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/downloads/)
+[!\[GitHub stars\](https://img.shields.io/github/stars/GPT-AGI/Clawd-Codex?style=for-the-badge\&logo=github\&color=yellow null)](https://github.com/GPT-AGI/Clawd-Codex/stargazers)
+[!\[GitHub forks\](https://img.shields.io/github/forks/GPT-AGI/Clawd-Codex?style=for-the-badge\&logo=github\&color=blue null)](https://github.com/GPT-AGI/Clawd-Codex/network/members)
+[!\[License: MIT\](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge null)](https://opensource.org/licenses/MIT)
+[!\[Python 3.10+\](https://img.shields.io/badge/python-3.10+-blue.svg?style=for-the-badge\&logo=python\&logoColor=white null)](https://www.python.org/downloads/)
 
 **🔥 Développement actif • Nouvelles fonctionnalités chaque semaine 🔥**
 
 </div>
 
----
+***
 
 ## 🎯 Qu'est-ce que c'est ?
 
@@ -627,7 +651,7 @@ MIT 许可证 — 查看 [LICENSE](LICENSE)
 
 <div align="center">
 
-![Clawd Codex CLI en action](assets/clawd-code-cli.png)
+!\[Clawd Codex CLI en action]\(assets/clawd-code-cli.png null)
 
 **Vrai CLI • Vraie utilisation • Vraie communauté**
 
@@ -642,7 +666,7 @@ MIT 许可证 — 查看 [LICENSE](LICENSE)
 
 **🚀 Essayez-le maintenant ! Forkez-le, modifiez-le, rendez-le vôtre ! Les pull requests sont les bienvenues !**
 
----
+***
 
 ## ✨ Fonctionnalités
 
@@ -673,18 +697,18 @@ clawd --version    # Vérifier la version
 clawd config       # Voir les paramètres
 ```
 
----
+***
 
 ## 📊 Statut
 
-| Composant | Statut | Quantité |
-|-----------|--------|----------|
-| Commandes | ✅ Complet | 150+ |
-| Outils | ✅ Complet | 100+ |
-| Couverture de tests | ✅ 90%+ | 75+ tests |
-| Documentation | ✅ Complète | 10+ docs |
+| Composant           | Statut     | Quantité  |
+| ------------------- | ---------- | --------- |
+| Commandes           | ✅ Complet  | 150+      |
+| Outils              | ✅ Complet  | 100+      |
+| Couverture de tests | ✅ 90%+     | 75+ tests |
+| Documentation       | ✅ Complète | 10+ docs  |
 
----
+***
 
 ## 🚀 Démarrage rapide
 
@@ -724,35 +748,26 @@ python -m src.cli --help   # Afficher l'aide
 
 **C'est tout !** Commencez à discuter avec l'IA en 3 étapes.
 
----
+***
 
 ## 💡 Utilisation
 
 ### Commandes REPL
 
-| Commande | Description |
-|----------|-------------|
-| `/help` | Afficher toutes les commandes |
-| `/save` | Sauvegarder la session |
-| `/load <id>` | Charger une session |
+| Commande     | Description                   |
+| ------------ | ----------------------------- |
+| `/help`      | Afficher toutes les commandes |
+| `/save`      | Sauvegarder la session        |
+| `/load <id>` | Charger une session           |
 | `/multiline` | Basculer le mode multi-lignes |
-| `/clear` | Effacer l'historique |
-| `/exit` | Quitter le REPL |
+| `/clear`     | Effacer l'historique          |
+| `/exit`      | Quitter le REPL               |
 
 ### Exemple de session
 
-```text
->>> Écrivez un hello world en Python
+![Exemple de session](assets/clawd-code-cli.png)
 
-Assistant: Bien sûr ! Voici un simple hello world en Python :
-
-    print("Hello, World!")
-
->>> /save
-Session sauvegardée : 20260401_120000
-```
-
----
+***
 
 ## 🎓 Pourquoi Clawd Codex ?
 
@@ -775,7 +790,7 @@ Session sauvegardée : 20260401_120000
 - **REPL riche** — Complétion par tabulation, coloration syntaxique
 - **Persistance des sessions** — Ne perdez jamais votre travail
 
----
+***
 
 ## 📦 Structure du projet
 
@@ -791,7 +806,7 @@ Clawd-Codex/
 └── docs/                # Docs complètes
 ```
 
----
+***
 
 ## 🗺️ Feuille de route
 
@@ -803,7 +818,7 @@ Clawd-Codex/
 - [ ] Paquet PyPI
 - [ ] Version Go
 
----
+***
 
 ## 🤝 Contribution
 
@@ -817,16 +832,16 @@ python -m pytest tests/ -v
 
 Voir [CONTRIBUTING.md](CONTRIBUTING.md) pour les directives.
 
----
+***
 
 ## 📖 Documentation
 
-- **[SETUP_GUIDE.md](SETUP_GUIDE.md)** — Installation détaillée
+- **[SETUP\_GUIDE.md](SETUP_GUIDE.md)** — Installation détaillée
 - **[CONTRIBUTING.md](CONTRIBUTING.md)** — Guide de développement
 - **[TESTING.md](TESTING.md)** — Guide de test
 - **[CHANGELOG.md](CHANGELOG.md)** — Historique des versions
 
----
+***
 
 ## ⚡ Performance
 
@@ -834,23 +849,24 @@ Voir [CONTRIBUTING.md](CONTRIBUTING.md) pour les directives.
 - **Mémoire** : < 50MB
 - **Réponse** : Streaming (temps réel)
 
----
+***
 
 ## 🔒 Sécurité
 
 ✅ **Audit de sécurité effectué**
+
 - Pas de données sensibles dans Git
 - Clés API chiffrées dans la configuration
 - Fichiers `.env` ignorés
 - Sûr pour la production
 
----
+***
 
 ## 📄 Licence
 
 Licence MIT — Voir [LICENSE](LICENSE)
 
----
+***
 
 ## 🙏 Remerciements
 
@@ -858,7 +874,7 @@ Licence MIT — Voir [LICENSE](LICENSE)
 - Projet éducatif indépendant
 - Non affilié à Anthropic
 
----
+***
 
 <div align="center">
 
@@ -872,7 +888,7 @@ Si vous trouvez cela utile, veuillez **star** ⭐ le repo !
 
 </div>
 
----
+***
 
 # Русский
 
@@ -886,18 +902,18 @@ Si vous trouvez cela utile, veuillez **star** ⭐ le repo !
 
 *Из исходного кода TypeScript → Перестроен на Python с ❤️*
 
----
+***
 
-[![GitHub stars](https://img.shields.io/github/stars/GPT-AGI/Clawd-Codex?style=for-the-badge&logo=github&color=yellow)](https://github.com/GPT-AGI/Clawd-Codex/stargazers)
-[![GitHub forks](https://img.shields.io/github/forks/GPT-AGI/Clawd-Codex?style=for-the-badge&logo=github&color=blue)](https://github.com/GPT-AGI/Clawd-Codex/network/members)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/downloads/)
+[!\[GitHub stars\](https://img.shields.io/github/stars/GPT-AGI/Clawd-Codex?style=for-the-badge\&logo=github\&color=yellow null)](https://github.com/GPT-AGI/Clawd-Codex/stargazers)
+[!\[GitHub forks\](https://img.shields.io/github/forks/GPT-AGI/Clawd-Codex?style=for-the-badge\&logo=github\&color=blue null)](https://github.com/GPT-AGI/Clawd-Codex/network/members)
+[!\[License: MIT\](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge null)](https://opensource.org/licenses/MIT)
+[!\[Python 3.10+\](https://img.shields.io/badge/python-3.10+-blue.svg?style=for-the-badge\&logo=python\&logoColor=white null)](https://www.python.org/downloads/)
 
 **🔥 Активная разработка • Новые функции еженедельно 🔥**
 
 </div>
 
----
+***
 
 ## 🎯 Что это?
 
@@ -909,7 +925,7 @@ Si vous trouvez cela utile, veuillez **star** ⭐ le repo !
 
 <div align="center">
 
-![Clawd Codex CLI в действии](assets/clawd-code-cli.png)
+!\[Clawd Codex CLI в действии]\(assets/clawd-code-cli.png null)
 
 **Реальный CLI • Реальное использование • Реальное сообщество**
 
@@ -924,7 +940,7 @@ Si vous trouvez cela utile, veuillez **star** ⭐ le repo !
 
 **🚀 Попробуйте сейчас! Форкните, изменяйте, сделайте своим! Pull requests приветствуются!**
 
----
+***
 
 ## ✨ Возможности
 
@@ -955,18 +971,18 @@ clawd --version    # Проверить версию
 clawd config       # Просмотреть настройки
 ```
 
----
+***
 
 ## 📊 Статус
 
-| Компонент | Статус | Количество |
-|-----------|--------|------------|
-| Команды | ✅ Завершено | 150+ |
-| Инструменты | ✅ Завершено | 100+ |
-| Покрытие тестами | ✅ 90%+ | 75+ тестов |
-| Документация | ✅ Завершено | 10+ документов |
+| Компонент        | Статус      | Количество     |
+| ---------------- | ----------- | -------------- |
+| Команды          | ✅ Завершено | 150+           |
+| Инструменты      | ✅ Завершено | 100+           |
+| Покрытие тестами | ✅ 90%+      | 75+ тестов     |
+| Документация     | ✅ Завершено | 10+ документов |
 
----
+***
 
 ## 🚀 Быстрый старт
 
@@ -1006,35 +1022,26 @@ python -m src.cli --help   # Показать справку
 
 **Вот и всё!** Начните общаться с ИИ за 3 шага.
 
----
+***
 
 ## 💡 Использование
 
 ### Команды REPL
 
-| Команда | Описание |
-|---------|----------|
-| `/help` | Показать все команды |
-| `/save` | Сохранить сессию |
-| `/load <id>` | Загрузить сессию |
+| Команда      | Описание                        |
+| ------------ | ------------------------------- |
+| `/help`      | Показать все команды            |
+| `/save`      | Сохранить сессию                |
+| `/load <id>` | Загрузить сессию                |
 | `/multiline` | Переключить многострочный режим |
-| `/clear` | Очистить историю |
-| `/exit` | Выйти из REPL |
+| `/clear`     | Очистить историю                |
+| `/exit`      | Выйти из REPL                   |
 
 ### Пример сессии
 
-```text
->>> Напишите hello world на Python
+![Пример сессии](assets/clawd-code-cli.png)
 
-Assistant: Конечно! Вот простой hello world на Python:
-
-    print("Hello, World!")
-
->>> /save
-Сессия сохранена: 20260401_120000
-```
-
----
+***
 
 ## 🎓 Почему Clawd Codex?
 
@@ -1049,15 +1056,13 @@ Assistant: Конечно! Вот простой hello world на Python:
 - **Аннотации типов** — Полные аннотации типов
 - **Современный Python** — Использует возможности 3.10+
 - **Идиоматичный** — Чистый Python код
-
 - **Нацелен на пользователя**
-
 - **3-шаговая настройка** — Клонировать, настроить, запустить
 - **Интерактивная настройка** — `clawd login` направляет вас
 - **Богатый REPL** — Автозаполнение табуляцией, подсветка синтаксиса
 - **Сохранение сессий** — Никогда не теряйте свою работу
 
----
+***
 
 ## 📦 Структура проекта
 
@@ -1073,7 +1078,7 @@ Clawd-Codex/
 └── docs/                # Полная документация
 ```
 
----
+***
 
 ## 🗺️ Дорожная карта
 
@@ -1085,7 +1090,7 @@ Clawd-Codex/
 - [ ] Пакет PyPI
 - [ ] Версия на Go
 
----
+***
 
 ## 🤝 Участие
 
@@ -1099,16 +1104,16 @@ python -m pytest tests/ -v
 
 См. [CONTRIBUTING.md](CONTRIBUTING.md) для руководства.
 
----
+***
 
 ## 📖 Документация
 
-- **[SETUP_GUIDE.md](SETUP_GUIDE.md)** — Подробная установка
+- **[SETUP\_GUIDE.md](SETUP_GUIDE.md)** — Подробная установка
 - **[CONTRIBUTING.md](CONTRIBUTING.md)** — Руководство по разработке
 - **[TESTING.md](TESTING.md)** — Руководство по тестированию
 - **[CHANGELOG.md](CHANGELOG.md)** — История версий
 
----
+***
 
 ## ⚡ Производительность
 
@@ -1116,23 +1121,24 @@ python -m pytest tests/ -v
 - **Память**: < 50MB
 - **Ответ**: Потоковая передача (реальное время)
 
----
+***
 
 ## 🔒 Безопасность
 
 ✅ **Проверка безопасности пройдена**
+
 - Нет конфиденциальных данных в Git
 - API ключи зашифрованы в конфигурации
 - Файлы `.env` игнорируются
 - Безопасно для продакшена
 
----
+***
 
 ## 📄 Лицензия
 
 MIT Лицензия — См. [LICENSE](LICENSE)
 
----
+***
 
 ## 🙏 Благодарности
 
@@ -1140,7 +1146,7 @@ MIT Лицензия — См. [LICENSE](LICENSE)
 - Независимый образовательный проект
 - Не связан с Anthropic
 
----
+***
 
 <div align="center">
 
@@ -1154,7 +1160,7 @@ MIT Лицензия — См. [LICENSE](LICENSE)
 
 </div>
 
----
+***
 
 # हिन्दी
 
@@ -1168,18 +1174,18 @@ MIT Лицензия — См. [LICENSE](LICENSE)
 
 *TypeScript स्रोत से → Python में ❤️ के साथ पुनर्निर्मित*
 
----
+***
 
-[![GitHub stars](https://img.shields.io/github/stars/GPT-AGI/Clawd-Codex?style=for-the-badge&logo=github&color=yellow)](https://github.com/GPT-AGI/Clawd-Codex/stargazers)
-[![GitHub forks](https://img.shields.io/github/forks/GPT-AGI/Clawd-Codex?style=for-the-badge&logo=github&color=blue)](https://github.com/GPT-AGI/Clawd-Codex/network/members)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/downloads/)
+[!\[GitHub stars\](https://img.shields.io/github/stars/GPT-AGI/Clawd-Codex?style=for-the-badge\&logo=github\&color=yellow null)](https://github.com/GPT-AGI/Clawd-Codex/stargazers)
+[!\[GitHub forks\](https://img.shields.io/github/forks/GPT-AGI/Clawd-Codex?style=for-the-badge\&logo=github\&color=blue null)](https://github.com/GPT-AGI/Clawd-Codex/network/members)
+[!\[License: MIT\](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge null)](https://opensource.org/licenses/MIT)
+[!\[Python 3.10+\](https://img.shields.io/badge/python-3.10+-blue.svg?style=for-the-badge\&logo=python\&logoColor=white null)](https://www.python.org/downloads/)
 
 **🔥 सक्रिय विकास • साप्ताहिक नई सुविधाएँ 🔥**
 
 </div>
 
----
+***
 
 ## 🎯 यह क्या है?
 
@@ -1191,7 +1197,7 @@ MIT Лицензия — См. [LICENSE](LICENSE)
 
 <div align="center">
 
-![Clawd Codex CLI एक्शन में](assets/clawd-code-cli.png)
+!\[Clawd Codex CLI एक्शन में]\(assets/clawd-code-cli.png null)
 
 **वास्तविक CLI • वास्तविक उपयोग • वास्तविक समुदाय**
 
@@ -1206,7 +1212,7 @@ MIT Лицензия — См. [LICENSE](LICENSE)
 
 **🚀 अभी आज़माएं! इसे फोर्क करें, संशोधित करें, अपना बनाएं! Pull requests का स्वागत है!**
 
----
+***
 
 ## ✨ विशेषताएँ
 
@@ -1237,18 +1243,18 @@ clawd --version    # संस्करण जांचें
 clawd config       # सेटिंग्स देखें
 ```
 
----
+***
 
 ## 📊 स्थिति
 
-| घटक | स्थिति | संख्या |
-|------|--------|--------|
-| कमांड | ✅ पूर्ण | 150+ |
-| उपकरण | ✅ पूर्ण | 100+ |
-| परीक्षण कवरेज | ✅ 90%+ | 75+ परीक्षण |
+| घटक           | स्थिति  | संख्या        |
+| ------------- | ------- | ------------- |
+| कमांड         | ✅ पूर्ण | 150+          |
+| उपकरण         | ✅ पूर्ण | 100+          |
+| परीक्षण कवरेज | ✅ 90%+  | 75+ परीक्षण   |
 | दस्तावेज़ीकरण | ✅ पूर्ण | 10+ दस्तावेज़ |
 
----
+***
 
 ## 🚀 त्वरित आरंभ
 
@@ -1288,35 +1294,26 @@ python -m src.cli --help   # सहायता दिखाएं
 
 **बस इतना ही!** 3 चरणों में AI के साथ चैट करना शुरू करें।
 
----
+***
 
 ## 💡 उपयोग
 
 ### REPL कमांड
 
-| कमांड | विवरण |
-|-------|--------|
-| `/help` | सभी कमांड दिखाएं |
-| `/save` | सत्र सहेजें |
-| `/load <id>` | सत्र लोड करें |
+| कमांड        | विवरण                    |
+| ------------ | ------------------------ |
+| `/help`      | सभी कमांड दिखाएं         |
+| `/save`      | सत्र सहेजें              |
+| `/load <id>` | सत्र लोड करें            |
 | `/multiline` | बहु-पंक्ति मोड टॉगल करें |
-| `/clear` | इतिहास साफ़ करें |
-| `/exit` | REPL से बाहर निकलें |
+| `/clear`     | इतिहास साफ़ करें         |
+| `/exit`      | REPL से बाहर निकलें      |
 
 ### उदाहरण सत्र
 
-```text
->>> Python में एक hello world लिखें
+![उदाहरण सत्र](assets/clawd-code-cli.png)
 
-Assistant: ज़रूर! यहाँ एक सरल Python hello world है:
-
-    print("Hello, World!")
-
->>> /save
-सत्र सहेजा गया: 20260401_120000
-```
-
----
+***
 
 ## 🎓 Clawd Codex क्यों?
 
@@ -1339,7 +1336,7 @@ Assistant: ज़रूर! यहाँ एक सरल Python hello world ह
 - **समृद्ध REPL** — टैब पूर्णता, सिंटैक्स हाइलाइटिंग
 - **सत्र दृढ़ता** — अपना काम कभी न खोएं
 
----
+***
 
 ## 📦 परियोजना संरचना
 
@@ -1355,7 +1352,7 @@ Clawd-Codex/
 └── docs/                # पूर्ण दस्तावेज़
 ```
 
----
+***
 
 ## 🗺️ रोडमैप
 
@@ -1367,7 +1364,7 @@ Clawd-Codex/
 - [ ] PyPI पैकेज
 - [ ] Go संस्करण
 
----
+***
 
 ## 🤝 योगदान
 
@@ -1381,16 +1378,16 @@ python -m pytest tests/ -v
 
 दिशानिर्देशों के लिए [CONTRIBUTING.md](CONTRIBUTING.md) देखें।
 
----
+***
 
 ## 📖 दस्तावेज़ीकरण
 
-- **[SETUP_GUIDE.md](SETUP_GUIDE.md)** — विस्तृत स्थापना
+- **[SETUP\_GUIDE.md](SETUP_GUIDE.md)** — विस्तृत स्थापना
 - **[CONTRIBUTING.md](CONTRIBUTING.md)** — विकास मार्गदर्शिका
 - **[TESTING.md](TESTING.md)** — परीक्षण मार्गदर्शिका
 - **[CHANGELOG.md](CHANGELOG.md)** — संस्करण इतिहास
 
----
+***
 
 ## ⚡ प्रदर्शन
 
@@ -1398,23 +1395,24 @@ python -m pytest tests/ -v
 - **मेमोरी**: < 50MB
 - **प्रतिक्रिया**: स्ट्रीमिंग (वास्तविक समय)
 
----
+***
 
 ## 🔒 सुरक्षा
 
 ✅ **सुरक्षा ऑडिट पूर्ण**
+
 - Git में कोई संवेदनशील डेटा नहीं
 - API कुंजी कॉन्फ़िगरेशन में एन्क्रिप्टेड
 - `.env` फ़ाइलें अनदेखी की गईं
 - उत्पादन के लिए सुरक्षित
 
----
+***
 
 ## 📄 लाइसेंस
 
 MIT लाइसेंस — [LICENSE](LICENSE) देखें
 
----
+***
 
 ## 🙏 स्वीकृतियाँ
 
@@ -1422,7 +1420,7 @@ MIT लाइसेंस — [LICENSE](LICENSE) देखें
 - स्वतंत्र शैक्षिक परियोजना
 - Anthropic से संबद्ध नहीं
 
----
+***
 
 <div align="center">
 
@@ -1436,7 +1434,7 @@ MIT लाइसेंस — [LICENSE](LICENSE) देखें
 
 </div>
 
----
+***
 
 # العربية
 
@@ -1450,18 +1448,18 @@ MIT लाइसेंस — [LICENSE](LICENSE) देखें
 
 *من كود TypeScript → أعيد بناؤه بـ Python بـ ❤️*
 
----
+***
 
-[![GitHub stars](https://img.shields.io/github/stars/GPT-AGI/Clawd-Codex?style=for-the-badge&logo=github&color=yellow)](https://github.com/GPT-AGI/Clawd-Codex/stargazers)
-[![GitHub forks](https://img.shields.io/github/forks/GPT-AGI/Clawd-Codex?style=for-the-badge&logo=github&color=blue)](https://github.com/GPT-AGI/Clawd-Codex/network/members)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/downloads/)
+[!\[GitHub stars\](https://img.shields.io/github/stars/GPT-AGI/Clawd-Codex?style=for-the-badge\&logo=github\&color=yellow null)](https://github.com/GPT-AGI/Clawd-Codex/stargazers)
+[!\[GitHub forks\](https://img.shields.io/github/forks/GPT-AGI/Clawd-Codex?style=for-the-badge\&logo=github\&color=blue null)](https://github.com/GPT-AGI/Clawd-Codex/network/members)
+[!\[License: MIT\](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge null)](https://opensource.org/licenses/MIT)
+[!\[Python 3.10+\](https://img.shields.io/badge/python-3.10+-blue.svg?style=for-the-badge\&logo=python\&logoColor=white null)](https://www.python.org/downloads/)
 
 **🔥 تطوير نشط • ميزات جديدة أسبوعيًا 🔥**
 
 </div>
 
----
+***
 
 ## 🎯 ما هذا؟
 
@@ -1473,7 +1471,7 @@ MIT लाइसेंस — [LICENSE](LICENSE) देखें
 
 <div align="center">
 
-![Clawd Codex CLI أثناء العمل](assets/clawd-code-cli.png)
+!\[Clawd Codex CLI أثناء العمل]\(assets/clawd-code-cli.png null)
 
 **CLI حقيقي • استخدام حقيقي • مجتمع حقيقي**
 
@@ -1488,7 +1486,7 @@ MIT लाइसेंस — [LICENSE](LICENSE) देखें
 
 **🚀 جرّبه الآن! افرکه، عدّله، اجعله ملكك! طلبات السحب مرحب بها!**
 
----
+***
 
 ## ✨ الميزات
 
@@ -1519,18 +1517,18 @@ clawd --version    # التحقق من الإصدار
 clawd config       # عرض الإعدادات
 ```
 
----
+***
 
 ## 📊 الحالة
 
-| المكون | الحالة | العدد |
-|--------|--------|-------|
-| الأوامر | ✅ مكتمل | 150+ |
-| الأدوات | ✅ مكتمل | 100+ |
-| تغطية الاختبارات | ✅ 90%+ | 75+ اختبار |
-| التوثيق | ✅ مكتمل | 10+ مستندات |
+| المكون           | الحالة  | العدد       |
+| ---------------- | ------- | ----------- |
+| الأوامر          | ✅ مكتمل | 150+        |
+| الأدوات          | ✅ مكتمل | 100+        |
+| تغطية الاختبارات | ✅ 90%+  | 75+ اختبار  |
+| التوثيق          | ✅ مكتمل | 10+ مستندات |
 
----
+***
 
 ## 🚀 البدء السريع
 
@@ -1570,35 +1568,26 @@ python -m src.cli --help   # عرض المساعدة
 
 **هذا كل شيء!** ابدأ الدردشة مع AI في 3 خطوات.
 
----
+***
 
 ## 💡 الاستخدام
 
 ### أوامر REPL
 
-| الأمر | الوصف |
-|-------|-------|
-| `/help` | عرض جميع الأوامر |
-| `/save` | حفظ الجلسة |
-| `/load <id>` | تحميل جلسة |
+| الأمر        | الوصف                  |
+| ------------ | ---------------------- |
+| `/help`      | عرض جميع الأوامر       |
+| `/save`      | حفظ الجلسة             |
+| `/load <id>` | تحميل جلسة             |
 | `/multiline` | تبديل وضع متعدد الأسطر |
-| `/clear` | مسح السجل |
-| `/exit` | الخروج من REPL |
+| `/clear`     | مسح السجل              |
+| `/exit`      | الخروج من REPL         |
 
 ### مثال على الجلسة
 
-```text
->>> اكتب hello world بـ Python
+![مثال على الجلسة](assets/clawd-code-cli.png)
 
-Assistant: بالتأكيد! إليك hello world بسيط بـ Python:
-
-    print("Hello, World!")
-
->>> /save
-تم حفظ الجلسة: 20260401_120000
-```
-
----
+***
 
 ## 🎓 لماذا Clawd Codex؟
 
@@ -1621,7 +1610,7 @@ Assistant: بالتأكيد! إليك hello world بسيط بـ Python:
 - **REPL غني** — إكمال Tab، تمييز بناء الجملة
 - **استمرار الجلسة** — لا تفقد عملك أبدًا
 
----
+***
 
 ## 📦 هيكل المشروع
 
@@ -1637,7 +1626,7 @@ Clawd-Codex/
 └── docs/                # توثيق كامل
 ```
 
----
+***
 
 ## 🗺️ خارطة الطريق
 
@@ -1649,7 +1638,7 @@ Clawd-Codex/
 - [ ] حزمة PyPI
 - [ ] إصدار Go
 
----
+***
 
 ## 🤝 المساهمة
 
@@ -1663,16 +1652,16 @@ python -m pytest tests/ -v
 
 راجع [CONTRIBUTING.md](CONTRIBUTING.md) للإرشادات.
 
----
+***
 
 ## 📖 التوثيق
 
-- **[SETUP_GUIDE.md](SETUP_GUIDE.md)** — التثبيت المفصل
+- **[SETUP\_GUIDE.md](SETUP_GUIDE.md)** — التثبيت المفصل
 - **[CONTRIBUTING.md](CONTRIBUTING.md)** — دليل التطوير
 - **[TESTING.md](TESTING.md)** — دليل الاختبار
 - **[CHANGELOG.md](CHANGELOG.md)** — تاريخ الإصدارات
 
----
+***
 
 ## ⚡ الأداء
 
@@ -1680,23 +1669,24 @@ python -m pytest tests/ -v
 - **الذاكرة**: < 50MB
 - **الاستجابة**: دفق (في الوقت الحقيقي)
 
----
+***
 
 ## 🔒 الأمان
 
 ✅ **تم تدقيق الأمان**
+
 - لا بيانات حساسة في Git
 - مفاتيح API مشفرة في التكوين
 - ملفات `.env` تم تجاهلها
 - آمن للإنتاج
 
----
+***
 
 ## 📄 الترخيص
 
 ترخيص MIT — راجع [LICENSE](LICENSE)
 
----
+***
 
 ## 🙏 الشكر
 
@@ -1704,7 +1694,7 @@ python -m pytest tests/ -v
 - مشروع تعليمي مستقل
 - غير تابع لـ Anthropic
 
----
+***
 
 <div align="center">
 
@@ -1718,7 +1708,7 @@ python -m pytest tests/ -v
 
 </div>
 
----
+***
 
 # Português
 
@@ -1732,18 +1722,18 @@ python -m pytest tests/ -v
 
 *Do Código Fonte TypeScript → Reconstruído em Python com ❤️*
 
----
+***
 
-[![GitHub stars](https://img.shields.io/github/stars/GPT-AGI/Clawd-Codex?style=for-the-badge&logo=github&color=yellow)](https://github.com/GPT-AGI/Clawd-Codex/stargazers)
-[![GitHub forks](https://img.shields.io/github/forks/GPT-AGI/Clawd-Codex?style=for-the-badge&logo=github&color=blue)](https://github.com/GPT-AGI/Clawd-Codex/network/members)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/downloads/)
+[!\[GitHub stars\](https://img.shields.io/github/stars/GPT-AGI/Clawd-Codex?style=for-the-badge\&logo=github\&color=yellow null)](https://github.com/GPT-AGI/Clawd-Codex/stargazers)
+[!\[GitHub forks\](https://img.shields.io/github/forks/GPT-AGI/Clawd-Codex?style=for-the-badge\&logo=github\&color=blue null)](https://github.com/GPT-AGI/Clawd-Codex/network/members)
+[!\[License: MIT\](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge null)](https://opensource.org/licenses/MIT)
+[!\[Python 3.10+\](https://img.shields.io/badge/python-3.10+-blue.svg?style=for-the-badge\&logo=python\&logoColor=white null)](https://www.python.org/downloads/)
 
 **🔥 Desenvolvimento Ativo • Novos Recursos Semanalmente 🔥**
 
 </div>
 
----
+***
 
 ## 🎯 O Que É Isso?
 
@@ -1755,7 +1745,7 @@ python -m pytest tests/ -v
 
 <div align="center">
 
-![Clawd Codex CLI em Ação](assets/clawd-code-cli.png)
+!\[Clawd Codex CLI em Ação]\(assets/clawd-code-cli.png null)
 
 **CLI Real • Uso Real • Comunidade Real**
 
@@ -1770,7 +1760,7 @@ python -m pytest tests/ -v
 
 **🚀 Experimente agora! Faça fork, modifique, torne seu! Pull requests são bem-vindos!**
 
----
+***
 
 ## ✨ Recursos
 
@@ -1801,18 +1791,18 @@ clawd --version    # Verificar versão
 clawd config       # Ver configurações
 ```
 
----
+***
 
 ## 📊 Status
 
-| Componente | Status | Quantidade |
-|------------|--------|------------|
-| Comandos | ✅ Completo | 150+ |
-| Ferramentas | ✅ Completo | 100+ |
-| Cobertura de Testes | ✅ 90%+ | 75+ testes |
-| Documentação | ✅ Completa | 10+ docs |
+| Componente          | Status     | Quantidade |
+| ------------------- | ---------- | ---------- |
+| Comandos            | ✅ Completo | 150+       |
+| Ferramentas         | ✅ Completo | 100+       |
+| Cobertura de Testes | ✅ 90%+     | 75+ testes |
+| Documentação        | ✅ Completa | 10+ docs   |
 
----
+***
 
 ## 🚀 Início Rápido
 
@@ -1852,35 +1842,26 @@ python -m src.cli --help   # Mostrar ajuda
 
 **É isso!** Comece a conversar com IA em 3 passos.
 
----
+***
 
 ## 💡 Uso
 
 ### Comandos REPL
 
-| Comando | Descrição |
-|---------|-----------|
-| `/help` | Mostrar todos os comandos |
-| `/save` | Salvar sessão |
-| `/load <id>` | Carregar sessão |
-| `/multiline` | Alternar modo multilinha |
-| `/clear` | Limpar histórico |
-| `/exit` | Sair do REPL |
+| Comando      | Descrição                 |
+| ------------ | ------------------------- |
+| `/help`      | Mostrar todos os comandos |
+| `/save`      | Salvar sessão             |
+| `/load <id>` | Carregar sessão           |
+| `/multiline` | Alternar modo multilinha  |
+| `/clear`     | Limpar histórico          |
+| `/exit`      | Sair do REPL              |
 
 ### Exemplo de Sessão
 
-```text
->>> Escreva um hello world em Python
+![Exemplo de Sessão](assets/clawd-code-cli.png)
 
-Assistant: Claro! Aqui está um simples hello world em Python:
-
-    print("Hello, World!")
-
->>> /save
-Sessão salva: 20260401_120000
-```
-
----
+***
 
 ## 🎓 Por Que Clawd Codex?
 
@@ -1903,7 +1884,7 @@ Sessão salva: 20260401_120000
 - **REPL rico** — Completar com tab, destaque de sintaxe
 - **Persistência de sessão** — Nunca perca seu trabalho
 
----
+***
 
 ## 📦 Estrutura do Projeto
 
@@ -1919,7 +1900,7 @@ Clawd-Codex/
 └── docs/                # Docs completos
 ```
 
----
+***
 
 ## 🗺️ Roteiro
 
@@ -1931,7 +1912,7 @@ Clawd-Codex/
 - [ ] Pacote PyPI
 - [ ] Versão Go
 
----
+***
 
 ## 🤝 Contribuindo
 
@@ -1945,16 +1926,16 @@ python -m pytest tests/ -v
 
 Veja [CONTRIBUTING.md](CONTRIBUTING.md) para diretrizes.
 
----
+***
 
 ## 📖 Documentação
 
-- **[SETUP_GUIDE.md](SETUP_GUIDE.md)** — Instalação detalhada
+- **[SETUP\_GUIDE.md](SETUP_GUIDE.md)** — Instalação detalhada
 - **[CONTRIBUTING.md](CONTRIBUTING.md)** — Guia de desenvolvimento
 - **[TESTING.md](TESTING.md)** — Guia de testes
 - **[CHANGELOG.md](CHANGELOG.md)** — Histórico de versões
 
----
+***
 
 ## ⚡ Performance
 
@@ -1962,23 +1943,24 @@ Veja [CONTRIBUTING.md](CONTRIBUTING.md) para diretrizes.
 - **Memória**: < 50MB
 - **Resposta**: Streaming (tempo real)
 
----
+***
 
 ## 🔒 Segurança
 
 ✅ **Auditoria de Segurança Realizada**
+
 - Sem dados sensíveis no Git
 - Chaves API criptografadas na configuração
 - Arquivos `.env` ignorados
 - Seguro para produção
 
----
+***
 
 ## 📄 Licença
 
 Licença MIT — Veja [LICENSE](LICENSE)
 
----
+***
 
 ## 🙏 Agradecimentos
 
@@ -1986,7 +1968,7 @@ Licença MIT — Veja [LICENSE](LICENSE)
 - Projeto educacional independente
 - Não afiliado à Anthropic
 
----
+***
 
 <div align="center">
 
