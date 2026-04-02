@@ -6,17 +6,14 @@ from typing import Any, Generator, Optional
 
 from openai import OpenAI
 
-from .base import BaseProvider, ChatMessage, ChatResponse
+from .base import BaseProvider, ChatResponse, MessageInput
 
 
 class OpenAIProvider(BaseProvider):
     """OpenAI provider."""
 
     def __init__(
-        self,
-        api_key: str,
-        base_url: Optional[str] = None,
-        model: Optional[str] = None
+        self, api_key: str, base_url: Optional[str] = None, model: Optional[str] = None
     ):
         """Initialize OpenAI provider.
 
@@ -34,11 +31,7 @@ class OpenAIProvider(BaseProvider):
 
         self.client = OpenAI(**client_kwargs)
 
-    def chat(
-        self,
-        messages: list[ChatMessage],
-        **kwargs
-    ) -> ChatResponse:
+    def chat(self, messages: list[MessageInput], **kwargs) -> ChatResponse:
         """Synchronous chat completion.
 
         Args:
@@ -51,13 +44,13 @@ class OpenAIProvider(BaseProvider):
         model = self._get_model(**kwargs)
 
         # Convert messages
-        openai_messages = [msg.to_dict() for msg in messages]
+        openai_messages = self._prepare_messages(messages)
 
         # Make API call
         response = self.client.chat.completions.create(
             model=model,
             messages=openai_messages,
-            **{k: v for k, v in kwargs.items() if k != "model"}
+            **{k: v for k, v in kwargs.items() if k != "model"},
         )
 
         # Extract content
@@ -69,15 +62,13 @@ class OpenAIProvider(BaseProvider):
             usage={
                 "input_tokens": response.usage.prompt_tokens,
                 "output_tokens": response.usage.completion_tokens,
-                "total_tokens": response.usage.total_tokens
+                "total_tokens": response.usage.total_tokens,
             },
-            finish_reason=choice.finish_reason
+            finish_reason=choice.finish_reason,
         )
 
     def chat_stream(
-        self,
-        messages: list[ChatMessage],
-        **kwargs
+        self, messages: list[MessageInput], **kwargs
     ) -> Generator[str, None, None]:
         """Streaming chat completion.
 
@@ -91,14 +82,14 @@ class OpenAIProvider(BaseProvider):
         model = self._get_model(**kwargs)
 
         # Convert messages
-        openai_messages = [msg.to_dict() for msg in messages]
+        openai_messages = self._prepare_messages(messages)
 
         # Stream API call
         stream = self.client.chat.completions.create(
             model=model,
             messages=openai_messages,
             stream=True,
-            **{k: v for k, v in kwargs.items() if k != "model"}
+            **{k: v for k, v in kwargs.items() if k != "model"},
         )
 
         for chunk in stream:
@@ -117,5 +108,5 @@ class OpenAIProvider(BaseProvider):
             "gpt-4o",
             "gpt-4o-mini",
             "gpt-3.5-turbo",
-            "gpt-3.5-turbo-16k"
+            "gpt-3.5-turbo-16k",
         ]

@@ -2,21 +2,18 @@
 
 from __future__ import annotations
 
-from typing import Any, Generator, Optional, Union
+from typing import Generator, Optional
 
 from zhipuai import ZhipuAI
 
-from .base import BaseProvider, ChatMessage, ChatResponse
+from .base import BaseProvider, ChatResponse, MessageInput
 
 
 class GLMProvider(BaseProvider):
     """GLM (Zhipu AI) provider."""
 
     def __init__(
-        self,
-        api_key: str,
-        base_url: Optional[str] = None,
-        model: Optional[str] = None
+        self, api_key: str, base_url: Optional[str] = None, model: Optional[str] = None
     ):
         """Initialize GLM provider.
 
@@ -30,32 +27,7 @@ class GLMProvider(BaseProvider):
         # Initialize client
         self.client = ZhipuAI(api_key=api_key)
 
-    def _convert_messages(
-        self,
-        messages: Union[list[ChatMessage], list[dict]]
-    ) -> list[dict]:
-        """Convert messages to GLM format.
-
-        Args:
-            messages: List of ChatMessage objects or dict messages
-
-        Returns:
-            List of dict messages in GLM format
-        """
-        if not messages:
-            return []
-
-        # Handle both ChatMessage objects and dict messages
-        if isinstance(messages[0], dict):
-            return messages
-        else:
-            return [msg.to_dict() for msg in messages]
-
-    def chat(
-        self,
-        messages: Union[list[ChatMessage], list[dict]],
-        **kwargs
-    ) -> ChatResponse:
+    def chat(self, messages: list[MessageInput], **kwargs) -> ChatResponse:
         """Synchronous chat completion.
 
         Args:
@@ -68,13 +40,13 @@ class GLMProvider(BaseProvider):
         model = self._get_model(**kwargs)
 
         # Convert messages
-        glm_messages = self._convert_messages(messages)
+        glm_messages = self._prepare_messages(messages)
 
         # Make API call
         response = self.client.chat.completions.create(
             model=model,
             messages=glm_messages,
-            **{k: v for k, v in kwargs.items() if k != "model"}
+            **{k: v for k, v in kwargs.items() if k != "model"},
         )
 
         # Extract content
@@ -82,7 +54,10 @@ class GLMProvider(BaseProvider):
 
         # GLM-4.5 specific: reasoning_content
         reasoning_content = None
-        if hasattr(choice.message, 'reasoning_content') and choice.message.reasoning_content:
+        if (
+            hasattr(choice.message, "reasoning_content")
+            and choice.message.reasoning_content
+        ):
             reasoning_content = choice.message.reasoning_content
 
         return ChatResponse(
@@ -91,16 +66,14 @@ class GLMProvider(BaseProvider):
             usage={
                 "input_tokens": response.usage.prompt_tokens,
                 "output_tokens": response.usage.completion_tokens,
-                "total_tokens": response.usage.total_tokens
+                "total_tokens": response.usage.total_tokens,
             },
             finish_reason=choice.finish_reason,
-            reasoning_content=reasoning_content
+            reasoning_content=reasoning_content,
         )
 
     def chat_stream(
-        self,
-        messages: Union[list[ChatMessage], list[dict]],
-        **kwargs
+        self, messages: list[MessageInput], **kwargs
     ) -> Generator[str, None, None]:
         """Streaming chat completion.
 
@@ -114,14 +87,14 @@ class GLMProvider(BaseProvider):
         model = self._get_model(**kwargs)
 
         # Convert messages
-        glm_messages = self._convert_messages(messages)
+        glm_messages = self._prepare_messages(messages)
 
         # Stream API call
         response = self.client.chat.completions.create(
             model=model,
             messages=glm_messages,
             stream=True,
-            **{k: v for k, v in kwargs.items() if k != "model"}
+            **{k: v for k, v in kwargs.items() if k != "model"},
         )
 
         for chunk in response:
@@ -141,5 +114,5 @@ class GLMProvider(BaseProvider):
             "glm-4-airx",
             "glm-4-flash",
             "glm-4-plus",
-            "glm-3-turbo"
+            "glm-3-turbo",
         ]

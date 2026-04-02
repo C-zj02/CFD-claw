@@ -103,21 +103,51 @@ uv venv --python 3.11
 source .venv/bin/activate
 
 # Install
-pip install anthropic openai zhipuai python-dotenv rich prompt-toolkit
+uv pip install -r requirements.txt
 ```
 
 ### Configure
 
+#### Option 1: Interactive (Recommended)
+
+
 ```bash
-# Option 1: Interactive (Recommended)
 python -m src.cli login
-
-# Option 2: Environment variable
-export GLM_API_KEY="your-key"
-
-# Option 3: .env file
-echo 'GLM_API_KEY=your-key' > .env
 ```
+
+This flow will:
+1. ask you to choose a provider: anthropic / openai / glm
+2. ask for that provider's API key
+3. optionally save a custom base URL
+4. optionally save a default model
+5. set the selected provider as default
+
+The configuration file is saved in in `~/.clawd/config.json`. Example structure:
+
+```json
+{
+  "default_provider": "glm",
+  "providers": {
+    "anthropic": {
+      "api_key": "base64-encoded-key",
+      "base_url": "https://api.anthropic.com",
+      "default_model": "claude-sonnet-4-20250514"
+    },
+    "openai": {
+      "api_key": "base64-encoded-key",
+      "base_url": "https://api.openai.com/v1",
+      "default_model": "gpt-4"
+    },
+    "glm": {
+      "api_key": "base64-encoded-key",
+      "base_url": "https://open.bigmodel.cn/api/paas/v4",
+      "default_model": "glm-4.5"
+    }
+  }
+}
+```
+
+
 
 ### Run
 

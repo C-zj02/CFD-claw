@@ -6,17 +6,14 @@ from typing import Generator, Optional
 
 import anthropic
 
-from .base import BaseProvider, ChatMessage, ChatResponse
+from .base import BaseProvider, ChatResponse, MessageInput
 
 
 class AnthropicProvider(BaseProvider):
     """Anthropic Claude provider."""
 
     def __init__(
-        self,
-        api_key: str,
-        base_url: Optional[str] = None,
-        model: Optional[str] = None
+        self, api_key: str, base_url: Optional[str] = None, model: Optional[str] = None
     ):
         """Initialize Anthropic provider.
 
@@ -34,11 +31,7 @@ class AnthropicProvider(BaseProvider):
 
         self.client = anthropic.Anthropic(**client_kwargs)
 
-    def chat(
-        self,
-        messages: list[ChatMessage],
-        **kwargs
-    ) -> ChatResponse:
+    def chat(self, messages: list[MessageInput], **kwargs) -> ChatResponse:
         """Synchronous chat completion.
 
         Args:
@@ -52,14 +45,14 @@ class AnthropicProvider(BaseProvider):
         max_tokens = kwargs.get("max_tokens", 4096)
 
         # Convert messages to Anthropic format
-        anthropic_messages = [msg.to_dict() for msg in messages]
+        anthropic_messages = self._prepare_messages(messages)
 
         # Make API call
         response = self.client.messages.create(
             model=model,
             max_tokens=max_tokens,
             messages=anthropic_messages,
-            **{k: v for k, v in kwargs.items() if k not in ["model", "max_tokens"]}
+            **{k: v for k, v in kwargs.items() if k not in ["model", "max_tokens"]},
         )
 
         # Extract content
@@ -70,15 +63,13 @@ class AnthropicProvider(BaseProvider):
             model=response.model,
             usage={
                 "input_tokens": response.usage.input_tokens,
-                "output_tokens": response.usage.output_tokens
+                "output_tokens": response.usage.output_tokens,
             },
-            finish_reason=response.stop_reason
+            finish_reason=response.stop_reason,
         )
 
     def chat_stream(
-        self,
-        messages: list[ChatMessage],
-        **kwargs
+        self, messages: list[MessageInput], **kwargs
     ) -> Generator[str, None, None]:
         """Streaming chat completion.
 
@@ -93,14 +84,14 @@ class AnthropicProvider(BaseProvider):
         max_tokens = kwargs.get("max_tokens", 4096)
 
         # Convert messages
-        anthropic_messages = [msg.to_dict() for msg in messages]
+        anthropic_messages = self._prepare_messages(messages)
 
         # Stream API call
         with self.client.messages.stream(
             model=model,
             max_tokens=max_tokens,
             messages=anthropic_messages,
-            **{k: v for k, v in kwargs.items() if k not in ["model", "max_tokens"]}
+            **{k: v for k, v in kwargs.items() if k not in ["model", "max_tokens"]},
         ) as stream:
             for text in stream.text_stream:
                 yield text
@@ -117,5 +108,5 @@ class AnthropicProvider(BaseProvider):
             "claude-3-5-haiku-20241022",
             "claude-3-opus-20240229",
             "claude-3-sonnet-20240229",
-            "claude-3-haiku-20240307"
+            "claude-3-haiku-20240307",
         ]

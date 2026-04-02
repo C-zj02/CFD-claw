@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Generator, Optional
+from typing import Any, Generator, Optional, TypeAlias
 
 
 @dataclass
@@ -30,14 +30,14 @@ class ChatResponse:
     reasoning_content: Optional[str] = None
 
 
+MessageInput: TypeAlias = ChatMessage | dict[str, Any]
+
+
 class BaseProvider(ABC):
     """Base class for LLM providers."""
 
     def __init__(
-        self,
-        api_key: str,
-        base_url: Optional[str] = None,
-        model: Optional[str] = None
+        self, api_key: str, base_url: Optional[str] = None, model: Optional[str] = None
     ):
         """Initialize provider.
 
@@ -51,11 +51,7 @@ class BaseProvider(ABC):
         self.model = model
 
     @abstractmethod
-    def chat(
-        self,
-        messages: list[ChatMessage],
-        **kwargs
-    ) -> ChatResponse:
+    def chat(self, messages: list[MessageInput], **kwargs) -> ChatResponse:
         """Synchronous chat completion.
 
         Args:
@@ -69,9 +65,7 @@ class BaseProvider(ABC):
 
     @abstractmethod
     def chat_stream(
-        self,
-        messages: list[ChatMessage],
-        **kwargs
+        self, messages: list[MessageInput], **kwargs
     ) -> Generator[str, None, None]:
         """Streaming chat completion.
 
@@ -103,3 +97,7 @@ class BaseProvider(ABC):
             Model name to use
         """
         return kwargs.get("model", self.model)
+
+    def _prepare_messages(self, messages: list[MessageInput]) -> list[dict[str, Any]]:
+        """Convert provider messages to API dictionary format."""
+        return [msg if isinstance(msg, dict) else msg.to_dict() for msg in messages]

@@ -3,14 +3,15 @@
 from __future__ import annotations
 
 import unittest
-from unittest.mock import Mock, patch, MagicMock
-from src.providers.base import ChatMessage, ChatResponse, BaseProvider
+from unittest.mock import MagicMock, patch
+
 from src.providers import (
     AnthropicProvider,
-    OpenAIProvider,
     GLMProvider,
-    get_provider_class
+    OpenAIProvider,
+    get_provider_class,
 )
+from src.providers.base import ChatMessage, ChatResponse
 
 
 class TestChatMessage(unittest.TestCase):
@@ -38,7 +39,7 @@ class TestChatResponse(unittest.TestCase):
             content="Hello!",
             model="gpt-4",
             usage={"input_tokens": 10, "output_tokens": 5},
-            finish_reason="stop"
+            finish_reason="stop",
         )
         self.assertEqual(response.content, "Hello!")
         self.assertEqual(response.model, "gpt-4")
@@ -51,7 +52,7 @@ class TestChatResponse(unittest.TestCase):
             model="glm-4.5",
             usage={"input_tokens": 10, "output_tokens": 5},
             finish_reason="stop",
-            reasoning_content="Reasoning process..."
+            reasoning_content="Reasoning process...",
         )
         self.assertEqual(response.reasoning_content, "Reasoning process...")
 
@@ -67,10 +68,7 @@ class TestAnthropicProvider(unittest.TestCase):
 
     def test_custom_model(self):
         """Test provider with custom model."""
-        provider = AnthropicProvider(
-            api_key="test_key",
-            model="claude-3-opus-20240229"
-        )
+        provider = AnthropicProvider(api_key="test_key", model="claude-3-opus-20240229")
         self.assertEqual(provider.model, "claude-3-opus-20240229")
 
     def test_get_available_models(self):
@@ -80,7 +78,7 @@ class TestAnthropicProvider(unittest.TestCase):
         self.assertIn("claude-sonnet-4-20250514", models)
         self.assertIn("claude-3-5-sonnet-20241022", models)
 
-    @patch('anthropic.Anthropic')
+    @patch("anthropic.Anthropic")
     def test_chat(self, mock_anthropic):
         """Test synchronous chat."""
         # Setup mock
@@ -102,6 +100,28 @@ class TestAnthropicProvider(unittest.TestCase):
         self.assertEqual(response.model, "claude-sonnet-4-20250514")
         self.assertEqual(response.finish_reason, "end_turn")
 
+    @patch("anthropic.Anthropic")
+    def test_chat_accepts_dict_messages(self, mock_anthropic):
+        """Test synchronous chat with dict messages."""
+        mock_client = MagicMock()
+        mock_response = MagicMock()
+        mock_response.content = [MagicMock(text="Hello!")]
+        mock_response.model = "claude-sonnet-4-20250514"
+        mock_response.usage = MagicMock(input_tokens=10, output_tokens=5)
+        mock_response.stop_reason = "end_turn"
+        mock_client.messages.create.return_value = mock_response
+        mock_anthropic.return_value = mock_client
+
+        provider = AnthropicProvider(api_key="test_key")
+        messages = [{"role": "user", "content": "Hi"}]
+        response = provider.chat(messages)
+
+        self.assertEqual(response.content, "Hello!")
+        mock_client.messages.create.assert_called_once()
+        self.assertEqual(
+            mock_client.messages.create.call_args.kwargs["messages"], messages
+        )
+
 
 class TestOpenAIProvider(unittest.TestCase):
     """Test OpenAI provider."""
@@ -113,10 +133,7 @@ class TestOpenAIProvider(unittest.TestCase):
 
     def test_custom_model(self):
         """Test provider with custom model."""
-        provider = OpenAIProvider(
-            api_key="test_key",
-            model="gpt-4-turbo"
-        )
+        provider = OpenAIProvider(api_key="test_key", model="gpt-4-turbo")
         self.assertEqual(provider.model, "gpt-4-turbo")
 
     def test_get_available_models(self):
@@ -126,7 +143,7 @@ class TestOpenAIProvider(unittest.TestCase):
         self.assertIn("gpt-4", models)
         self.assertIn("gpt-4o", models)
 
-    @patch('openai.OpenAI')
+    @patch("src.providers.openai_provider.OpenAI")
     def test_chat(self, mock_openai):
         """Test synchronous chat."""
         # Setup mock
@@ -136,9 +153,7 @@ class TestOpenAIProvider(unittest.TestCase):
         mock_response.choices[0].message.content = "Hello!"
         mock_response.model = "gpt-4"
         mock_response.usage = MagicMock(
-            prompt_tokens=10,
-            completion_tokens=5,
-            total_tokens=15
+            prompt_tokens=10, completion_tokens=5, total_tokens=15
         )
         mock_response.choices[0].finish_reason = "stop"
         mock_client.chat.completions.create.return_value = mock_response
@@ -153,6 +168,31 @@ class TestOpenAIProvider(unittest.TestCase):
         self.assertEqual(response.model, "gpt-4")
         self.assertEqual(response.usage["total_tokens"], 15)
 
+    @patch("src.providers.openai_provider.OpenAI")
+    def test_chat_accepts_dict_messages(self, mock_openai):
+        """Test synchronous chat with dict messages."""
+        mock_client = MagicMock()
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message.content = "Hello!"
+        mock_response.model = "gpt-4"
+        mock_response.usage = MagicMock(
+            prompt_tokens=10, completion_tokens=5, total_tokens=15
+        )
+        mock_response.choices[0].finish_reason = "stop"
+        mock_client.chat.completions.create.return_value = mock_response
+        mock_openai.return_value = mock_client
+
+        provider = OpenAIProvider(api_key="test_key")
+        messages = [{"role": "user", "content": "Hi"}]
+        response = provider.chat(messages)
+
+        self.assertEqual(response.content, "Hello!")
+        mock_client.chat.completions.create.assert_called_once()
+        self.assertEqual(
+            mock_client.chat.completions.create.call_args.kwargs["messages"], messages
+        )
+
 
 class TestGLMProvider(unittest.TestCase):
     """Test GLM provider."""
@@ -164,10 +204,7 @@ class TestGLMProvider(unittest.TestCase):
 
     def test_custom_model(self):
         """Test provider with custom model."""
-        provider = GLMProvider(
-            api_key="test_key",
-            model="glm-4"
-        )
+        provider = GLMProvider(api_key="test_key", model="glm-4")
         self.assertEqual(provider.model, "glm-4")
 
     def test_get_available_models(self):
@@ -177,7 +214,7 @@ class TestGLMProvider(unittest.TestCase):
         self.assertIn("glm-4.5", models)
         self.assertIn("glm-4", models)
 
-    @patch('zhipuai.ZhipuAI')
+    @patch("src.providers.glm_provider.ZhipuAI")
     def test_chat(self, mock_zhipu):
         """Test synchronous chat."""
         # Setup mock
@@ -188,9 +225,7 @@ class TestGLMProvider(unittest.TestCase):
         mock_response.choices[0].message.reasoning_content = None
         mock_response.model = "glm-4.5"
         mock_response.usage = MagicMock(
-            prompt_tokens=10,
-            completion_tokens=5,
-            total_tokens=15
+            prompt_tokens=10, completion_tokens=5, total_tokens=15
         )
         mock_response.choices[0].finish_reason = "stop"
         mock_client.chat.completions.create.return_value = mock_response
@@ -205,7 +240,7 @@ class TestGLMProvider(unittest.TestCase):
         self.assertEqual(response.model, "glm-4.5")
         self.assertIsNone(response.reasoning_content)
 
-    @patch('zhipuai.ZhipuAI')
+    @patch("src.providers.glm_provider.ZhipuAI")
     def test_chat_with_reasoning(self, mock_zhipu):
         """Test chat with reasoning content."""
         # Setup mock
@@ -216,9 +251,7 @@ class TestGLMProvider(unittest.TestCase):
         mock_response.choices[0].message.reasoning_content = "Thinking..."
         mock_response.model = "glm-4.5"
         mock_response.usage = MagicMock(
-            prompt_tokens=10,
-            completion_tokens=5,
-            total_tokens=15
+            prompt_tokens=10, completion_tokens=5, total_tokens=15
         )
         mock_response.choices[0].finish_reason = "stop"
         mock_client.chat.completions.create.return_value = mock_response
@@ -259,5 +292,5 @@ class TestGetProviderClass(unittest.TestCase):
         self.assertIn("Unknown provider", str(context.exception))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()
