@@ -109,6 +109,85 @@ class TestREPL(unittest.TestCase):
                     repl.handle_command("/multiline")
                     self.assertFalse(repl.multiline_mode)
 
+    def test_handle_command_slash_shows_commands_and_skills(self):
+        skills_dir = Path(self.temp_dir) / "skills"
+        (skills_dir / "hello").mkdir(parents=True, exist_ok=True)
+        (skills_dir / "hello" / "SKILL.md").write_text(
+            "---\n"
+            "description: say hello\n"
+            "---\n"
+            "Hello\n",
+            encoding="utf-8",
+        )
+        with patch.dict("os.environ", {"CLAWD_SKILLS_DIR": str(skills_dir)}):
+            with patch('src.config.get_config_path', return_value=self.config_dir / "config.json"):
+                with patch('src.repl.core.Session.create'):
+                    with patch('src.providers.get_provider_class') as mock_provider_class:
+                        mock_provider = Mock()
+                        mock_provider.model = "glm-4.5"
+                        mock_provider_class.return_value = mock_provider
+
+                        repl = ClawdREPL(provider_name="glm")
+                        repl.console.print = Mock()
+                        repl.handle_command("/")
+                        rendered = "\n".join(
+                            str(args[0]) for args, _kwargs in repl.console.print.call_args_list if args
+                        )
+                        self.assertIn("Available commands and skills", rendered)
+                        self.assertIn("/hello", rendered)
+
+    def test_handle_command_slash_prefix_filters(self):
+        skills_dir = Path(self.temp_dir) / "skills"
+        (skills_dir / "hello").mkdir(parents=True, exist_ok=True)
+        (skills_dir / "hello" / "SKILL.md").write_text(
+            "---\n"
+            "description: say hello\n"
+            "---\n"
+            "Hello\n",
+            encoding="utf-8",
+        )
+        with patch.dict("os.environ", {"CLAWD_SKILLS_DIR": str(skills_dir)}):
+            with patch('src.config.get_config_path', return_value=self.config_dir / "config.json"):
+                with patch('src.repl.core.Session.create'):
+                    with patch('src.providers.get_provider_class') as mock_provider_class:
+                        mock_provider = Mock()
+                        mock_provider.model = "glm-4.5"
+                        mock_provider_class.return_value = mock_provider
+
+                        repl = ClawdREPL(provider_name="glm")
+                        repl.console.print = Mock()
+                        repl.handle_command("/he")
+                        rendered = "\n".join(
+                            str(args[0]) for args, _kwargs in repl.console.print.call_args_list if args
+                        )
+                        self.assertIn("/help", rendered)
+                        self.assertIn("/hello", rendered)
+
+    def test_handle_command_skill_invokes_skill_tool_and_chats_with_prompt(self):
+        skills_dir = Path(self.temp_dir) / "skills"
+        (skills_dir / "hello").mkdir(parents=True, exist_ok=True)
+        (skills_dir / "hello" / "SKILL.md").write_text(
+            "---\n"
+            "description: say hello\n"
+            "arguments: [name]\n"
+            "---\n"
+            "Hello $name\n",
+            encoding="utf-8",
+        )
+        with patch.dict("os.environ", {"CLAWD_SKILLS_DIR": str(skills_dir)}):
+            with patch('src.config.get_config_path', return_value=self.config_dir / "config.json"):
+                with patch('src.repl.core.Session.create'):
+                    with patch('src.providers.get_provider_class') as mock_provider_class:
+                        mock_provider = Mock()
+                        mock_provider.model = "glm-4.5"
+                        mock_provider_class.return_value = mock_provider
+
+                        repl = ClawdREPL(provider_name="glm")
+                        repl.chat = Mock()
+                        repl.handle_command("/hello bob")
+                        args, _kwargs = repl.chat.call_args
+                        self.assertIn("Hello bob", args[0])
+
     def test_save_session(self):
         """Test session saving."""
         with patch('src.config.get_config_path', return_value=self.config_dir / "config.json"):

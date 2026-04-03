@@ -1,16 +1,14 @@
-"""Python package placeholder for the archived `skills` subsystem."""
+from .model import Skill, PromptSkill
+from .frontmatter import parse_frontmatter
+from .loader import load_skills_from_dir, get_all_skills, clear_skill_registry
+from .create import create_skill
 
-from __future__ import annotations
-
-import json
-from pathlib import Path
-
-SNAPSHOT_PATH = Path(__file__).resolve().parent.parent / 'reference_data' / 'subsystems' / 'skills.json'
-_SNAPSHOT = json.loads(SNAPSHOT_PATH.read_text())
-
-ARCHIVE_NAME = _SNAPSHOT['archive_name']
-MODULE_COUNT = _SNAPSHOT['module_count']
-SAMPLE_FILES = tuple(_SNAPSHOT['sample_files'])
-PORTING_NOTE = f"Python placeholder package for '{ARCHIVE_NAME}' with {MODULE_COUNT} archived module references."
-
-__all__ = ['ARCHIVE_NAME', 'MODULE_COUNT', 'PORTING_NOTE', 'SAMPLE_FILES']
+__all__ = [
+    "Skill",
+    "PromptSkill",
+    "parse_frontmatter",
+    "load_skills_from_dir",
+    "get_all_skills",
+    "clear_skill_registry",
+    "create_skill",
+]

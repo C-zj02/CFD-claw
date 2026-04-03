@@ -302,16 +302,33 @@ class TestLSPTool(ToolSystemTests):
 
 
 class TestSkillTool(ToolSystemTests):
-    def test_skill_runs_python_file(self) -> None:
+    def test_skill_runs_markdown_skill(self) -> None:
+        from src.skills.create import create_skill
+
+        skills_dir = self.root / "skills"
+        create_skill(
+            directory=skills_dir,
+            name="hello",
+            description="say hello",
+            body="Hello $ARGUMENTS[0]!",
+            arguments=["name"],
+        )
+        with patch.dict(os.environ, {"CLAWD_SKILLS_DIR": str(skills_dir)}):
+            out = SkillTool().run({"skill": "hello", "args": "bob"}, self.ctx).output
+            self.assertTrue(out["success"])
+            self.assertIn("Hello bob!", out["prompt"])
+            self.assertEqual(out["loadedFrom"], "user")
+
+    def test_skill_runs_legacy_python_skill(self) -> None:
         skills_dir = self.root / "skills"
         skills_dir.mkdir(parents=True, exist_ok=True)
-        (skills_dir / "hello.py").write_text(
-            "def run(input, context):\n    return 'hello ' + input.get('name','world')\n",
+        (skills_dir / "legacy.py").write_text(
+            "def run(input, context):\n    return 'hi ' + input.get('name','world')\n",
             encoding="utf-8",
         )
         with patch.dict(os.environ, {"CLAWD_SKILLS_DIR": str(skills_dir)}):
-            out = SkillTool().run({"name": "hello", "input": {"name": "bob"}}, self.ctx).output
-            self.assertEqual(out["output"], "hello bob")
+            out = SkillTool().run({"name": "legacy", "input": {"name": "bob"}}, self.ctx).output
+            self.assertEqual(out["output"], "hi bob")
 
 
 class TestNewParityTools(ToolSystemTests):

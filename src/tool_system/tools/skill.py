@@ -16,19 +16,98 @@ class SkillTool:
     def spec(self) -> ToolSpec:
         return ToolSpec(
             name="Skill",
-            description="Execute a user-defined skill from the skills directory.",
+            description="Execute a prompt-based SKILL.md skill or a legacy Python skill module.",
             input_schema={
-                "type": "object",
-                "additionalProperties": False,
-                "properties": {"name": {"type": "string"}, "input": {"type": "object"}},
-                "required": ["name"],
+                "anyOf": [
+                    {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "properties": {
+                            "skill": {"type": "string"},
+                            "args": {"type": "string"},
+                        },
+                        "required": ["skill"],
+                    },
+                    {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "properties": {"name": {"type": "string"}, "input": {"type": "object"}},
+                        "required": ["name"],
+                    },
+                ]
             },
             is_destructive=False,
             max_result_size_chars=100_000,
         )
 
     def run(self, tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
-        name = tool_input["name"]
+        if "skill" in tool_input:
+            return self._run_markdown_skill(tool_input, context)
+        return self._run_legacy_python_skill(tool_input, context)
+
+    def _run_markdown_skill(self, tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
+        skill_name = tool_input.get("skill")
+        if not isinstance(skill_name, str) or not skill_name.strip():
+            raise ToolInputError("skill must be a non-empty string")
+        args = tool_input.get("args", "")
+        if not isinstance(args, str):
+            raise ToolInputError("args must be a string when provided")
+
+        normalized = skill_name.strip()
+        if normalized.startswith("/"):
+            normalized = normalized[1:]
+
+        from ...skills.argument_substitution import substitute_arguments
+        from ...skills.loader import get_all_skills
+
+        cwd = context.cwd or context.workspace_root
+        skills = get_all_skills(project_root=cwd)
+        skill = next((s for s in skills if s.name == normalized), None)
+        if skill is None:
+            return ToolResult(
+                name="Skill",
+                output={"success": False, "error": f"unknown skill: {normalized}", "commandName": normalized},
+                is_error=True,
+            )
+        if skill.disable_model_invocation:
+            return ToolResult(
+                name="Skill",
+                output={
+                    "success": False,
+                    "error": f"skill {normalized} cannot be invoked (disable-model-invocation: true)",
+                    "commandName": normalized,
+                },
+                is_error=True,
+            )
+
+        content = skill.markdown_content
+        content = substitute_arguments(
+            content,
+            args,
+            append_if_no_placeholder=True,
+            argument_names=skill.arg_names,
+        )
+        if skill.skill_root:
+            content = f"Base directory for this skill: {skill.skill_root}\n\n{content}"
+            skill_dir = skill.skill_root.replace("\\", "/")
+            content = content.replace("${CLAUDE_SKILL_DIR}", skill_dir)
+
+        return ToolResult(
+            name="Skill",
+            output={
+                "success": True,
+                "commandName": normalized,
+                "status": "inline",
+                "allowedTools": list(skill.allowed_tools) if skill.allowed_tools else [],
+                "model": skill.model,
+                "loadedFrom": skill.loaded_from,
+                "skillRoot": skill.skill_root,
+                "prompt": content,
+            },
+        )
+
+    def _run_legacy_python_skill(self, tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
+        name = tool_input.get("name")
         if not isinstance(name, str) or not name:
             raise ToolInputError("name must be a non-empty string")
         payload = tool_input.get("input") or {}
@@ -58,4 +137,3 @@ def _load_module(path: Path, *, module_prefix: str) -> types.ModuleType:
     assert isinstance(module, types.ModuleType)
     spec.loader.exec_module(module)
     return module
-

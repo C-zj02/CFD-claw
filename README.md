@@ -35,11 +35,13 @@
 | **Core Features Showcase** |
 |:---:|
 | ![Bash Execution](assets/clawd-code-bash.png) |
-| *Real-time Bash Command Execution* |
+| *Real-time Tool Execution* |
 | ![Web Fetch](assets/claude-code-webfetch.png) |
 | *Instant Web Content Extraction* |
 | ![File Operations](assets/clawd-code-write-read.png) |
-| *Seamless File Reading & Writing* |
+| *Seamless Coding & Debugging* |
+| ![Skills (Slash Commands)](assets/clawd-code-skill.png) |
+| *Flexible Skill Systems* |
 
 **Real CLI • Real Usage • Real Community**
 
@@ -81,9 +83,11 @@ providers = ["Anthropic Claude", "OpenAI GPT", "Zhipu GLM"]  # + easy to extend
 Assistant: Hi! I'm Clawd Codex, a Python reimplementation...
 
 >>> /help         # Show commands
+>>> /             # Show all commands & skills
 >>> /save         # Save session
 >>> /multiline    # Multi-paragraph input
 >>> Tab           # Auto-complete
+>>> /explain-code qsort.py   # Run a skill
 ```
 
 ### Complete CLI
@@ -115,6 +119,7 @@ clawd config       # View settings
 | Multi-Provider | ✅ | Anthropic, OpenAI, GLM support |
 | Session Persistence | ✅ | Save/load sessions locally |
 | Agent Loop | ✅ | Tool calling loop implementation |
+| Skill System | ✅ | SKILL.md-based slash-command skills with args + tool limits |
 | Context Building | 🟡 | Basic framework, needs enhancement |
 | Permission System | 🟡 | Framework exists, needs integration |
 
@@ -217,12 +222,61 @@ python -m src.cli --help   # Show help
 
 | Command      | Description           |
 | ------------ | --------------------- |
+| `/`          | Show commands & skills |
 | `/help`      | Show all commands     |
 | `/save`      | Save session          |
 | `/load <id>` | Load session          |
 | `/multiline` | Toggle multiline mode |
 | `/clear`     | Clear history         |
 | `/exit`      | Exit REPL             |
+
+### Skills (Slash Commands)
+
+Skills are markdown-based slash commands stored under `.clawd/skills`. Each skill lives in its own directory and must be named `SKILL.md`.
+
+**1) Create a project skill**
+
+Create:
+
+```text
+<project-root>/.clawd/skills/<skill-name>/SKILL.md
+```
+
+Example:
+
+```md
+---
+description: Explains code with diagrams and analogies
+when_to_use: Use when explaining how code works
+allowed-tools:
+  - Read
+  - Grep
+  - Glob
+arguments: [path]
+---
+
+Explain the code in $path. Start with an analogy, then draw a diagram.
+```
+
+**2) Use it in the REPL**
+
+```text
+❯ /
+❯ /<skill-name> <args>
+```
+
+Example:
+
+```text
+❯ /explain-code qsort.py
+```
+
+**Notes**
+
+- User-level skills: `~/.clawd/skills/<skill-name>/SKILL.md`
+- Tool limits: `allowed-tools` controls which tools the skill can use.
+- Arguments: use `$ARGUMENTS`, `$0`, `$1`, or named args like `$path` (from `arguments`).
+
 
 
 ***
@@ -382,6 +436,8 @@ If you find this useful, please **star** ⭐ the repo!
 | *即时的网页内容提取* |
 | ![文件操作](assets/clawd-code-write-read.png) |
 | *无缝的文件读取与写入* |
+| ![Skills（斜杠命令）](assets/clawd-code-skill.png) |
+| *基于 SKILL.md 的技能系统：支持参数与工具限制* |
 
 **真实的 CLI • 真实的使用 • 真实的社区**
 
@@ -423,9 +479,11 @@ providers = ["Anthropic Claude", "OpenAI GPT", "Zhipu GLM"]  # + 易于扩展
 Assistant: 嗨！我是 Clawd Codex，一个 Python 重实现...
 
 >>> /help         # 显示命令
+>>> /             # 显示命令与技能
 >>> /save         # 保存会话
 >>> /multiline    # 多行输入模式
 >>> Tab           # 自动补全
+>>> /explain-code qsort.py   # 运行一个技能
 ```
 
 ### 完整的 CLI
@@ -457,6 +515,7 @@ clawd config       # 查看设置
 | 多提供商支持 | ✅ | 支持 Anthropic、OpenAI、GLM |
 | 会话持久化 | ✅ | 本地保存/加载会话 |
 | Agent Loop | ✅ | 工具调用循环实现 |
+| Skill 系统 | ✅ | 基于 SKILL.md 的 /skill 技能：参数替换 + 工具限制 |
 | 上下文构建 | 🟡 | 基础框架，需要增强 |
 | 权限系统 | 🟡 | 框架已存在，需要集成 |
 
@@ -472,7 +531,7 @@ clawd config       # 查看设置
 | Agent 工具 | Agent, Brief, Team | ✅ 完成 |
 | 配置 | Config, PlanMode, Cron | ✅ 完成 |
 | MCP | MCP 工具和资源 | ✅ 完成 |
-| 其他 | LSP, Worktree, Skill, ToolSearch | ✅ 完成 |
+| 其他 | LSP, Worktree, Skill（SKILL.md）, ToolSearch | ✅ 完成 |
 
 ### 路线图进度
 
@@ -559,12 +618,60 @@ python -m src.cli --help   # 显示帮助
 
 | 命令           | 描述      |
 | ------------ | ------- |
+| `/`          | 显示命令与技能 |
 | `/help`      | 显示所有命令  |
 | `/save`      | 保存会话    |
 | `/load <id>` | 加载会话    |
 | `/multiline` | 切换多行模式  |
 | `/clear`     | 清空历史    |
 | `/exit`      | 退出 REPL |
+
+### Skills（技能 / 斜杠命令）教程
+
+技能是存放在 `.clawd/skills` 下的 Markdown 斜杠命令。每个技能对应一个目录，并且文件名固定为 `SKILL.md`。
+
+**1）创建项目技能**
+
+创建：
+
+```text
+<project-root>/.clawd/skills/<skill-name>/SKILL.md
+```
+
+示例：
+
+```md
+---
+description: 用类比 + 图示解释代码
+when_to_use: 当用户问“这段代码怎么工作？”时使用
+allowed-tools:
+  - Read
+  - Grep
+  - Glob
+arguments: [path]
+---
+
+请解释 $path 的实现：先给一个类比，再画一个结构示意图。
+```
+
+**2）在 REPL 中使用**
+
+```text
+❯ /
+❯ /<skill-name> <args>
+```
+
+示例：
+
+```text
+❯ /explain-code qsort.py
+```
+
+**补充说明**
+
+- 用户级技能：`~/.clawd/skills/<skill-name>/SKILL.md`
+- 工具限制：`allowed-tools` 用于限制技能允许调用的工具集合
+- 参数替换：支持 `$ARGUMENTS`、`$0`、`$1`、以及命名参数（例如 `$path`，来自 `arguments`）
 
 
 ***

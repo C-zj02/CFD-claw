@@ -34,11 +34,13 @@
 | **Core Features Showcase** |
 |:---:|
 | ![Bash Execution](assets/clawd-code-bash.png) |
-| *Real-time Bash Command Execution* |
+| *Real-time Tool Execution* |
 | ![Web Fetch](assets/claude-code-webfetch.png) |
 | *Instant Web Content Extraction* |
 | ![File Operations](assets/clawd-code-write-read.png) |
-| *Seamless File Reading & Writing* |
+| *Seamless Coding & Debugging* |
+| ![Skills (Slash Commands)](assets/clawd-code-skill.png) |
+| *Flexible Skill Systems* |
 
 **Vrai CLI • Vraie utilisation • Vraie communauté**
 
@@ -80,10 +82,16 @@ providers = ["Anthropic Claude", "OpenAI GPT", "Zhipu GLM"]  # + facile à éten
 Assistant: Salut ! Je suis Clawd Codex, une réimplémentation en Python...
 
 >>> /help         # Afficher les commandes
+>>> /             # Afficher commandes & skills
 >>> /save         # Sauvegarder la session
 >>> /multiline    # Mode multi-lignes
 >>> Tab           # Auto-complétion
+>>> /explain-code qsort.py   # Exécuter un skill
 ```
+
+### Skills (Slash Commands)
+
+See [README.md](README.md#skills-slash-commands) for a quick tutorial on creating skills under `.clawd/skills/<skill-name>/SKILL.md`.
 
 ### CLI complet
 

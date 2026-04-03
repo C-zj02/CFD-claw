@@ -8,6 +8,10 @@ try:
     from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
     from prompt_toolkit.styles import Style
     from prompt_toolkit.completion import WordCompleter
+    try:
+        from prompt_toolkit.completion import FuzzyCompleter
+    except Exception:  # pragma: no cover
+        FuzzyCompleter = None  # type: ignore
     from prompt_toolkit.key_binding import KeyBindings
 except ModuleNotFoundError:  # pragma: no cover
     class FileHistory:  # type: ignore
@@ -26,6 +30,7 @@ except ModuleNotFoundError:  # pragma: no cover
     class WordCompleter:  # type: ignore
         def __init__(self, *args, **kwargs):
             pass
+    FuzzyCompleter = None  # type: ignore
 
     class KeyBindings:  # type: ignore
         def __init__(self, *args, **kwargs):
@@ -100,12 +105,30 @@ class ClawdREPL:
         history_file = Path.home() / ".clawd" / "history"
         history_file.parent.mkdir(parents=True, exist_ok=True)
 
-        # Command completer
-        commands = ["/help", "/exit", "/quit", "/q", "/clear", "/save", "/load", "/multiline", "/tools", "/tool"]
-        self.completer = WordCompleter(commands, ignore_case=True)
+        self._built_in_commands = [
+            "/",
+            "/help",
+            "/exit",
+            "/quit",
+            "/q",
+            "/clear",
+            "/save",
+            "/load",
+            "/multiline",
+            "/tools",
+            "/tool",
+        ]
+        self.completer = WordCompleter(self._get_slash_command_words(), ignore_case=True)
 
         # Key bindings for multiline
         self.bindings = KeyBindings()
+        if hasattr(self.bindings, "add"):
+            @self.bindings.add("/")  # type: ignore[attr-defined]
+            def _show_slash_completions(event):  # type: ignore[no-untyped-def]
+                buf = event.current_buffer
+                if buf.text == "":
+                    buf.insert_text("/")
+                    buf.start_completion(select_first=False)
 
         self.prompt_session = PromptSession(
             history=FileHistory(str(history_file)),
@@ -114,7 +137,8 @@ class ClawdREPL:
             style=Style.from_dict({
                 'prompt': 'bold blue',
             }),
-            key_bindings=self.bindings
+            key_bindings=self.bindings,
+            complete_while_typing=True,
         )
 
     def _ask_user_questions(self, questions: list[dict]) -> dict[str, str]:
@@ -164,6 +188,80 @@ class ClawdREPL:
             answers[question_text] = ", ".join(selected) if multi else selected[0]
         return answers
 
+    def _get_slash_command_words(self) -> list[str]:
+        words = list(self._built_in_commands)
+        try:
+            from src.skills.loader import get_all_skills
+
+            cwd = self.tool_context.cwd or self.tool_context.workspace_root
+            for s in get_all_skills(project_root=cwd):
+                words.append(f"/{s.name}")
+        except Exception:
+            pass
+        deduped: list[str] = []
+        seen: set[str] = set()
+        for w in words:
+            lw = w.lower()
+            if lw in seen:
+                continue
+            seen.add(lw)
+            deduped.append(w)
+        return deduped
+
+    def _refresh_completer(self) -> None:
+        try:
+            words = self._get_slash_command_words()
+            try:
+                base = WordCompleter(words, ignore_case=True, match_middle=True)
+            except TypeError:
+                base = WordCompleter(words, ignore_case=True)
+            self.completer = FuzzyCompleter(base) if FuzzyCompleter is not None else base
+            if hasattr(self, "prompt_session") and getattr(self.prompt_session, "completer", None) is not None:
+                self.prompt_session.completer = self.completer
+        except Exception:
+            return
+
+    def _show_slash_palette(self, query: str | None = None) -> None:
+        q = (query or "").strip().lower()
+        self.console.print("\n[bold]Available commands and skills:[/bold]")
+        for cmd in self._built_in_commands:
+            if cmd == "/":
+                continue
+            if q and q not in cmd.lower():
+                continue
+            self.console.print(f"  {cmd}")
+        try:
+            from src.skills.loader import get_all_skills
+
+            cwd = self.tool_context.cwd or self.tool_context.workspace_root
+            skills = list(get_all_skills(project_root=cwd))
+            skills.sort(key=lambda s: s.name.lower())
+            if skills:
+                self.console.print("\n[bold]Skills:[/bold]")
+                for s in skills:
+                    if q and q not in s.name.lower() and q not in (s.description or "").lower():
+                        continue
+                    desc = (s.description or "").strip()
+                    loaded = (getattr(s, "loaded_from", "") or "").strip()
+                    tag = f"[{loaded}]" if loaded else ""
+                    model = (getattr(s, "model", None) or "").strip()
+                    allowed_tools = list(getattr(s, "allowed_tools", []) or [])
+                    parts: list[str] = []
+                    if tag:
+                        parts.append(tag)
+                    if model:
+                        parts.append(f"model={model}")
+                    if allowed_tools:
+                        shown = ", ".join(allowed_tools[:6])
+                        more = f" (+{len(allowed_tools) - 6})" if len(allowed_tools) > 6 else ""
+                        parts.append(f"tools={shown}{more}")
+                    meta = f"  [dim]{' · '.join(parts)}[/dim]" if parts else ""
+                    suffix = f"  [dim]{desc}[/dim]" if desc else ""
+                    self.console.print(f"  /{s.name}{meta}{suffix}")
+        except Exception:
+            pass
+        self.console.print()
+
     def _shorten_path_text(self, text: str) -> str:
         root = str(self.tool_context.workspace_root)
         cwd = str(self.tool_context.cwd or self.tool_context.workspace_root)
@@ -202,6 +300,7 @@ class ClawdREPL:
 
         while True:
             try:
+                self._refresh_completer()
                 # Dynamic prompt based on multiline mode
                 # Using '❯' for a modern feel
                 prompt_text = '... ' if self.multiline_mode else '❯ '
@@ -233,7 +332,16 @@ class ClawdREPL:
 
     def handle_command(self, command: str):
         """Handle slash commands."""
-        cmd = command.strip().lower()
+        raw = command.strip()
+        if raw == "/":
+            self._show_slash_palette()
+            return
+        if raw.startswith("/") and " " not in raw and raw.lower() not in (c.lower() for c in self._built_in_commands):
+            query = raw[1:]
+            if query:
+                self._show_slash_palette(query=query)
+                return
+        cmd = raw.lower()
 
         if cmd in ['/exit', '/quit', '/q']:
             self.console.print("[blue]Goodbye![/blue]")
@@ -295,13 +403,72 @@ class ClawdREPL:
                 self.load_session(session_id)
 
         else:
+            if raw.startswith("/"):
+                if self._try_run_skill_slash(raw):
+                    return
             self.console.print(f"[red]Unknown command: {command}[/red]")
+
+    def _try_run_skill_slash(self, raw: str) -> bool:
+        text = raw.strip()
+        if not text.startswith("/"):
+            return False
+        body = text[1:]
+        if not body:
+            return False
+        if body.split(maxsplit=1)[0].lower() in {c.lstrip("/").lower() for c in self._built_in_commands if c != "/"}:
+            return False
+
+        parts = body.split(maxsplit=1)
+        skill_name = parts[0].strip()
+        args = parts[1] if len(parts) > 1 else ""
+        if not skill_name:
+            return False
+
+        try:
+            result = self.tool_registry.dispatch(
+                ToolCall(name="Skill", input={"skill": skill_name, "args": args}),
+                self.tool_context,
+            )
+        except Exception as e:
+            self.console.print(f"[red]Skill error: {e}[/red]")
+            return True
+
+        payload = result.output if isinstance(result.output, dict) else {}
+        if result.is_error or not payload.get("success"):
+            err = payload.get("error") if isinstance(payload.get("error"), str) else "Unknown skill error"
+            self.console.print(f"[red]{err}[/red]")
+            return True
+
+        self.console.print(f"[dim]Launching skill: {payload.get('commandName', skill_name)}[/dim]")
+        meta_parts: list[str] = []
+        loaded = payload.get("loadedFrom")
+        if isinstance(loaded, str) and loaded:
+            meta_parts.append(f"source={loaded}")
+        model = payload.get("model")
+        if isinstance(model, str) and model:
+            meta_parts.append(f"model={model}")
+        tools = payload.get("allowedTools")
+        if isinstance(tools, list) and tools:
+            shown = ", ".join(str(t) for t in tools[:6])
+            more = f" (+{len(tools) - 6})" if len(tools) > 6 else ""
+            meta_parts.append(f"tools={shown}{more}")
+        if meta_parts:
+            self.console.print(f"[dim]{' · '.join(meta_parts)}[/dim]")
+
+        prompt = payload.get("prompt")
+        if not isinstance(prompt, str) or not prompt.strip():
+            self.console.print("[red]Skill produced empty prompt[/red]")
+            return True
+
+        self.chat(prompt)
+        return True
 
     def show_help(self):
         """Show help message."""
         help_text = """
 **Available Commands:**
 
+- `/` - Show all commands and skills
 - `/help` - Show this help message
 - `/exit`, `/quit`, `/q` - Exit the REPL
 - `/clear` - Clear conversation history
@@ -319,6 +486,22 @@ class ClawdREPL:
 - Use `/multiline` for multi-paragraph inputs
 """
         self.console.print(Markdown(help_text))
+
+    def _is_recoverable_tool_error(self, tool_name: str, tool_output) -> bool:
+        if not isinstance(tool_name, str):
+            return False
+        if not isinstance(tool_output, dict):
+            return False
+        name = tool_name.strip().lower()
+        err = tool_output.get("error")
+        if not isinstance(err, str):
+            return False
+        e = err.lower()
+        if name == "read" and e.startswith("file not found:"):
+            p = err.split(":", 2)[-1].strip()
+            if "/.clawd/skills/" in p or "\\.clawd\\skills\\" in p or "/.claude/skills/" in p or "\\.claude\\skills\\" in p:
+                return True
+        return False
 
     def chat(self, user_input: str):
         """Send message to LLM and display response."""
@@ -338,6 +521,8 @@ class ClawdREPL:
                     return
                 if ev.kind == "tool_result":
                     if ev.is_error:
+                        if self._is_recoverable_tool_error(ev.tool_name, ev.tool_output):
+                            return
                         msg = ""
                         if isinstance(ev.tool_output, dict) and isinstance(ev.tool_output.get("error"), str):
                             msg = ev.tool_output["error"]
