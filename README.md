@@ -133,7 +133,7 @@ clawd config       # View settings
 | System | Status | Description |
 |--------|--------|-------------|
 | CLI Entry | ✅ | `clawd`, `login`, `config`, `--version` |
-| Interactive REPL | ✅ | Streaming output, history, tab completion, multiline |
+| Interactive REPL | ✅ | Rich interactive output, history, tab completion, multiline |
 | Multi-Provider | ✅ | Anthropic, OpenAI, GLM support |
 | Session Persistence | ✅ | Save/load sessions locally |
 | Agent Loop | ✅ | Tool calling loop implementation |
@@ -294,6 +294,7 @@ Example:
 - User-level skills: `~/.clawd/skills/<skill-name>/SKILL.md`
 - Tool limits: `allowed-tools` controls which tools the skill can use.
 - Arguments: use `$ARGUMENTS`, `$0`, `$1`, or named args like `$path` (from `arguments`).
+- Placeholder syntax: use `$path`, not `${path}`.
 
 
 
@@ -377,9 +378,9 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 ✅ **Security Audited**
 
 - No sensitive data in Git
-- API keys encrypted in config
+- API keys obfuscated in config
 - `.env` files ignored
-- Safe for production
+- Safe for local development workflows
 
 ***
 
@@ -553,7 +554,7 @@ clawd config       # 查看设置
 | 系统 | 状态 | 描述 |
 |------|------|------|
 | CLI 入口 | ✅ | `clawd`、`login`、`config`、`--version` |
-| 交互式 REPL | ✅ | 流式输出、历史记录、Tab 补全、多行输入 |
+| 交互式 REPL | ✅ | 丰富的交互输出、历史记录、Tab 补全、多行输入 |
 | 多提供商支持 | ✅ | 支持 Anthropic、OpenAI、GLM |
 | 会话持久化 | ✅ | 本地保存/加载会话 |
 | Agent Loop | ✅ | 工具调用循环实现 |
@@ -714,6 +715,7 @@ arguments: [path]
 - 用户级技能：`~/.clawd/skills/<skill-name>/SKILL.md`
 - 工具限制：`allowed-tools` 用于限制技能允许调用的工具集合
 - 参数替换：支持 `$ARGUMENTS`、`$0`、`$1`、以及命名参数（例如 `$path`，来自 `arguments`）
+- 占位符写法：请使用 `$path`，不要写成 `${path}`
 
 
 ***
@@ -795,9 +797,9 @@ python -m pytest tests/ -v
 ✅ **已通过安全审计**
 
 - Git 中无敏感数据
-- API 密钥在配置中加密
+- API 密钥在配置中做了基础混淆
 - `.env` 文件被忽略
-- 生产环境安全
+- 适合本地开发工作流
 
 ***
 

@@ -40,6 +40,17 @@ class TestSkillCreate(SkillSystemTests):
         self.assertEqual(parsed.frontmatter["description"], "demo skill")
         self.assertEqual(parsed.frontmatter["when_to_use"], "use it when testing")
 
+    def test_parse_frontmatter_supports_inline_lists(self) -> None:
+        parsed = parse_frontmatter(
+            "---\n"
+            "arguments: [name]\n"
+            "allowed-tools: [Read, Grep]\n"
+            "---\n"
+            "Hello $name\n"
+        )
+        self.assertEqual(parsed.frontmatter["arguments"], ["name"])
+        self.assertEqual(parsed.frontmatter["allowed-tools"], ["Read", "Grep"])
+
 
 class TestSkillRegister(SkillSystemTests):
     def test_register_loads_skill_from_dir(self) -> None:

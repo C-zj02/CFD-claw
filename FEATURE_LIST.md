@@ -33,7 +33,7 @@
 | 能力 | 状态 | 当前情况 |
 |------|------|----------|
 | CLI 启动入口 | ✅ | 已支持 `clawd`、`login`、`config`、`--version` |
-| 交互式 REPL | ✅ | 支持流式输出、历史记录、Tab 补全、多行输入 |
+| 交互式 REPL | ✅ | 支持交互式输出、历史记录、Tab 补全、多行输入 |
 | Slash Commands | ✅ | 已支持 `/help`、`/clear`、`/save`、`/load`、`/multiline`、`/exit` |
 | 多 Provider 抽象 | ✅ | 已支持 Anthropic / OpenAI / GLM |
 | Provider 配置管理 | ✅ | 支持默认 Provider、Base URL、默认模型配置 |
@@ -108,7 +108,7 @@
 
 | 模块 | 状态 | 当前情况 |
 |------|------|----------|
-| Provider Runtime | ✅ | 已能完成基础聊天请求与流式响应 |
+| Provider Runtime | ✅ | 已能完成基础聊天请求，Provider 层提供流式接口 |
 | REPL Runtime | ✅ | 已支持基础交互、命令分流、消息记录 |
 | Agent Loop Runtime | ✅ | 已实现完整的工具调用循环与结果处理 |
 | Tool Execution Engine | ✅ | 已实现工具加载、执行、结果回填闭环 |
@@ -142,7 +142,7 @@
 - ✅ 多 Provider 聊天 CLI
 - ✅ 交互式 REPL
 - ✅ 会话保存/加载
-- ✅ 流式输出
+- ✅ 交互式 REPL 输出
 - ✅ Provider 配置管理
 - ✅ **完整的工具系统框架（30+ 工具）**
 - ✅ **Agent Loop 实现**

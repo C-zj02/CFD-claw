@@ -16,6 +16,8 @@ def parse_frontmatter(markdown: str) -> FrontmatterParseResult:
     - Top-level key: value pairs
     - Booleans: true/false (case-insensitive)
     - Numbers: integers
+    - Lists via inline bracket form:
+        key: [item1, item2]
     - Lists via hyphen form:
         key:
           - item1
@@ -62,6 +64,11 @@ def parse_frontmatter(markdown: str) -> FrontmatterParseResult:
                     break
             fm[key] = [_coerce_scalar(x) for x in items]
             continue
+        inline_list = _parse_inline_list(value)
+        if inline_list is not None:
+            fm[key] = inline_list
+            i += 1
+            continue
         # Comma-separated list
         if "," in value:
             fm[key] = [_coerce_scalar(v.strip()) for v in value.split(",") if v.strip()]
@@ -89,3 +96,12 @@ def _coerce_scalar(value: str) -> Any:
             pass
     return value
 
+
+def _parse_inline_list(value: str) -> List[Any] | None:
+    stripped = value.strip()
+    if len(stripped) < 2 or not stripped.startswith("[") or not stripped.endswith("]"):
+        return None
+    inner = stripped[1:-1].strip()
+    if not inner:
+        return []
+    return [_coerce_scalar(part.strip()) for part in inner.split(",") if part.strip()]
