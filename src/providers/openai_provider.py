@@ -2,30 +2,18 @@
 
 from __future__ import annotations
 
-from typing import Any, Generator, Optional
+from typing import Any, Optional
 
 try:
     from openai import OpenAI  # type: ignore
 except ModuleNotFoundError:  # pragma: no cover
     OpenAI = None
 
-from .base import BaseProvider, ChatResponse, MessageInput
+from .openai_compatible import OpenAICompatibleProvider
 
 
-def _convert_to_openai_tool_schema(anthropic_tool: dict[str, Any]) -> dict[str, Any]:
-    """Convert Anthropic tool schema to OpenAI/GLM format."""
-    return {
-        "type": "function",
-        "function": {
-            "name": anthropic_tool["name"],
-            "description": anthropic_tool.get("description", ""),
-            "parameters": anthropic_tool.get("input_schema", {}),
-        },
-    }
-
-
-class OpenAIProvider(BaseProvider):
-    """OpenAI provider."""
+class OpenAIProvider(OpenAICompatibleProvider):
+    """OpenAI provider using OpenAI SDK."""
 
     def __init__(
         self, api_key: str, base_url: Optional[str] = None, model: Optional[str] = None
@@ -35,130 +23,20 @@ class OpenAIProvider(BaseProvider):
         Args:
             api_key: OpenAI API key
             base_url: Base URL (optional, for custom endpoints)
-            model: Default model (default: gpt-4)
+            model: Default model (default: gpt-5.4)
         """
-        super().__init__(api_key, base_url, model or "gpt-4")
+        super().__init__(api_key, base_url, model or "gpt-5.4")
 
-        self._client_kwargs = {"api_key": api_key}
-        if base_url:
-            self._client_kwargs["base_url"] = base_url
-        self.client = None
-
-    def _ensure_client(self):
-        if self.client is not None:
-            return self.client
+    def _create_client(self) -> Any:
+        """Create OpenAI SDK client."""
         if OpenAI is None:  # pragma: no cover
             raise ModuleNotFoundError(
                 "openai package is not installed. Install optional dependencies to use OpenAIProvider."
             )
-        self.client = OpenAI(**self._client_kwargs)
-        return self.client
-
-    def chat(
-        self,
-        messages: list[MessageInput],
-        tools: Optional[list[dict[str, Any]]] = None,
-        **kwargs
-    ) -> ChatResponse:
-        """Synchronous chat completion.
-
-        Args:
-            messages: List of chat messages
-            tools: Optional list of tool schemas (Anthropic format)
-            **kwargs: Additional parameters
-
-        Returns:
-            Chat response
-        """
-        model = self._get_model(**kwargs)
-
-        # Convert messages
-        openai_messages = self._prepare_messages(messages)
-
-        # Convert tools to OpenAI format
-        extra_kwargs: dict[str, Any] = {}
-        if tools:
-            extra_kwargs["tools"] = [_convert_to_openai_tool_schema(t) for t in tools]
-
-        # Make API call
-        client = self._ensure_client()
-        response = client.chat.completions.create(
-            model=model,
-            messages=openai_messages,
-            **extra_kwargs,
-            **{k: v for k, v in kwargs.items() if k not in ["model", "tools"]},
-        )
-
-        # Extract content
-        choice = response.choices[0]
-
-        # Extract tool calls (OpenAI format -> Anthropic format)
-        tool_uses: Optional[list[dict[str, Any]]] = None
-        if hasattr(choice.message, "tool_calls") and choice.message.tool_calls:
-            tool_uses = []
-            for tc in choice.message.tool_calls:
-                import json
-                try:
-                    args = json.loads(tc.function.arguments) if tc.function.arguments else {}
-                except Exception:
-                    args = {}
-                tool_uses.append({
-                    "id": tc.id,
-                    "name": tc.function.name,
-                    "input": args,
-                })
-
-        return ChatResponse(
-            content=choice.message.content or "",
-            model=response.model,
-            usage={
-                "input_tokens": response.usage.prompt_tokens,
-                "output_tokens": response.usage.completion_tokens,
-                "total_tokens": response.usage.total_tokens,
-            },
-            finish_reason=choice.finish_reason,
-            tool_uses=tool_uses,
-        )
-
-    def chat_stream(
-        self,
-        messages: list[MessageInput],
-        tools: Optional[list[dict[str, Any]]] = None,
-        **kwargs
-    ) -> Generator[str, None, None]:
-        """Streaming chat completion.
-
-        Args:
-            messages: List of chat messages
-            tools: Optional list of tool schemas (Anthropic format)
-            **kwargs: Additional parameters
-
-        Yields:
-            Chunks of response content
-        """
-        model = self._get_model(**kwargs)
-
-        # Convert messages
-        openai_messages = self._prepare_messages(messages)
-
-        # Convert tools to OpenAI format
-        extra_kwargs: dict[str, Any] = {}
-        if tools:
-            extra_kwargs["tools"] = [_convert_to_openai_tool_schema(t) for t in tools]
-
-        # Stream API call
-        client = self._ensure_client()
-        stream = client.chat.completions.create(
-            model=model,
-            messages=openai_messages,
-            stream=True,
-            **extra_kwargs,
-            **{k: v for k, v in kwargs.items() if k not in ["model", "tools"]},
-        )
-
-        for chunk in stream:
-            if chunk.choices[0].delta.content is not None:
-                yield chunk.choices[0].delta.content
+        kwargs: dict[str, Any] = {"api_key": self.api_key}
+        if self.base_url:
+            kwargs["base_url"] = self.base_url
+        return OpenAI(**kwargs)
 
     def get_available_models(self) -> list[str]:
         """Get list of available OpenAI models.
@@ -167,10 +45,22 @@ class OpenAIProvider(BaseProvider):
             List of model names
         """
         return [
-            "gpt-4",
-            "gpt-4-turbo",
+            # GPT-5.4 series (latest flagship)
+            "gpt-5.4",
+            "gpt-5.4-pro",
+            "gpt-5.4-mini",
+            "gpt-5.4-nano",
+            # GPT-5.2 series
+            "gpt-5.2",
+            "gpt-5.2-pro",
+            "gpt-5.2-mini",
+            "gpt-5.2-nano",
+            # GPT-5.3-Codex (coding-specialized)
+            "gpt-5.3-codex",
+            # Legacy GPT-4 series
             "gpt-4o",
             "gpt-4o-mini",
+            "gpt-4-turbo",
+            "gpt-4",
             "gpt-3.5-turbo",
-            "gpt-3.5-turbo-16k",
         ]

@@ -13,10 +13,11 @@ from ..context_system import build_context_prompt
 from ..outputStyles import resolve_output_style
 from ..providers.base import BaseProvider
 from ..providers.anthropic_provider import AnthropicProvider
+from ..providers.minimax_provider import MinimaxProvider
 
 
 def _is_anthropic_provider(provider: BaseProvider) -> bool:
-    return isinstance(provider, AnthropicProvider)
+    return isinstance(provider, (AnthropicProvider, MinimaxProvider))
 
 
 def _build_openai_tool_result_content(result_output: Any) -> str:

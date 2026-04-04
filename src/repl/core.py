@@ -50,6 +50,7 @@ try:
     from rich.table import Table
     from rich.text import Text
     from rich.markdown import Markdown
+    from rich.columns import Columns
 except ModuleNotFoundError:  # pragma: no cover
     class Console:  # type: ignore
         def print(self, *args, **kwargs):
@@ -60,6 +61,7 @@ except ModuleNotFoundError:  # pragma: no cover
     Panel = None  # type: ignore
     Table = None  # type: ignore
     Text = None  # type: ignore
+    Columns = None  # type: ignore
 
     class Markdown:  # type: ignore
         def __init__(self, text: str):
@@ -305,33 +307,18 @@ class ClawdREPL:
         provider_label = f"{self.provider_name.upper()} Provider"
         model_label = self.provider.model or "Unknown model"
 
-        logo_ascii = "\n".join([
-            "  ██████╗██╗      █████╗ ██╗    ██╗██████╗",
-            " ██╔════╝██║     ██╔══██╗██║    ██║██╔══██╗",
-            " ██║     ██║     ███████║██║ █╗ ██║██║  ██║",
-            " ██║     ██║     ██╔══██║██║███╗██║██║  ██║",
-            " ╚██████╗███████╗██║  ██║╚███╔███╔╝██████╔╝",
-            "  ╚═════╝╚══════╝╚═╝  ╚═╝ ╚══╝╚══╝ ╚═════╝",
-            "   ██████╗ ██████╗ ██████╗ ███████╗",
-            "  ██╔════╝██╔═══██╗██╔══██╗██╔════╝",
-            "  ██║     ██║   ██║██║  ██║█████╗",
-            "  ██║     ██║   ██║██║  ██║██╔══╝",
-            "  ╚██████╗╚██████╔╝██████╔╝███████╗",
-            "   ╚═════╝ ╚═════╝ ╚═════╝ ╚══════╝",
-        ])
         mascot_ascii = "\n".join([
-            "           ^._.^",
-            "          / o o \\",
-            "         (   T   )",
-            "          `~---~'",
+            "  /\\__/\\",
+            " / o  o \\",
+            "(  __  )",
+            " \\/__/  ",
         ])
 
-        if Panel is None or Group is None or Align is None or Table is None or Text is None:
-            self.console.print(logo_ascii)
-            self.console.print(mascot_ascii)
-            self.console.print(f"Clawd Codex v{__version__}")
-            self.console.print(f"{model_label} · {provider_label}")
-            self.console.print(f"{display_path}\n")
+        if Panel is None or Group is None or Align is None or Table is None or Text is None or Columns is None:
+            print(mascot_ascii)
+            print(f"Clawd Codex v{__version__}")
+            print(f"{model_label} · {provider_label}")
+            print(f"{display_path}\n")
             return
 
         width = getattr(self.console, "width", 80)
@@ -345,12 +332,9 @@ class ClawdREPL:
         table.add_row("Workspace", Text(self._truncate_middle(display_path, content_width - 12), style="bold blue"))
 
         footer = Text("/help  •  /tools  •  /exit", style="dim")
+        mascot_block = Text(mascot_ascii, style="bold orange3", no_wrap=True)
         body = Group(
-            Align.center(Text(logo_ascii, style="bold bright_cyan", no_wrap=True)),
-            Text(""),
-            Align.center(Text(mascot_ascii, style="orange3", no_wrap=True)),
-            Text(""),
-            table,
+            Columns([mascot_block, table], align="center", expand=False),
             Text(""),
             Align.center(footer),
         )
@@ -655,15 +639,25 @@ class ClawdREPL:
         """Handle re-authentication when API key fails."""
         from rich.prompt import Prompt
         from src.config import set_api_key, set_default_provider
+        from src.providers import PROVIDER_INFO
 
         self.console.print("\n[bold blue]🔑 Reconfigure API Key[/bold blue]\n")
+
+        # Show available providers and defaults
+        provider_names = list(PROVIDER_INFO.keys())
+        self.console.print("[bold]Available providers:[/bold]")
+        for name, info in PROVIDER_INFO.items():
+            self.console.print(f"  [cyan]{name}[/cyan] - {info['label']} (default model: {info['default_model']})")
+        self.console.print()
 
         # Select provider
         provider = Prompt.ask(
             "Select LLM provider",
-            choices=["anthropic", "openai", "glm"],
-            default=self.provider_name
+            choices=provider_names,
+            default=self.provider_name if self.provider_name in provider_names else "anthropic"
         )
+
+        info = PROVIDER_INFO[provider]
 
         # Input API Key
         api_key = Prompt.ask(
@@ -675,19 +669,23 @@ class ClawdREPL:
             self.console.print("\n[red]Error: API Key cannot be empty[/red]")
             return
 
-        # Optional: Base URL
-        self.console.print(f"\n[dim]Press Enter to keep current, or enter custom base URL[/dim]")
+        # Optional: Base URL (show default)
+        self.console.print(f"\n[dim]Default:[/dim] {info['default_base_url']}")
         base_url = Prompt.ask(
-            f"{provider.upper()} Base URL (optional)",
-            default=""
+            f"{provider.upper()} Base URL",
+            default=info["default_base_url"]
+        )
+
+        # Optional: Default Model (show options)
+        self.console.print(f"\n[dim]Available models:[/dim] {', '.join(info['available_models'])}")
+        self.console.print(f"[dim]Default:[/dim] [bold]{info['default_model']}[/bold]")
+        default_model = Prompt.ask(
+            f"{provider.upper()} Default Model",
+            default=info["default_model"]
         )
 
         # Save configuration
-        kwargs = {"api_key": api_key}
-        if base_url:
-            kwargs["base_url"] = base_url
-
-        set_api_key(provider, **kwargs)
+        set_api_key(provider, api_key=api_key, base_url=base_url, default_model=default_model)
         set_default_provider(provider)
 
         self.console.print(f"\n[green]✓ {provider.upper()} API Key updated successfully![/green]\n")
