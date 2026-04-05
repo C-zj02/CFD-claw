@@ -53,7 +53,7 @@ class TestOutputStyles(unittest.TestCase):
             )
 
             out = run_agent_loop(conversation, provider, registry, ctx, verbose=False)
-            self.assertEqual(out, "ok")
+            self.assertEqual(out.response_text, "ok")
             messages = provider.chat.call_args.args[0]
             self.assertEqual(messages[0]["role"], "system")
             self.assertIn("Be extra terse.", messages[0]["content"])

@@ -61,7 +61,7 @@ class TestAnthropicProvider(unittest.TestCase):
     def test_initialization(self):
         """Test provider initialization."""
         provider = AnthropicProvider(api_key="test_key")
-        self.assertEqual(provider.model, "claude-sonnet-4-20250514")
+        self.assertEqual(provider.model, "claude-sonnet-4-6")
         self.assertEqual(provider.api_key, "test_key")
 
     def test_custom_model(self):
@@ -135,7 +135,7 @@ class TestOpenAIProvider(unittest.TestCase):
     def test_initialization(self):
         """Test provider initialization."""
         provider = OpenAIProvider(api_key="test_key")
-        self.assertEqual(provider.model, "gpt-4")
+        self.assertEqual(provider.model, "gpt-5.4")
 
     def test_custom_model(self):
         """Test provider with custom model."""
@@ -206,7 +206,7 @@ class TestGLMProvider(unittest.TestCase):
     def test_initialization(self):
         """Test provider initialization."""
         provider = GLMProvider(api_key="test_key")
-        self.assertEqual(provider.model, "glm-4.5")
+        self.assertEqual(provider.model, "zai/glm-5")
 
     def test_custom_model(self):
         """Test provider with custom model."""
@@ -217,8 +217,8 @@ class TestGLMProvider(unittest.TestCase):
         """Test getting available models."""
         provider = GLMProvider(api_key="test_key")
         models = provider.get_available_models()
-        self.assertIn("glm-4.5", models)
-        self.assertIn("glm-4", models)
+        self.assertIn("zai/glm-4.5", models)
+        self.assertIn("zai/glm-4", models)
 
     @patch("src.providers.glm_provider.ZhipuAI")
     def test_chat(self, mock_zhipu):

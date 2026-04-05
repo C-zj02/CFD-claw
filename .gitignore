@@ -79,3 +79,6 @@ CLAUDE.md
 sessions/
 .transcripts/
 .port_sessions/
+
+# Claude Code personal settings
+CLAUDE.local.md

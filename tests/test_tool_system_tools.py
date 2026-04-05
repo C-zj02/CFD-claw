@@ -45,6 +45,12 @@ from src.tool_system.tools import (
     ToolSearchTool,
     WebFetchTool,
     WebSearchTool,
+    TeamCreateTool,
+    TeamDeleteTool,
+    EnterWorktreeTool,
+    ExitWorktreeTool,
+    EnterPlanModeTool,
+    ExitPlanModeTool,
 )
 
 
@@ -442,6 +448,161 @@ class TestBriefAndAgentTools(ToolSystemTests):
         call = {"name": "Read", "input": {"file_path": str(p), "limit": 10}}
         out = reg.get("Agent").run({"calls": [call]}, ctx).output  # type: ignore[union-attr]
         self.assertEqual(out["results"][0]["name"], "Read")
+
+
+class TestTeamTools(ToolSystemTests):
+    def test_team_create_roundtrip(self) -> None:
+        """Test creating and deleting a team."""
+        # Create team
+        create_out = TeamCreateTool().run(
+            {"team_name": "test-team", "description": "A test team"},
+            self.ctx,
+        ).output
+        self.assertEqual(create_out["team_name"], "test-team")
+        self.assertIsNotNone(create_out["lead_agent_id"])
+        self.assertEqual(self.ctx.team["team_name"], "test-team")
+
+        # Verify team file was created
+        team_file = self.root / ".clawd" / "team.json"
+        self.assertTrue(team_file.exists())
+
+        # Delete team
+        delete_out = TeamDeleteTool().run({}, self.ctx).output
+        self.assertTrue(delete_out["success"])
+        self.assertEqual(delete_out["team_name"], "test-team")
+        self.assertIsNone(self.ctx.team)
+
+        # Verify team file was deleted
+        self.assertFalse(team_file.exists())
+
+    def test_team_delete_no_team(self) -> None:
+        """Test deleting when no team exists."""
+        out = TeamDeleteTool().run({}, self.ctx).output
+        self.assertFalse(out["success"])
+        self.assertEqual(out["message"], "No active team")
+
+    def test_team_create_requires_name(self) -> None:
+        """Test team name validation."""
+        from src.tool_system.errors import ToolInputError
+
+        with self.assertRaises(ToolInputError):
+            TeamCreateTool().run({"team_name": ""}, self.ctx)
+
+
+class TestWorktreeTools(ToolSystemTests):
+    def test_worktree_roundtrip(self) -> None:
+        """Test entering and exiting a worktree."""
+        # Enter worktree
+        enter_out = EnterWorktreeTool().run({"name": "test-tree"}, self.ctx).output
+        self.assertIn("test-tree", enter_out["worktreePath"])
+        self.assertIsNotNone(self.ctx.worktree_root)
+        self.assertEqual(self.ctx.cwd, self.ctx.worktree_root)
+
+        # Verify worktree directory exists
+        worktree_dir = self.root / ".clawd" / "worktrees" / "test-tree"
+        self.assertTrue(worktree_dir.exists())
+
+        # Exit worktree
+        exit_out = ExitWorktreeTool().run({}, self.ctx).output
+        self.assertIn("Exited worktree", exit_out["message"])
+        self.assertIsNone(self.ctx.worktree_root)
+        self.assertEqual(self.ctx.cwd, self.root)
+
+    def test_worktree_enter_already_in(self) -> None:
+        """Test entering worktree when already in one."""
+        from src.tool_system.errors import ToolPermissionError
+
+        EnterWorktreeTool().run({"name": "first"}, self.ctx)
+        with self.assertRaises(ToolPermissionError):
+            EnterWorktreeTool().run({"name": "second"}, self.ctx)
+
+    def test_worktree_exit_not_in(self) -> None:
+        """Test exiting worktree when not in one."""
+        from src.tool_system.errors import ToolPermissionError
+
+        with self.assertRaises(ToolPermissionError):
+            ExitWorktreeTool().run({}, self.ctx)
+
+    def test_worktree_name_validation(self) -> None:
+        """Test worktree name validation."""
+        from src.tool_system.errors import ToolInputError
+
+        # Invalid empty name
+        with self.assertRaises(ToolInputError):
+            EnterWorktreeTool().run({"name": ""}, self.ctx)
+
+        # Invalid characters
+        with self.assertRaises(ToolInputError):
+            EnterWorktreeTool().run({"name": "invalid name!"}, self.ctx)
+
+        # Too long
+        with self.assertRaises(ToolInputError):
+            EnterWorktreeTool().run({"name": "a" * 65}, self.ctx)
+
+
+class TestPlanModeTools(ToolSystemTests):
+    def test_plan_mode_roundtrip(self) -> None:
+        """Test entering and exiting plan mode."""
+        # Enter plan mode
+        enter_out = EnterPlanModeTool().run({}, self.ctx).output
+        self.assertTrue(self.ctx.plan_mode)
+        self.assertIn("Entered plan mode", enter_out["message"])
+
+        # Exit plan mode
+        exit_out = ExitPlanModeTool().run({}, self.ctx).output
+        self.assertFalse(self.ctx.plan_mode)
+        self.assertFalse(exit_out["isAgent"])
+        self.assertTrue(exit_out["hasTaskTool"])
+
+    def test_plan_mode_exit_with_plan(self) -> None:
+        """Test exiting plan mode with a plan."""
+        EnterPlanModeTool().run({}, self.ctx)
+
+        plan_content = "# My Plan\n\n- Do something\n- Do something else"
+        exit_out = ExitPlanModeTool().run({"plan": plan_content}, self.ctx).output
+
+        self.assertEqual(exit_out["plan"], plan_content)
+        self.assertIsNotNone(exit_out["filePath"])
+
+        # Verify plan file was created
+        plan_file = self.root / ".clawd" / "plan.md"
+        self.assertTrue(plan_file.exists())
+        self.assertEqual(plan_file.read_text(encoding="utf-8"), plan_content)
+
+    def test_plan_mode_exit_with_custom_path(self) -> None:
+        """Test exiting plan mode with custom plan file path."""
+        EnterPlanModeTool().run({}, self.ctx)
+
+        custom_path = self.root / "my-plan.md"
+        plan_content = "# Custom Plan"
+        exit_out = ExitPlanModeTool().run(
+            {"plan": plan_content, "planFilePath": str(custom_path)},
+            self.ctx,
+        ).output
+
+        self.assertEqual(exit_out["filePath"], str(custom_path))
+        self.assertTrue(custom_path.exists())
+
+    def test_plan_mode_exit_not_in_mode(self) -> None:
+        """Test exiting plan mode when not in it."""
+        from src.tool_system.errors import ToolPermissionError
+
+        with self.assertRaises(ToolPermissionError):
+            ExitPlanModeTool().run({}, self.ctx)
+
+    def test_plan_mode_plan_validation(self) -> None:
+        """Test plan input validation."""
+        from src.tool_system.errors import ToolInputError
+
+        EnterPlanModeTool().run({}, self.ctx)
+
+        # Plan must be string
+        with self.assertRaises(ToolInputError):
+            ExitPlanModeTool().run({"plan": 123}, self.ctx)
+
+        # Plan file path must be string
+        with self.assertRaises(ToolInputError):
+            ExitPlanModeTool().run({"plan": "x", "planFilePath": 123}, self.ctx)
 
 
 if __name__ == "__main__":

@@ -67,6 +67,7 @@ except ModuleNotFoundError:  # pragma: no cover
         def __init__(self, text: str):
             self.text = text
 from pathlib import Path
+import asyncio
 import sys
 import json
 
@@ -78,6 +79,18 @@ from src.tool_system.context import ToolContext
 from src.tool_system.defaults import build_default_registry
 from src.tool_system.protocol import ToolCall
 from src.tool_system.agent_loop import ToolEvent, run_agent_loop, summarize_tool_result, summarize_tool_use
+
+# New command system imports
+from src.command_system import (
+    CommandRegistry,
+    CommandResult,
+    create_command_context,
+    execute_command_async,
+    execute_command_sync,
+    register_builtin_commands,
+)
+from src.cost_tracker import CostTracker
+from src.history import HistoryLog
 
 
 class ClawdREPL:
@@ -116,11 +129,8 @@ class ClawdREPL:
         self._current_status = None
         self.tool_context.permission_handler = self._handle_permission_request
 
-        # Prompt toolkit with tab completion
-        history_file = Path.home() / ".clawd" / "history"
-        history_file.parent.mkdir(parents=True, exist_ok=True)
-
-        self._built_in_commands = [
+        # Original built-in commands - define this FIRST!
+        self._original_built_ins = [
             "/",
             "/help",
             "/exit",
@@ -132,9 +142,18 @@ class ClawdREPL:
             "/multiline",
             "/tools",
             "/tool",
-            "/skill",
+            "/skills",
             "/init",
         ]
+        self._built_in_commands = list(self._original_built_ins)
+
+        # Initialize new command system
+        self._init_command_system()
+
+        # Prompt toolkit with tab completion
+        history_file = Path.home() / ".clawd" / "history"
+        history_file.parent.mkdir(parents=True, exist_ok=True)
+
         self.completer = WordCompleter(self._get_slash_command_words(), ignore_case=True)
 
         # Key bindings for multiline
@@ -159,6 +178,13 @@ class ClawdREPL:
         )
 
     def _ask_user_questions(self, questions: list[dict]) -> dict[str, str]:
+        # Stop the Rich status spinner if running, so we can get clean input
+        if self._current_status is not None:
+            try:
+                self._current_status.stop()
+            except Exception:
+                pass
+
         answers: dict[str, str] = {}
         for q in questions:
             question_text = str(q.get("question", "")).strip()
@@ -178,7 +204,7 @@ class ClawdREPL:
             self.console.print(f"  {other_idx}. Other  [dim]Provide custom text[/dim]")
 
             prompt = "Select (comma-separated) > " if multi else "Select > "
-            raw = self.prompt_session.prompt(prompt).strip()
+            raw = input(prompt).strip()
             if not raw:
                 choice_str = "1"
             else:
@@ -194,7 +220,7 @@ class ClawdREPL:
                 except ValueError:
                     idx = -1
                 if idx == other_idx:
-                    free = self.prompt_session.prompt("Other > ").strip()
+                    free = input("Other > ").strip()
                     if free:
                         selected.append(free)
                     continue
@@ -203,6 +229,14 @@ class ClawdREPL:
             if not selected:
                 selected = [labels[0]]
             answers[question_text] = ", ".join(selected) if multi else selected[0]
+
+        # Restart spinner after getting answers
+        if self._current_status is not None:
+            try:
+                self._current_status.start()
+            except Exception:
+                pass
+
         return answers
 
     def _handle_permission_request(
@@ -298,6 +332,114 @@ class ClawdREPL:
 
         self.console.print(f"[dim]Could not enable {setting_name}.[/dim]")
 
+    def _init_command_system(self):
+        """Initialize the new command system."""
+        # Also register to global registry so execute_command_async can find commands
+        register_builtin_commands(None)  # None = use global registry
+
+        # Create command registry and register built-ins
+        self.command_registry = CommandRegistry()
+        register_builtin_commands(self.command_registry)
+
+        # Create cost tracker and history
+        self.cost_tracker = CostTracker()
+        self.history_log = HistoryLog()
+
+        # Create command context
+        self.command_context = create_command_context(
+            workspace_root=Path.cwd(),
+            conversation=self.session.conversation,
+            cost_tracker=self.cost_tracker,
+            history=self.history_log,
+        )
+
+        # Merge new commands with built-in list for completion
+        self._update_built_in_commands_with_command_system()
+
+    def _update_built_in_commands_with_command_system(self):
+        """Update the built-in commands list with commands from the new system."""
+        # Start with original built-ins
+        self._built_in_commands = list(self._original_built_ins)
+
+        # Add commands from the new command system
+        try:
+            for cmd in self.command_registry.list_commands():
+                cmd_name = f"/{cmd.name}"
+                if cmd_name not in self._built_in_commands:
+                    self._built_in_commands.append(cmd_name)
+                # Add aliases
+                for alias in cmd.aliases:
+                    alias_name = f"/{alias}"
+                    if alias_name not in self._built_in_commands:
+                        self._built_in_commands.append(alias_name)
+        except Exception:
+            pass
+
+    def _try_execute_new_command(self, command: str, args: str) -> tuple[bool, str | None]:
+        """Try to execute a command using the new command system (sync path for LocalCommand only).
+
+        Returns:
+            Tuple of (handled: bool, result_text: str | None)
+        """
+        try:
+            success, result_text, error = execute_command_sync(
+                command, args, self.command_context
+            )
+            if success:
+                return True, result_text
+            else:
+                return False, error
+        except Exception as e:
+            return False, str(e)
+
+    async def _try_execute_command_async(self, command: str, args: str) -> CommandResult:
+        """Execute a command asynchronously, supporting both LocalCommand and PromptCommand.
+
+        Returns:
+            CommandResult with the execution result
+        """
+        try:
+            return await execute_command_async(command, args, self.command_context)
+        except Exception as e:
+            return CommandResult.error(command, str(e))
+
+    def _handle_command_result(self, result: CommandResult) -> bool:
+        """Handle the result of a command execution.
+
+        Returns True if the command was handled, False otherwise.
+        """
+        if not result.success:
+            if result.error:
+                self.console.print(f"[red]{result.error}[/red]")
+            return True
+
+        if result.result_type == "text":
+            if result.text:
+                self.console.print("\n" + result.text)
+                self.console.print()
+            return True
+
+        elif result.result_type == "prompt":
+            # For PromptCommand, extract the text content and send to LLM
+            prompt_text = ""
+            for item in result.prompt_content:
+                if item.get("type") == "text":
+                    prompt_text = item.get("text", "")
+                    break
+
+            if prompt_text:
+                # Send the prompt to the LLM for interactive execution
+                # Use higher max_turns for complex commands like /init
+                self.console.print("[dim]Initializing workspace setup...[/dim]")
+                self.chat(prompt_text, max_turns=100)
+            return True
+
+        elif result.result_type == "skip":
+            # Command handled silently
+            return True
+
+        return False
+
     def _get_slash_command_words(self) -> list[str]:
         words = list(self._built_in_commands)
         try:
@@ -334,42 +476,62 @@ class ClawdREPL:
     def _show_slash_palette(self, query: str | None = None) -> None:
         q = (query or "").strip().lower()
         self.console.print("\n[bold]Available commands and skills:[/bold]")
-        for cmd in self._built_in_commands:
+
+        # Collect all commands
+        all_commands: list[tuple[str, str, str]] = []  # (name, description, type)
+        seen: set[str] = set()
+
+        def add_command(name: str, desc: str, cmd_type: str = "command") -> None:
+            if name in seen:
+                return
+            seen.add(name)
+            if q and q not in name.lower() and q not in desc.lower():
+                return
+            all_commands.append((name, desc, cmd_type))
+
+        # Add built-in commands
+        for cmd in self._original_built_ins:
             if cmd == "/":
                 continue
-            if q and q not in cmd.lower():
-                continue
-            self.console.print(f"  {cmd}")
+            add_command(cmd, "", "command")
+
+        # Add commands from new command system
+        try:
+            for cmd in self.command_registry.list_commands():
+                cmd_name = f"/{cmd.name}"
+                if cmd_name in self._original_built_ins:
+                    continue
+                alias_str = f" (aliases: {', '.join(cmd.aliases)})" if cmd.aliases else ""
+                add_command(f"{cmd_name}{alias_str}", cmd.description, "command")
+        except Exception:
+            pass
+
+        # Add skills
         try:
             from src.skills.loader import get_all_skills
 
             cwd = self.tool_context.cwd or self.tool_context.workspace_root
             skills = list(get_all_skills(project_root=cwd))
             skills.sort(key=lambda s: s.name.lower())
-            if skills:
-                self.console.print("\n[bold]Skills:[/bold]")
-                for s in skills:
-                    if q and q not in s.name.lower() and q not in (s.description or "").lower():
-                        continue
-                    desc = (s.description or "").strip()
-                    loaded = (getattr(s, "loaded_from", "") or "").strip()
-                    tag = f"[{loaded}]" if loaded else ""
-                    model = (getattr(s, "model", None) or "").strip()
-                    allowed_tools = list(getattr(s, "allowed_tools", []) or [])
-                    parts: list[str] = []
-                    if tag:
-                        parts.append(tag)
-                    if model:
-                        parts.append(f"model={model}")
-                    if allowed_tools:
-                        shown = ", ".join(allowed_tools[:6])
-                        more = f" (+{len(allowed_tools) - 6})" if len(allowed_tools) > 6 else ""
-                        parts.append(f"tools={shown}{more}")
-                    meta = f"  [dim]{' · '.join(parts)}[/dim]" if parts else ""
-                    suffix = f"  [dim]{desc}[/dim]" if desc else ""
-                    self.console.print(f"  /{s.name}{meta}{suffix}")
+            for s in skills:
+                desc = (s.description or "").strip()
+                add_command(f"/{s.name}", desc, "skill")
         except Exception:
             pass
+
+        # Sort and display
+        all_commands.sort(key=lambda x: x[0].lower())
+        for name, desc, cmd_type in all_commands:
+            if cmd_type == "skill":
+                self.console.print(f"  [magenta]{name}[/magenta]")
+                if desc:
+                    self.console.print(f"    [dim]{desc}[/dim]")
+            else:
+                if desc:
+                    self.console.print(f"  {name}  [dim]- {desc}[/dim]")
+                else:
+                    self.console.print(f"  {name}")
+
         self.console.print()
 
     def _shorten_path_text(self, text: str) -> str:
@@ -493,6 +655,79 @@ class ClawdREPL:
             if query:
                 self._show_slash_palette(query=query)
                 return
+
+        # First, try the new command system
+        if raw.startswith("/"):
+            parts = raw[1:].split(maxsplit=1)
+            cmd_name = parts[0].lower()
+            args = parts[1] if len(parts) > 1 else ""
+
+            # Check if this command exists in the new command system
+            # but skip the ones we handle specially
+            # Note: /context, /compact, /skill need special handling, don't route through new system
+            # /init is handled via new command system (PromptCommand) so it's NOT in special_commands
+            special_commands = {
+                'exit', 'quit', 'q',
+                'help', 'tools', 'tool',
+                'save', 'load', 'multiline',
+                'skill',
+                'context', 'compact',  # These need special handling
+                ''
+            }
+
+            # Handle /init through the new command system (PromptCommand path)
+            if cmd_name == 'init':
+                # Use async path for PromptCommand
+                try:
+                    # Run async command execution in a new event loop
+                    import concurrent.futures
+                    with concurrent.futures.ThreadPoolExecutor() as executor:
+                        future = executor.submit(
+                            asyncio.run,
+                            self._try_execute_command_async(cmd_name, args)
+                        )
+                        result = future.result()
+
+                    if result.success:
+                        self._handle_command_result(result)
+                    elif result.error:
+                        self.console.print(f"[red]{result.error}[/red]")
+                except Exception as e:
+                    self.console.print(f"[red]Error executing /init: {e}[/red]")
+                return
+
+            if cmd_name not in special_commands:
+                # Try to execute via new command system
+                # First try sync path for LocalCommand (faster)
+                try:
+                    handled, result_text = self._try_execute_new_command(cmd_name, args)
+                    if handled:
+                        if result_text:
+                            self.console.print("\n" + result_text)
+                        self.console.print()
+                        return
+                except Exception as e:
+                    # Fall through to async path
+                    pass
+
+                # Use async path for PromptCommand
+                # Run in a new event loop since we're in a sync context
+                try:
+                    import concurrent.futures
+                    with concurrent.futures.ThreadPoolExecutor() as executor:
+                        future = executor.submit(
+                            asyncio.run,
+                            self._try_execute_command_async(cmd_name, args)
+                        )
+                        result = future.result()
+
+                    if result.success:
+                        if self._handle_command_result(result):
+                            return
+                except Exception:
+                    pass
+
+        # Fall back to original command handling
         cmd = raw.lower()
 
         if cmd in ['/exit', '/quit', '/q']:
@@ -533,6 +768,15 @@ class ClawdREPL:
             self.console.print()
 
         elif cmd == '/clear':
+            # Try new command system first, fall back to original
+            try:
+                handled, result_text = self._try_execute_new_command('clear', '')
+                if handled and result_text:
+                    self.console.print("\n[green]" + result_text + "[/green]")
+                    return
+            except Exception:
+                pass
+            # Original implementation
             self.session.conversation.clear()
             self.console.print("[green]Conversation cleared.[/green]")
 
@@ -557,8 +801,45 @@ class ClawdREPL:
         elif cmd == '/skill':
             self._handle_skill_command()
 
-        elif cmd == '/init':
-            self._handle_init_command()
+        elif cmd == '/context':
+            # Populate command context config for context analysis
+            self.command_context.config["provider"] = self.provider
+            self.command_context.config["model"] = self.provider.model
+            self.command_context.config["tool_schemas"] = [
+                spec.to_dict() if hasattr(spec, "to_dict") else {
+                    "name": spec.name,
+                    "description": spec.description,
+                    "input_schema": dict(spec.input_schema) if hasattr(spec.input_schema, "keys") else spec.input_schema,
+                }
+                for spec in self.tool_registry.list_specs()
+            ]
+            self.command_context.config["system_prompt"] = ""
+            # Try new command system
+            try:
+                handled, result_text = self._try_execute_new_command('context', '')
+                if handled and result_text:
+                    self.console.print(Markdown(result_text))
+                    return
+            except Exception:
+                pass
+            self.console.print("[yellow]/context analysis unavailable in this context.[/yellow]")
+
+        elif cmd == '/compact':
+            # Populate command context config for compact
+            self.command_context.config["provider"] = self.provider
+            self.command_context.config["model"] = self.provider.model
+            self.command_context.config["system_prompt"] = ""
+            # Try new command system
+            try:
+                handled, result_text = self._try_execute_new_command('compact', '')
+                if handled and result_text:
+                    self.console.print("\n[green]" + result_text + "[/green]")
+                    return
+            except Exception:
+                pass
+            # Simple fallback: just clear conversation
+            self.session.conversation.clear()
+            self.console.print("[green]Conversation cleared.[/green]")
 
         else:
             if raw.startswith("/"):
@@ -629,14 +910,16 @@ class ClawdREPL:
 - `/` - Show all commands and skills
 - `/help` - Show this help message
 - `/exit`, `/quit`, `/q` - Exit the REPL
-- `/clear` - Clear conversation history
+- `/clear`, `/reset`, `/new` - Clear conversation history
 - `/save` - Save current session
 - `/load <session-id>` - Load a previous session
 - `/multiline` - Toggle multiline input mode
 - `/tools` - List available built-in tools
 - `/tool <name> <json>` - Run a tool directly
-- `/skill` - List all available skills
+- `/skills` - List all available skills
 - `/init` - Create CLAUDE.md file for the project
+- `/cost` - Show session cost and usage
+- `/compact` - Compact conversation to save context space
 
 **Usage:**
 - Type your message and press Enter to chat
@@ -684,27 +967,6 @@ class ClawdREPL:
         except Exception as e:
             self.console.print(f"[red]Error loading skills: {e}[/red]")
 
-    def _handle_init_command(self) -> None:
-        """Handle /init command - create CLAUDE.md file for the project via LLM analysis."""
-        cwd = self.tool_context.cwd or self.tool_context.workspace_root
-        if cwd is None:
-            self.console.print("[red]Error: Could not determine current working directory.[/red]")
-            return
-
-        init_prompt = f"""Create a CLAUDE.md at {cwd}. Read the key files (README, package.json, pyproject.toml, Makefile, existing CLAUDE.md if any) and write a minimal file.
-
-Include only non-obvious info: special build/test commands, code style rules that differ from defaults, required env vars, gotchas.
-
-Header:
-```
-# CLAUDE.md
-
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-```"""
-
-        self.console.print("[dim]Creating CLAUDE.md...[/dim]")
-        self.chat(init_prompt)
-
     def _is_recoverable_tool_error(self, tool_name: str, tool_output) -> bool:
         if not isinstance(tool_name, str):
             return False
@@ -721,8 +983,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
                 return True
         return False
 
-    def chat(self, user_input: str):
-        """Send message to LLM and display response."""
+    def chat(self, user_input: str, max_turns: int = 20):
+        """Send message to LLM and display response.
+
+        Args:
+            user_input: The user message to send.
+            max_turns: Maximum number of tool call turns (default 20, higher for complex commands).
+        """
         # Add user message
         self.session.conversation.add_user_message(user_input)
 
@@ -762,17 +1029,31 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
             from rich.status import Status
             self._current_status = self.console.status("[dim]Thinking...[/dim]", spinner="dots")
             with self._current_status:
-                response_text = run_agent_loop(
+                result = run_agent_loop(
                     conversation=self.session.conversation,
                     provider=self.provider,
                     tool_registry=self.tool_registry,
                     tool_context=self.tool_context,
+                    max_turns=max_turns,
                     verbose=False,
                     on_event=on_event,
                 )
             self._current_status = None
-            
-            self.console.print(Markdown(response_text))
+
+            # Record usage to cost tracker
+            if result.usage:
+                input_tokens = result.usage.get("input_tokens", 0)
+                output_tokens = result.usage.get("output_tokens", 0)
+                if input_tokens > 0 or output_tokens > 0:
+                    self.cost_tracker.record(
+                        f"turn_{result.num_turns}_tokens",
+                        input_tokens + output_tokens
+                    )
+                    # Also update command context for new commands
+                    if hasattr(self, 'command_context') and self.command_context:
+                        self.command_context.cost_tracker = self.cost_tracker
+
+            self.console.print(Markdown(result.response_text))
             self.console.print("\n")
 
         except Exception as e:

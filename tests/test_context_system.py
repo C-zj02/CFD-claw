@@ -61,7 +61,7 @@ class TestContextSystem(unittest.TestCase):
             )
 
             out = run_agent_loop(conversation, provider, registry, ctx, verbose=False)
-            self.assertEqual(out, "ok")
+            self.assertEqual(out.response_text, "ok")
             system_message = provider.chat.call_args.args[0][0]
             self.assertEqual(system_message["role"], "system")
             self.assertIn("## Runtime Context", system_message["content"])

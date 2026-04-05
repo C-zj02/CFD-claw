@@ -9,7 +9,7 @@ from src.agent.conversation import Conversation
 from src.providers.base import ChatResponse
 from src.tool_system.defaults import build_default_registry
 from src.tool_system.context import ToolContext
-from src.tool_system.agent_loop import run_agent_loop
+from src.tool_system.agent_loop import run_agent_loop, AgentLoopResult
 
 
 class TestAgentLoop(unittest.TestCase):
@@ -62,7 +62,7 @@ class TestAgentLoop(unittest.TestCase):
 
         mock_provider.chat.side_effect = [mock_response1, mock_response2]
 
-        final_text = run_agent_loop(
+        result = run_agent_loop(
             conversation=conversation,
             provider=mock_provider,
             tool_registry=self.registry,
@@ -71,7 +71,8 @@ class TestAgentLoop(unittest.TestCase):
         )
 
         # Verify final response
-        self.assertEqual(final_text, "File created successfully!")
+        self.assertIsInstance(result, AgentLoopResult)
+        self.assertEqual(result.response_text, "File created successfully!")
 
         # Verify provider was called twice
         self.assertEqual(mock_provider.chat.call_count, 2)
@@ -117,7 +118,7 @@ class TestAgentLoop(unittest.TestCase):
 
         mock_provider.chat.side_effect = [mock_response1, mock_response2]
 
-        final_text = run_agent_loop(
+        result = run_agent_loop(
             conversation=conversation,
             provider=mock_provider,
             tool_registry=self.registry,
@@ -125,7 +126,8 @@ class TestAgentLoop(unittest.TestCase):
             verbose=False,
         )
 
-        self.assertEqual(final_text, "File created successfully!")
+        self.assertIsInstance(result, AgentLoopResult)
+        self.assertEqual(result.response_text, "File created successfully!")
         self.assertTrue(hello_path.exists())
         self.assertEqual(hello_path.read_text(), "print('hello world')")
 

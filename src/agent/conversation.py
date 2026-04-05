@@ -41,6 +41,8 @@ class Message:
     role: str  # "user", "assistant", "system"
     content: Union[str, list[ContentBlock]]
     timestamp: str = field(default_factory=lambda: datetime.now().isoformat())
+    # Internal marker for messages that should be filtered from API (e.g., compact boundary)
+    _is_internal: bool = field(default=False, repr=False)
 
 
 @dataclass
@@ -78,6 +80,9 @@ class Conversation:
         """Get messages in API format (Anthropic style)."""
         api_messages = []
         for msg in self.messages:
+            # Skip internal messages (e.g., compact boundary markers)
+            if getattr(msg, "_is_internal", False):
+                continue
             if isinstance(msg.content, str):
                 api_messages.append({"role": msg.role, "content": msg.content})
             else:
@@ -134,7 +139,8 @@ class Conversation:
             messages_data.append({
                 "role": msg.role,
                 "content": content_data,
-                "timestamp": msg.timestamp
+                "timestamp": msg.timestamp,
+                "_is_internal": getattr(msg, "_is_internal", False),
             })
         return {
             "messages": messages_data,
@@ -172,6 +178,7 @@ class Conversation:
             conv.messages.append(Message(
                 role=msg_data["role"],
                 content=msg_content,
-                timestamp=msg_data.get("timestamp", "")
+                timestamp=msg_data.get("timestamp", ""),
+                _is_internal=msg_data.get("_is_internal", False),
             ))
         return conv

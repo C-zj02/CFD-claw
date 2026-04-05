@@ -59,25 +59,25 @@ class TestDefaultConfig(unittest.TestCase):
         self.assertIn("openai", config["providers"])
         self.assertIn("glm", config["providers"])
 
-    def test_default_provider_is_glm(self):
-        """Test that default provider is GLM."""
+    def test_default_provider_is_anthropic(self):
+        """Test that default provider is Anthropic."""
         config = get_default_config()
-        self.assertEqual(config["default_provider"], "glm")
+        self.assertEqual(config["default_provider"], "anthropic")
 
     def test_default_models(self):
         """Test default models for providers."""
         config = get_default_config()
         self.assertEqual(
             config["providers"]["anthropic"]["default_model"],
-            "claude-sonnet-4-20250514"
+            "claude-sonnet-4-6"
         )
         self.assertEqual(
             config["providers"]["openai"]["default_model"],
-            "gpt-4"
+            "gpt-5.4"
         )
         self.assertEqual(
             config["providers"]["glm"]["default_model"],
-            "glm-4.5"
+            "zai/glm-5"
         )
 
 
@@ -301,7 +301,7 @@ class TestDefaultProvider(unittest.TestCase):
 
             with patch('src.config.get_config_path', return_value=config_path):
                 provider = get_default_provider()
-                self.assertEqual(provider, "glm")
+                self.assertEqual(provider, "anthropic")
 
 
 if __name__ == '__main__':

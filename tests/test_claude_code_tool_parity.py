@@ -101,7 +101,7 @@ class TestClaudeCodeToolParity(unittest.TestCase):
             tool_context=self.ctx,
             verbose=False,
         )
-        self.assertEqual(out, "hello")
+        self.assertEqual(out.response_text, "hello")
 
     def test_tool_search_select(self) -> None:
         out = self.registry.dispatch(

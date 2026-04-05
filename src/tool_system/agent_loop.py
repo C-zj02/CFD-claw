@@ -100,6 +100,14 @@ class ToolEvent:
     error: str | None = None
 
 
+@dataclass(frozen=True)
+class AgentLoopResult:
+    """Result of running the agent loop."""
+    response_text: str
+    usage: dict[str, Any] | None = None  # {"input_tokens": int, "output_tokens": int}
+    num_turns: int = 0
+
+
 ToolEventHandler = Callable[[ToolEvent], None]
 
 
@@ -192,7 +200,7 @@ def run_agent_loop(
     stream: bool = False,
     verbose: bool = False,
     on_event: ToolEventHandler | None = None,
-) -> str:
+) -> AgentLoopResult:
     """Run agent loop: LLM -> tools -> LLM until no more tools or max turns.
 
     Args:
@@ -203,9 +211,10 @@ def run_agent_loop(
         max_turns: Maximum tool turns before stopping
         stream: Whether to stream responses
         verbose: Whether to print tool calls/results
+        on_event: Optional callback for tool events
 
     Returns:
-        Final assistant text response
+        AgentLoopResult with final text response, usage info, and turn count
     """
     # Convert tools to schemas (Anthropic format)
     tool_schemas = []
@@ -232,6 +241,10 @@ def run_agent_loop(
             # If there are already block messages, we are probably Anthropic; leave as is
             pass
 
+    # Track usage across all turns
+    total_usage: dict[str, int] = {"input_tokens": 0, "output_tokens": 0}
+    turn_count = 0
+
     for turn in range(max_turns):
         if _is_anthropic_provider(provider):
             api_messages = conversation.get_messages()
@@ -249,6 +262,12 @@ def run_agent_loop(
             if turn == 0:
                 api_messages = [{"role": "system", "content": effective_system_prompt}, *api_messages]
         response = provider.chat(api_messages, **call_kwargs)
+        turn_count += 1
+
+        # Collect usage info
+        if response.usage:
+            total_usage["input_tokens"] += response.usage.get("input_tokens", 0)
+            total_usage["output_tokens"] += response.usage.get("output_tokens", 0)
 
         # Build assistant content for Anthropic or just text for OpenAI
         final_assistant_content = response.content or ""
@@ -292,8 +311,16 @@ def run_agent_loop(
         if not tool_uses:
             # No more tools, done
             if (final_assistant_content or "").strip() == "" and last_user_visible_message is not None:
-                return last_user_visible_message
-            return final_assistant_content
+                return AgentLoopResult(
+                    response_text=last_user_visible_message,
+                    usage=total_usage if total_usage["input_tokens"] > 0 or total_usage["output_tokens"] > 0 else None,
+                    num_turns=turn_count,
+                )
+            return AgentLoopResult(
+                response_text=final_assistant_content,
+                usage=total_usage if total_usage["input_tokens"] > 0 or total_usage["output_tokens"] > 0 else None,
+                num_turns=turn_count,
+            )
 
         # Call each tool
         for tool_use in tool_uses:
@@ -378,4 +405,8 @@ def run_agent_loop(
                     })
 
     # Reached max turns
-    return "[Max tool turns reached]"
+    return AgentLoopResult(
+        response_text="[Max tool turns reached]",
+        usage=total_usage if total_usage["input_tokens"] > 0 or total_usage["output_tokens"] > 0 else None,
+        num_turns=turn_count,
+    )

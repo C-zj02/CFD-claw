@@ -114,7 +114,16 @@ class SkillTool:
         if not isinstance(payload, dict):
             raise ToolInputError("input must be an object when provided")
 
-        skill_dir = Path(os.environ.get("CLAWD_SKILLS_DIR", str(Path.home() / ".clawd" / "skills"))).expanduser().resolve()
+        clawd_skills_dir = os.environ.get("CLAWD_SKILLS_DIR")
+        if clawd_skills_dir:
+            skill_dir = Path(clawd_skills_dir).expanduser().resolve()
+        else:
+            for d in (Path.home() / ".clawd" / "skills", Path.home() / ".claude" / "skills"):
+                if d.exists() and d.is_dir():
+                    skill_dir = d
+                    break
+            else:
+                skill_dir = Path.home() / ".clawd" / "skills"
         file_path = (skill_dir / f"{name}.py").resolve()
         if not file_path.exists():
             return ToolResult(name="Skill", output={"error": f"skill not found: {name}"}, is_error=True)
