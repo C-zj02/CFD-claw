@@ -8,6 +8,7 @@ from pathlib import Path
 import tempfile
 import json
 import base64
+import os
 
 from src.config import (
     get_config_path,
@@ -206,6 +207,17 @@ class TestLoadSaveConfig(unittest.TestCase):
                     config["providers"]["glm"]["api_key"],
                     "secret_key"
                 )
+
+    @unittest.skipIf(os.name == "nt", "POSIX file permission semantics differ on Windows")
+    def test_config_file_permissions_restricted_on_save(self):
+        """Test that saved config uses owner-only permissions on POSIX systems."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / ".clawd" / "config.json"
+
+            with patch('src.config.get_config_path', return_value=config_path):
+                save_config(get_default_config())
+                mode = config_path.stat().st_mode & 0o777
+                self.assertEqual(mode, 0o600)
 
 
 class TestProviderConfig(unittest.TestCase):

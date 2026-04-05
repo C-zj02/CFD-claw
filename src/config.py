@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import base64
+import os
 from pathlib import Path
 from typing import Any, Optional
 
@@ -101,8 +102,18 @@ def save_config(config: dict[str, Any]) -> None:
         if provider_config.get("api_key"):
             provider_config["api_key"] = _encode_api_key(provider_config["api_key"])
 
-    with open(config_path, 'w', encoding='utf-8') as f:
-        json.dump(config_copy, f, indent=2, ensure_ascii=False)
+    if os.name == "nt":
+        with open(config_path, 'w', encoding='utf-8') as f:
+            json.dump(config_copy, f, indent=2, ensure_ascii=False)
+    else:
+        fd = os.open(
+            config_path,
+            os.O_WRONLY | os.O_CREAT | os.O_TRUNC,
+            0o600,
+        )
+        with os.fdopen(fd, 'w', encoding='utf-8') as f:
+            json.dump(config_copy, f, indent=2, ensure_ascii=False)
+        os.chmod(config_path, 0o600)
 
 
 def get_provider_config(provider: str) -> dict[str, Any]:

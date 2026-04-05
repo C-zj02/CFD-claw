@@ -197,15 +197,19 @@ class ClawdCodexCLI:
             if not args:
                 print(f"{self._colorize('Usage:', 'yellow')} show <command|tool> <name>")
             else:
-                kind, name = args[0], ' '.join(args[1:]) if len(args) > 1 else (None, None)
+                kind = args[0]
+                name = ' '.join(args[1:]) if len(args) > 1 else None
+                if not name:
+                    print(f"{self._colorize('Usage:', 'yellow')} show <command|tool> <name>")
+                    return True
                 if kind == 'command':
                     module = get_command(name)
                     if module:
                         print(f"\n{module.name}")
                         print(f"  Source: {module.source_hint}")
                         print(f"  {module.responsibility}")
-                else:
-                    print(f"{self._colorize('Command not found:', 'red')} {name}")
+                    else:
+                        print(f"{self._colorize('Command not found:', 'red')} {name}")
                 elif kind == 'tool':
                     module = get_tool(name)
                     if module:
@@ -234,8 +238,8 @@ class ClawdCodexCLI:
         """Run the interactive CLI."""
         self.print_banner()
         self.print_status()
-        print(f"\n{self._colorize('Type your request or "help" for commands:', 'cyan')}")
-        print(f"{self._colorize('─' * 60}", 'dim')}\n")
+        print("\n" + self._colorize('Type your request or "help" for commands:', 'cyan'))
+        print(f"{self._colorize('─' * 60, 'dim')}\n")
 
         while self.running:
             try:
