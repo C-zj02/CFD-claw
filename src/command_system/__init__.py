@@ -14,6 +14,7 @@ from .builtins import (
     HELP_COMMAND,
     INIT_COMMAND,
     SKILLS_COMMAND,
+    execute_command_async,
     execute_command_sync,
     get_builtin_commands,
     register_builtin_commands,

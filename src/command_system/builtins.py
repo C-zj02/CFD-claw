@@ -27,6 +27,105 @@ from .registry import CommandRegistry, get_command_registry, list_commands
 from .types import Command, CommandType, CompactionResult, LocalCommand, PromptCommand
 
 
+# Official Claude Code /init prompts (Simplified)
+NEW_INIT_PROMPT = """Set up a CLAUDE.md file for this repo. CLAUDE.md is loaded into every Claude Code session, so it must be concise — only include what Claude would get wrong without it.
+
+## Step 1: Ask what to set up
+
+Use AskUserQuestion to ask the user:
+- "Which CLAUDE.md files should /init set up?" with options: "Project CLAUDE.md" | "Personal CLAUDE.local.md" | "Both project + personal"
+
+Use AskUserQuestion to ask:
+- "Also set up skills and hooks?" with options: "Skills + hooks" | "Skills only" | "Hooks only" | "Neither, just CLAUDE.md"
+
+## Step 2: Explore the codebase
+
+Use tools to understand the project:
+- Read key files: README, package.json, pyproject.toml, Cargo.toml, Makefile, existing CLAUDE.md
+- Detect: build/test/lint commands, languages, frameworks, project structure
+- Detect: code style rules, required env vars, gotchas
+- Check for formatter config (ruff, black, prettier, etc.)
+
+## Step 3: Ask follow-up questions (if needed)
+
+Use AskUserQuestion to ask only things you CAN'T figure out from code:
+- User's role (e.g., "backend engineer", "new hire")
+- Non-obvious workflows or commands
+- Communication preferences (terse vs detailed)
+
+## Step 4: Write CLAUDE.md
+
+Write a minimal CLAUDE.md at the project root.
+
+Include:
+- Build/test/lint commands that aren't standard (e.g., "uv run pytest" not just "pytest")
+- Code style rules that DIFFER from defaults
+- Required env vars or setup steps
+- Non-obvious gotchas
+
+Exclude:
+- File structure (Claude can discover this)
+- Standard conventions Claude already knows
+- Generic advice
+
+Prefix with:
+```
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+```
+
+If CLAUDE.md exists: read it, propose specific improvements.
+
+## Step 5: Write CLAUDE.local.md (if user chose personal or both)
+
+Write CLAUDE.local.md at project root. Add it to .gitignore.
+
+Include:
+- User's role and familiarity with codebase
+- Personal sandbox URLs, test accounts
+- Communication preferences
+
+## Step 6: Create skills (if user chose skills)
+
+Create skills at `.claude/skills/<name>/SKILL.md`:
+```yaml
+---
+name: <skill-name>
+description: <what it does>
+---
+
+<Instructions>
+```
+
+## Step 7: Summary
+
+Tell the user what was set up and suggest any additional optimizations."""
+
+# Fallback prompt for simpler initialization
+OLD_INIT_PROMPT = """Please analyze this codebase and create a CLAUDE.md file, which will be given to future instances of Claude Code to operate in this repository.
+
+What to add:
+1. Commands that will be commonly used, such as how to build, lint, and run tests. Include the necessary commands to develop in this codebase, such as how to run a single test.
+2. High-level code architecture and structure so that future instances can be productive more quickly. Focus on the "big picture" architecture that requires reading multiple files to understand.
+
+Usage notes:
+- If there's already a CLAUDE.md, suggest improvements to it.
+- When you make the initial CLAUDE.md, do not repeat yourself and do not include obvious instructions like "Provide helpful error messages to users", "Write unit tests for all new utilities", "Never include sensitive information (API keys, tokens) in code or commits".
+- Avoid listing every component or file structure that can be easily discovered.
+- Don't include generic development practices.
+- If there are Cursor rules (in .cursor/rules/ or .cursorrules) or Copilot rules (in .github/copilot-instructions.md), make sure to include the important parts.
+- If there is a README.md, make sure to include the important parts.
+- Do not make up information such as "Common Development Tasks", "Tips for Development", "Support and Documentation" unless this is expressly included in other files that you read.
+- Be sure to prefix the file with the following text:
+
+```
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+```"""
+
+
 def clear_command_call(args: str, context: CommandContext) -> LocalCommandResult:
     """
     Handle /clear command - clear conversation history.
@@ -455,30 +554,6 @@ def _sync_compact_fallback(context: CommandContext) -> LocalCommandResult:
         )
 
 
-def init_command_call(args: str, context: CommandContext) -> LocalCommandResult:
-    """
-    Handle /init command - initialize workspace.
-
-    Args:
-        args: Command arguments
-        context: Command context
-
-    Returns:
-        LocalCommandResult
-    """
-    try:
-        report = run_setup(cwd=context.workspace_root, trusted=True)
-        return LocalCommandResult(
-            type="text",
-            value=report.as_markdown(),
-        )
-    except Exception as e:
-        return LocalCommandResult(
-            type="text",
-            value=f"Init failed: {e}",
-        )
-
-
 # Command definitions
 HELP_COMMAND = LocalCommand(
     name="help",
@@ -530,11 +605,13 @@ COMPACT_COMMAND = LocalCommand(
     supports_non_interactive=True,
 )
 
-INIT_COMMAND = LocalCommand(
+INIT_COMMAND = PromptCommand(
     name="init",
-    description="Initialize workspace",
-    argument_hint="",
-    supports_non_interactive=True,
+    description="Initialize new CLAUDE.md file(s) and optional skills/hooks with codebase documentation",
+    markdown_content=NEW_INIT_PROMPT,
+    progress_message="analyzing your codebase",
+    content_length=0,
+    source="builtin",
 )
 
 
@@ -572,8 +649,6 @@ def execute_command_sync(cmd_name: str, args: str, context: CommandContext) -> t
             result = context_command_call(args, context)
         elif cmd is COMPACT_COMMAND:
             result = compact_command_call(args, context)
-        elif cmd is INIT_COMMAND:
-            result = init_command_call(args, context)
         else:
             return False, None, f"Command not implemented for sync execution: {cmd_name}"
 
@@ -590,7 +665,6 @@ SKILLS_COMMAND.set_call(skills_command_call)
 COST_COMMAND.set_call(cost_command_call)
 CONTEXT_COMMAND.set_call(context_command_call)
 COMPACT_COMMAND.set_call(compact_command_call)
-INIT_COMMAND.set_call(init_command_call)
 
 
 def get_builtin_commands() -> list[Command]:
@@ -617,3 +691,47 @@ def register_builtin_commands(registry: CommandRegistry | None = None) -> None:
     reg = registry or get_command_registry()
     for cmd in get_builtin_commands():
         reg.register(cmd)
+
+
+async def execute_command_async(
+    cmd_name: str,
+    args: str,
+    context: CommandContext,
+) -> CommandResult:
+    """
+    Execute a command asynchronously.
+
+    This function handles both LocalCommand and PromptCommand types.
+    For PromptCommand, it returns the prompt content that should be sent to the LLM.
+
+    Args:
+        cmd_name: Name of the command to execute
+        args: Arguments for the command
+        context: Command context
+
+    Returns:
+        CommandResult with the execution result
+    """
+    from .engine import CommandEngine
+
+    registry = get_command_registry()
+    cmd = registry.get(cmd_name)
+
+    if cmd is None:
+        return CommandResult.error(cmd_name, f"Unknown command: {cmd_name}")
+
+    if not cmd.is_enabled():
+        return CommandResult.error(cmd_name, f"Command {cmd_name} is disabled")
+
+    engine = CommandEngine(
+        registry=registry,
+        workspace_root=context.workspace_root,
+        context=context,
+    )
+
+    # Create a fake command input string for the engine
+    command_input = f"/{cmd_name}"
+    if args:
+        command_input += f" {args}"
+
+    return await engine.execute(command_input)
