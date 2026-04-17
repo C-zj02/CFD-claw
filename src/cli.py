@@ -27,6 +27,7 @@ Examples:
   clawd --version          Show version
   clawd login              Configure API keys
   clawd config             Show current configuration
+  clawd web                Start the browser UI
   clawd --stream           Start REPL with live response rendering
   clawd                    Start interactive REPL
 """
@@ -56,6 +57,11 @@ Examples:
     # config subcommand
     config_parser = subparsers.add_parser('config', help='Show current configuration')
 
+    # web subcommand
+    web_parser = subparsers.add_parser('web', help='Start the browser UI')
+    web_parser.add_argument('--host', default='127.0.0.1', help='Host to bind the web UI server to')
+    web_parser.add_argument('--port', type=int, default=8080, help='Port to bind the web UI server to')
+
     args = parser.parse_args()
 
     # Handle --version
@@ -73,6 +79,8 @@ Examples:
         return handle_login()
     elif args.command == 'config':
         return show_config()
+    elif args.command == 'web':
+        return start_web(host=args.host, port=args.port)
 
     # Default: start REPL
     return start_repl(stream=args.stream)
@@ -199,6 +207,14 @@ def start_repl(stream: bool = False):
     provider = get_default_provider()
     repl = ClawdREPL(provider_name=provider, stream=stream)
     repl.run()
+    return 0
+
+
+def start_web(host: str = "127.0.0.1", port: int = 8080):
+    """Start the local browser-based UI."""
+    from src.web import run_web_server
+
+    run_web_server(host=host, port=port, workspace_root=Path.cwd())
     return 0
 
 

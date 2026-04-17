@@ -126,6 +126,7 @@ clawd              # Start REPL
 clawd login        # Configure API
 clawd --version    # Check version
 clawd config       # View settings
+clawd web          # Start browser UI
 ```
 
 ***
@@ -239,7 +240,16 @@ The configuration file is saved in in `~/.clawd/config.json`. Example structure:
 ```bash
 python -m src.cli          # Start REPL
 python -m src.cli --help   # Show help
+python -m src.cli web      # Start browser UI on http://127.0.0.1:8080
 ```
+
+### Browser UI
+
+```bash
+clawd web --host 127.0.0.1 --port 8080
+```
+
+This starts a local web interface for the current workspace. The browser app reuses your configured provider credentials, shows tool activity per response, and keeps the CLI workflow available alongside it.
 
 **That's it!** Start chatting with AI in 3 steps.
 
