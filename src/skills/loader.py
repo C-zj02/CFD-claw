@@ -89,6 +89,8 @@ def load_skills_from_dir(base_dir: str | Path, *, loaded_from: str = "skills") -
         version = str(version) if version is not None else None
         model = fm.get("model")
         model = str(model) if model is not None else None
+        run_command = fm.get("run-command") or fm.get("run_command")
+        run_command = str(run_command) if run_command is not None else None
 
         allowed_tools = _as_str_list(fm.get("allowed-tools"))
         arg_names = parse_argument_names(fm.get("arguments"))
@@ -113,6 +115,7 @@ def load_skills_from_dir(base_dir: str | Path, *, loaded_from: str = "skills") -
             when_to_use=when_to_use,
             version=version,
             model=model,
+            run_command=run_command,
             allowed_tools=allowed_tools,
             arg_names=arg_names,
             context=context,

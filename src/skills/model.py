@@ -21,6 +21,7 @@ class PromptSkill(Skill):
     when_to_use: Optional[str]
     version: Optional[str]
     model: Optional[str]
+    run_command: Optional[str]
     allowed_tools: Sequence[str]
     arg_names: Sequence[str]
     context: Optional[str]  # 'inline' | 'fork'
@@ -28,4 +29,3 @@ class PromptSkill(Skill):
     effort: Optional[str]
     paths: Optional[Sequence[str]]
     markdown_content: str
-

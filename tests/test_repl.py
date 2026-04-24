@@ -380,6 +380,37 @@ class TestREPL(unittest.TestCase):
                         args, _kwargs = repl.chat.call_args
                         self.assertIn("Hello bob", args[0])
 
+    def test_handle_command_project_skill_registers_and_expands_skill_dir(self):
+        project_root = Path(self.temp_dir) / "repo"
+        skill_dir = project_root / ".clawd" / "skills" / "aircraft-design-rag"
+        scripts_dir = skill_dir / "scripts"
+        scripts_dir.mkdir(parents=True, exist_ok=True)
+
+        (skill_dir / "SKILL.md").write_text(
+            "---\n"
+            "description: search the local project RAG corpus\n"
+            "arguments: [query]\n"
+            "---\n"
+            "Run `python \"${CLAUDE_SKILL_DIR}/scripts/search_rag.py\" --query \"$query\"`\n",
+            encoding="utf-8",
+        )
+
+        with patch('src.config.get_config_path', return_value=self.config_dir / "config.json"):
+            with patch('src.repl.core.Path.cwd', return_value=project_root):
+                with patch('src.repl.core.Session.create'):
+                    with patch('src.providers.get_provider_class') as mock_provider_class:
+                        mock_provider = Mock()
+                        mock_provider.model = "glm-4.5"
+                        mock_provider_class.return_value = mock_provider
+
+                        repl = ClawdREPL(provider_name="glm")
+                        repl.chat = Mock()
+                        repl.handle_command("/aircraft-design-rag YF-21")
+                        args, _kwargs = repl.chat.call_args
+                        expected_script = str((scripts_dir / "search_rag.py").resolve()).replace("\\", "/")
+                        self.assertIn(expected_script, args[0])
+                        self.assertIn("YF-21", args[0])
+
     def test_save_session(self):
         """Test session saving."""
         with patch('src.config.get_config_path', return_value=self.config_dir / "config.json"):

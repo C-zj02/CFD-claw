@@ -8,6 +8,8 @@ Implements the core command types inspired by Claude Code's command system:
 
 from __future__ import annotations
 
+import shlex
+import subprocess
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -98,6 +100,7 @@ class PromptCommand(CommandBase):
     arg_names: list[str] = field(default_factory=list)
     allowed_tools: list[str] = field(default_factory=list)
     model: Optional[str] = None
+    run_command: Optional[str] = None
     source: str = "builtin"
     plugin_info: Optional[dict[str, Any]] = None
     disable_non_interactive: bool = False
@@ -121,8 +124,103 @@ class PromptCommand(CommandBase):
         """Get the prompt content for this command."""
         # Default implementation - will be overridden
         from .argument_substitution import substitute_arguments
-        content = substitute_arguments(self.markdown_content, args, self.arg_names)
+        if self.skill_root:
+            skill_dir = self.skill_root.replace("\\", "/")
+            project_dir = _project_root_for_skill(self.skill_root, context).replace("\\", "/")
+            source = self.markdown_content.replace("${CLAUDE_SKILL_DIR}", skill_dir)
+            source = source.replace("${CLAUDE_PROJECT_DIR}", project_dir)
+            content = substitute_arguments(source, args, self.arg_names)
+            content = f"Base directory for this skill: {self.skill_root}\n\n{content}"
+        else:
+            content = substitute_arguments(self.markdown_content, args, self.arg_names)
+        if self.run_command:
+            command_output = _run_prompt_command(
+                template=self.run_command,
+                args=args,
+                arg_names=self.arg_names,
+                skill_root=self.skill_root,
+                context=context,
+            )
+            content = (
+                "The local retriever command for this skill has already been executed. "
+                "Do not call Bash again; answer from the command output below.\n\n"
+                f"{content}\n\n"
+                "Retrieved command output:\n\n"
+                f"```text\n{command_output}\n```"
+            )
         return [{"type": "text", "text": content}]
+
+
+def _project_root_for_skill(skill_root: str | None, context: CommandContext) -> str:
+    if skill_root:
+        root = Path(skill_root).expanduser().resolve()
+        if len(root.parents) >= 3:
+            return str(root.parents[2])
+    return str((context.cwd or context.workspace_root).resolve())
+
+
+def _run_prompt_command(
+    *,
+    template: str,
+    args: str,
+    arg_names: list[str],
+    skill_root: str | None,
+    context: CommandContext,
+) -> str:
+    command = _prepare_prompt_command(template, args, arg_names, skill_root, context)
+    cwd = (context.cwd or context.workspace_root).resolve()
+    try:
+        completed = subprocess.run(
+            ["bash", "-lc", command],
+            cwd=str(cwd),
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+    except subprocess.TimeoutExpired:
+        return f"Command timed out after 60 seconds.\nCommand: {command}"
+
+    parts = [f"Command: {command}", f"Exit code: {completed.returncode}"]
+    if completed.stdout:
+        parts.append("STDOUT:\n" + completed.stdout.strip())
+    if completed.stderr:
+        parts.append("STDERR:\n" + completed.stderr.strip())
+    return "\n\n".join(parts)
+
+
+def _prepare_prompt_command(
+    template: str,
+    args: str,
+    arg_names: list[str],
+    skill_root: str | None,
+    context: CommandContext,
+) -> str:
+    command = template
+    if skill_root:
+        skill_dir = str(Path(skill_root).expanduser().resolve())
+        command = command.replace("${CLAUDE_SKILL_DIR}", shlex.quote(skill_dir))
+        command = command.replace("$CLAUDE_SKILL_DIR", shlex.quote(skill_dir))
+    project_dir = _project_root_for_skill(skill_root, context)
+    command = command.replace("${CLAUDE_PROJECT_DIR}", shlex.quote(project_dir))
+    command = command.replace("$CLAUDE_PROJECT_DIR", shlex.quote(project_dir))
+    command = command.replace("${ARGUMENTS}", shlex.quote(args))
+    command = command.replace("$ARGUMENTS", shlex.quote(args))
+
+    try:
+        parsed_args = shlex.split(args) if args else []
+    except ValueError:
+        parsed_args = args.split() if args else []
+    for index, value in enumerate(parsed_args):
+        quoted = shlex.quote(value)
+        command = command.replace(f"${{{index}}}", quoted)
+        command = command.replace(f"${index}", quoted)
+    for index, name in enumerate(arg_names):
+        if index >= len(parsed_args):
+            continue
+        quoted = shlex.quote(parsed_args[index])
+        command = command.replace(f"${{{name}}}", quoted)
+        command = command.replace(f"${name}", quoted)
+    return command
 
 
 @dataclass(frozen=True)

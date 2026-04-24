@@ -43,6 +43,7 @@ def skill_to_prompt_command(skill: PromptSkill) -> PromptCommand:
         arg_names=list(skill.arg_names),
         allowed_tools=list(skill.allowed_tools),
         model=skill.model,
+        run_command=skill.run_command,
         source=skill.loaded_from,
         skill_root=skill.skill_root,
         context=skill.context or "inline",

@@ -12,6 +12,7 @@ Tests cover:
 
 from __future__ import annotations
 
+import asyncio
 import os
 import tempfile
 import unittest
@@ -155,6 +156,26 @@ class TestCommandTypes(unittest.TestCase):
         self.assertTrue(is_command_enabled(cmd))
         enabled = False
         self.assertFalse(is_command_enabled(cmd))
+
+    def test_prompt_command_run_command_includes_output(self):
+        """Test PromptCommand can run local retriever commands before prompting."""
+        with tempfile.TemporaryDirectory() as temp:
+            project_root = Path(temp).resolve()
+            skill_root = project_root / ".clawd" / "skills" / "demo"
+            context = create_command_context(workspace_root=project_root, cwd=project_root)
+            cmd = PromptCommand(
+                name="demo",
+                description="demo",
+                markdown_content="Answer from retrieved evidence only.",
+                run_command='printf "hit:%s" $ARGUMENTS',
+                skill_root=str(skill_root),
+            )
+
+            prompt = asyncio.run(cmd.get_prompt_for_command("YF-21 液体发动机", context))[0]["text"]
+
+        self.assertIn("Do not call Bash again", prompt)
+        self.assertIn("Retrieved command output", prompt)
+        self.assertIn("hit:YF-21 液体发动机", prompt)
 
 
 class TestCommandRegistry(unittest.TestCase):

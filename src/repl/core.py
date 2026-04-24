@@ -91,6 +91,8 @@ from src.command_system import (
     create_command_context,
     execute_command_async,
     execute_command_sync,
+    get_command_registry,
+    load_and_register_skills,
     register_builtin_commands,
 )
 from src.cost_tracker import CostTracker
@@ -359,9 +361,30 @@ class ClawdREPL:
             cost_tracker=self.cost_tracker,
             history=self.history_log,
         )
+        self._registered_skill_names: set[str] = set()
+        self._refresh_registered_skills()
 
         # Merge new commands with built-in list for completion
         self._update_built_in_commands_with_command_system()
+
+    def _refresh_registered_skills(self) -> None:
+        """Load project/user skills into both command registries."""
+        current_cwd = (self.tool_context.cwd or self.tool_context.workspace_root).resolve()
+
+        if hasattr(self, "command_context") and self.command_context is not None:
+            self.command_context.cwd = current_cwd
+
+        global_registry = get_command_registry()
+        for name in getattr(self, "_registered_skill_names", set()):
+            self.command_registry.unregister(name)
+            global_registry.unregister(name)
+
+        local_commands = load_and_register_skills(
+            project_root=current_cwd,
+            registry=self.command_registry,
+        )
+        load_and_register_skills(project_root=current_cwd)
+        self._registered_skill_names = {command.name for command in local_commands}
 
     def _update_built_in_commands_with_command_system(self):
         """Update the built-in commands list with commands from the new system."""
@@ -653,6 +676,7 @@ class ClawdREPL:
 
     def handle_command(self, command: str):
         """Handle slash commands."""
+        self._refresh_registered_skills()
         raw = command.strip()
         if raw == "/":
             self._show_slash_palette()
