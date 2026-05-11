@@ -74,6 +74,8 @@ credentials.json
 # Claude Code specific
 .claude/
 .clawd/cache/
+.clawd/traces/
+.clawd/skill-candidates/
 CLAUDE.md
 
 # Session data

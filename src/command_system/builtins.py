@@ -224,6 +224,72 @@ def skills_command_call(args: str, context: CommandContext) -> LocalCommandResul
     )
 
 
+def skill_candidates_command_call(args: str, context: CommandContext) -> LocalCommandResult:
+    """Handle /skill-candidates command."""
+    from ..skill_memory import (
+        approve_candidate,
+        get_candidate,
+        list_candidates,
+        reject_candidate,
+    )
+
+    parts = args.split(maxsplit=1)
+    action = parts[0].lower() if parts else "list"
+    candidate_id = parts[1].strip() if len(parts) > 1 else ""
+    root = context.cwd or context.workspace_root
+
+    if action in {"", "list"}:
+        candidates = list_candidates(root)
+        if not candidates:
+            return LocalCommandResult(type="text", value="No skill candidates.")
+        lines = ["Skill candidates:", ""]
+        for item in candidates:
+            status = item.get("status", "unknown")
+            cid = item.get("id", "")
+            name = item.get("skill_name", "")
+            desc = item.get("description", "")
+            lines.append(f"  {cid} [{status}] {name}")
+            if desc:
+                lines.append(f"      {desc}")
+        return LocalCommandResult(type="text", value="\n".join(lines))
+
+    if not candidate_id:
+        return LocalCommandResult(
+            type="text",
+            value="Usage: /skill-candidates [list|show <id>|approve <id>|reject <id>]",
+        )
+
+    try:
+        if action == "show":
+            _path, metadata, content = get_candidate(root, candidate_id)
+            return LocalCommandResult(
+                type="text",
+                value=(
+                    f"Candidate: {candidate_id}\n"
+                    f"Status: {metadata.get('status')}\n"
+                    f"Skill: {metadata.get('skill_name')}\n"
+                    f"Reason: {metadata.get('reason', '')}\n\n"
+                    f"{content}"
+                ),
+            )
+        if action == "approve":
+            metadata = approve_candidate(root, candidate_id)
+            return LocalCommandResult(
+                type="text",
+                value=f"Approved skill candidate {candidate_id} -> {metadata.get('skill_path')}",
+            )
+        if action == "reject":
+            reject_candidate(root, candidate_id)
+            return LocalCommandResult(type="text", value=f"Rejected skill candidate {candidate_id}.")
+    except Exception as exc:
+        return LocalCommandResult(type="text", value=f"Skill candidate error: {exc}")
+
+    return LocalCommandResult(
+        type="text",
+        value="Usage: /skill-candidates [list|show <id>|approve <id>|reject <id>]",
+    )
+
+
 def exit_command_call(args: str, context: CommandContext) -> LocalCommandResult:
     """
     Handle /exit command - exit the application.
@@ -584,6 +650,13 @@ SKILLS_COMMAND = LocalCommand(
     supports_non_interactive=True,
 )
 
+SKILL_CANDIDATES_COMMAND = LocalCommand(
+    name="skill-candidates",
+    description="List, inspect, approve, or reject learned skill candidates",
+    argument_hint="[list|show <id>|approve <id>|reject <id>]",
+    supports_non_interactive=True,
+)
+
 COST_COMMAND = LocalCommand(
     name="cost",
     description="Show session cost and usage",
@@ -643,6 +716,8 @@ def execute_command_sync(cmd_name: str, args: str, context: CommandContext) -> t
             result = exit_command_call(args, context)
         elif cmd is SKILLS_COMMAND:
             result = skills_command_call(args, context)
+        elif cmd is SKILL_CANDIDATES_COMMAND:
+            result = skill_candidates_command_call(args, context)
         elif cmd is COST_COMMAND:
             result = cost_command_call(args, context)
         elif cmd is CONTEXT_COMMAND:
@@ -662,6 +737,7 @@ HELP_COMMAND.set_call(help_command_call)
 CLEAR_COMMAND.set_call(clear_command_call)
 EXIT_COMMAND.set_call(exit_command_call)
 SKILLS_COMMAND.set_call(skills_command_call)
+SKILL_CANDIDATES_COMMAND.set_call(skill_candidates_command_call)
 COST_COMMAND.set_call(cost_command_call)
 CONTEXT_COMMAND.set_call(context_command_call)
 COMPACT_COMMAND.set_call(compact_command_call)
@@ -674,6 +750,7 @@ def get_builtin_commands() -> list[Command]:
         CLEAR_COMMAND,
         EXIT_COMMAND,
         SKILLS_COMMAND,
+        SKILL_CANDIDATES_COMMAND,
         COST_COMMAND,
         CONTEXT_COMMAND,
         COMPACT_COMMAND,

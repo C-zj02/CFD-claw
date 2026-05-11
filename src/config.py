@@ -19,6 +19,7 @@ def get_config_path() -> Path:
 def _get_default_config_from_providers() -> dict[str, Any]:
     """Build default config using provider info registry."""
     from src.providers import PROVIDER_INFO
+    from src.skill_memory import get_default_skill_memory_config
 
     return {
         "default_provider": "anthropic",
@@ -33,7 +34,8 @@ def _get_default_config_from_providers() -> dict[str, Any]:
         "session": {
             "auto_save": True,
             "max_history": 100
-        }
+        },
+        "skill_memory": get_default_skill_memory_config(),
     }
 
 

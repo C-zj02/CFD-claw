@@ -73,12 +73,17 @@ import json
 from typing import Any
 
 from src.agent import Session
-from src.config import get_provider_config
+from src.config import get_provider_config, load_config
 from src.outputStyles import resolve_output_style
 from src.providers import get_provider_class
 from src.providers.anthropic_provider import AnthropicProvider
 from src.providers.base import ChatMessage
 from src.providers.minimax_provider import MinimaxProvider
+from src.skill_memory import (
+    TraceRecorder,
+    process_trace_to_candidate_background,
+    skill_memory_config,
+)
 from src.tool_system.context import ToolContext
 from src.tool_system.defaults import build_default_registry
 from src.tool_system.protocol import ToolCall
@@ -107,6 +112,7 @@ class ClawdREPL:
         self.provider_name = provider_name
         self.stream = stream
         self.multiline_mode = False
+        self.learn_mode = "off"
 
         # Load configuration
         config = get_provider_config(provider_name)
@@ -152,6 +158,8 @@ class ClawdREPL:
             "/tools",
             "/tool",
             "/skills",
+            "/skill-candidates",
+            "/learn",
             "/init",
         ]
         self._built_in_commands = list(self._original_built_ins)
@@ -175,16 +183,26 @@ class ClawdREPL:
                     buf.insert_text("/")
                     buf.start_completion(select_first=False)
 
-        self.prompt_session = PromptSession(
-            history=FileHistory(str(history_file)),
-            auto_suggest=AutoSuggestFromHistory(),
-            completer=self.completer,
-            style=Style.from_dict({
-                'prompt': 'bold blue',
-            }),
-            key_bindings=self.bindings,
-            complete_while_typing=True,
-        )
+        try:
+            self.prompt_session = PromptSession(
+                history=FileHistory(str(history_file)),
+                auto_suggest=AutoSuggestFromHistory(),
+                completer=self.completer,
+                style=Style.from_dict({
+                    'prompt': 'bold blue',
+                }),
+                key_bindings=self.bindings,
+                complete_while_typing=True,
+            )
+        except Exception:  # pragma: no cover - depends on host terminal availability
+            class _HeadlessPromptSession:
+                def __init__(self, completer=None):
+                    self.completer = completer
+
+                def prompt(self, *args, **kwargs):
+                    raise EOFError()
+
+            self.prompt_session = _HeadlessPromptSession(self.completer)
 
     def _ask_user_questions(self, questions: list[dict]) -> dict[str, str]:
         # Stop the Rich status spinner if running, so we can get clean input
@@ -503,6 +521,82 @@ class ClawdREPL:
         except Exception:
             return
 
+    def _handle_learn_command(self, args: str = "") -> None:
+        arg = args.strip().lower()
+        if arg in {"", "once"}:
+            self.learn_mode = "once"
+            self.console.print("[green]Learn mode enabled for the next task.[/green]")
+            return
+        if arg == "on":
+            self.learn_mode = "on"
+            self.console.print("[green]Learn mode enabled for every task.[/green]")
+            return
+        if arg == "off":
+            self.learn_mode = "off"
+            self.console.print("[green]Learn mode disabled.[/green]")
+            return
+        if arg == "status":
+            self.console.print(f"[cyan]Learn mode:[/cyan] {self.learn_mode}")
+            return
+        self.console.print("[red]Usage: /learn [on|off|status][/red]")
+
+    def _start_trace_if_learning(self, user_input: str) -> TraceRecorder | None:
+        if self.learn_mode not in {"once", "on"}:
+            return None
+        try:
+            config = load_config()
+            memory = skill_memory_config(config)
+            if not memory.get("enabled", True):
+                return None
+            return TraceRecorder(
+                workspace_root=Path.cwd(),
+                session_id=getattr(self.session, "session_id", ""),
+                task=user_input,
+                provider_name=self.provider_name,
+                model=str(getattr(self.provider, "model", "")),
+                trace_level=str(memory.get("trace_level", "full")),
+                trace_dir=str(memory.get("trace_dir", ".clawd/traces")),
+            )
+        except Exception:
+            return None
+
+    def _finish_trace(
+        self,
+        recorder: TraceRecorder | None,
+        *,
+        status: str,
+        final_response: str = "",
+        error: str | None = None,
+    ) -> None:
+        if recorder is None:
+            return
+        try:
+            conversation = None
+            if hasattr(self.session, "conversation") and hasattr(self.session.conversation, "to_dict"):
+                conversation = self.session.conversation.to_dict()
+            trace_path = recorder.finish(
+                status=status,
+                final_response=final_response,
+                error=error,
+                conversation=conversation,
+            )
+            if status != "completed":
+                return
+            memory = skill_memory_config(load_config())
+            process_trace_to_candidate_background(
+                trace_path=trace_path,
+                provider=self.provider,
+                model=str(getattr(self.provider, "model", "")),
+                workspace_root=Path.cwd(),
+                candidate_dir=str(memory.get("candidate_dir", ".clawd/skill-candidates")),
+            )
+        except Exception:
+            return
+
+    def _consume_learn_once(self) -> None:
+        if self.learn_mode == "once":
+            self.learn_mode = "off"
+
     def _show_slash_palette(self, query: str | None = None) -> None:
         q = (query or "").strip().lower()
         self.console.print("\n[bold]Available commands and skills:[/bold]")
@@ -681,6 +775,10 @@ class ClawdREPL:
         if raw == "/":
             self._show_slash_palette()
             return
+        if raw == "/learn" or raw.startswith("/learn "):
+            parts = raw.split(maxsplit=1)
+            self._handle_learn_command(parts[1] if len(parts) > 1 else "")
+            return
         if raw.startswith("/") and " " not in raw and raw.lower() not in (c.lower() for c in self._built_in_commands):
             query = raw[1:]
             if query:
@@ -735,6 +833,9 @@ class ClawdREPL:
                     if handled:
                         if result_text:
                             self.console.print("\n" + result_text)
+                        if cmd_name == "skill-candidates" and args.strip().lower().startswith("approve"):
+                            self._refresh_registered_skills()
+                            self._refresh_completer()
                         self.console.print()
                         return
                 except Exception as e:
@@ -972,6 +1073,8 @@ class ClawdREPL:
 - `/load <session-id>` - Load a previous session
 - `/multiline` - Toggle multiline input mode
 - `/stream [on|off|toggle]` - Toggle live response rendering
+- `/learn [on|off|status]` - Enable trace-to-skill learning for the next task or every task
+- `/skill-candidates [list|show <id>|approve <id>|reject <id>]` - Review learned skill candidates
 - `/render-last` - Re-render the last assistant reply as Markdown
 - `/tools` - List available built-in tools
 - `/tool <name> <json>` - Run a tool directly
@@ -1148,6 +1251,7 @@ class ClawdREPL:
         """
         # Add user message
         self.session.conversation.add_user_message(user_input)
+        trace_recorder = self._start_trace_if_learning(user_input)
 
         try:
             self.console.print("\n[bold]Assistant[/bold]")
@@ -1164,6 +1268,8 @@ class ClawdREPL:
                 stream_started = True
 
             def on_event(ev: ToolEvent) -> None:
+                if trace_recorder is not None:
+                    trace_recorder.record_event(ev)
                 if ev.kind == "tool_use":
                     summary = summarize_tool_use(ev.tool_name, ev.tool_input or {})
                     if isinstance(summary, str) and summary:
@@ -1204,6 +1310,14 @@ class ClawdREPL:
                     direct_response = self._stream_direct_response(on_text_chunk=on_text_chunk)
                 self._current_status = None
                 if direct_response is not None:
+                    if trace_recorder is not None:
+                        trace_recorder.record_direct_response(direct_response)
+                    self._finish_trace(
+                        trace_recorder,
+                        status="completed",
+                        final_response=direct_response,
+                    )
+                    self._consume_learn_once()
                     self.console.print("\n")
                     return
 
@@ -1242,9 +1356,21 @@ class ClawdREPL:
             else:
                 self.console.print(Markdown(result.response_text))
                 self.console.print("\n")
+            self._finish_trace(
+                trace_recorder,
+                status="completed",
+                final_response=result.response_text,
+            )
+            self._consume_learn_once()
 
         except Exception as e:
             error_str = str(e)
+            self._finish_trace(
+                trace_recorder,
+                status="error",
+                error=error_str,
+            )
+            self._consume_learn_once()
 
             # Check for authentication errors
             if "401" in error_str or "authentication" in error_str.lower() or "令牌" in error_str:

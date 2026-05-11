@@ -270,6 +270,7 @@ class TestBuiltinCommands(unittest.TestCase):
         self.assertTrue(registry.has("context"))
         self.assertTrue(registry.has("compact"))
         self.assertTrue(registry.has("init"))
+        self.assertTrue(registry.has("skill-candidates"))
 
     def test_skills_command_with_project_root(self):
         """Test that /skills command can find project skills."""
@@ -300,6 +301,39 @@ class TestBuiltinCommands(unittest.TestCase):
         self.assertTrue(success)
         self.assertIsNone(error)
         self.assertIn("test-project-skill", result)
+
+    def test_skill_candidates_command_lists_and_approves(self):
+        """Test /skill-candidates can promote a candidate into project skills."""
+        candidate_dir = Path(self.tmpdir.name) / ".clawd" / "skill-candidates" / "c1"
+        candidate_dir.mkdir(parents=True)
+        (candidate_dir / "SKILL.md").write_text(
+            "---\ndescription: learned test\n---\nDo the learned workflow.\n",
+            encoding="utf-8",
+        )
+        (candidate_dir / "metadata.json").write_text(
+            '{"id":"c1","status":"pending","skill_name":"learned-test","description":"learned test"}',
+            encoding="utf-8",
+        )
+
+        context = create_command_context(
+            workspace_root=self.tmpdir.name,
+            conversation=self.conversation,
+            cost_tracker=self.cost_tracker,
+            history=self.history,
+        )
+
+        success, result, error = execute_command_sync("skill-candidates", "list", context)
+        self.assertTrue(success)
+        self.assertIsNone(error)
+        self.assertIn("c1", result)
+
+        success, result, error = execute_command_sync("skill-candidates", "approve c1", context)
+        self.assertTrue(success)
+        self.assertIsNone(error)
+        self.assertIn("Approved", result)
+        self.assertTrue(
+            (Path(self.tmpdir.name) / ".clawd" / "skills" / "learned-test" / "SKILL.md").exists()
+        )
 
 
 class TestCommandEngine(unittest.TestCase):

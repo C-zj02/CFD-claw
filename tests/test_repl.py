@@ -171,6 +171,79 @@ class TestREPL(unittest.TestCase):
                     repl.handle_command("/stream off")
                     self.assertFalse(repl.stream)
 
+    def test_handle_command_learn_modes(self):
+        """Test /learn command state transitions."""
+        with patch('src.config.get_config_path', return_value=self.config_dir / "config.json"):
+            with patch('src.repl.core.Session.create'):
+                with patch('src.repl.core.get_provider_class') as mock_provider_class:
+                    mock_provider = Mock()
+                    mock_provider.model = "glm-4.5"
+                    mock_provider_class.return_value = mock_provider
+
+                    repl = ClawdREPL(provider_name="glm")
+                    repl.console.print = Mock()
+
+                    self.assertEqual(repl.learn_mode, "off")
+                    repl.handle_command("/learn")
+                    self.assertEqual(repl.learn_mode, "once")
+                    repl.handle_command("/learn on")
+                    self.assertEqual(repl.learn_mode, "on")
+                    repl.handle_command("/learn off")
+                    self.assertEqual(repl.learn_mode, "off")
+
+    def test_chat_does_not_trace_when_learn_mode_off(self):
+        """Default learn mode does not create traces."""
+        with patch('src.config.get_config_path', return_value=self.config_dir / "config.json"):
+            with patch('src.repl.core.Session.create') as mock_session_factory:
+                mock_session = Mock()
+                mock_session.session_id = "s1"
+                mock_session.conversation = Conversation()
+                mock_session_factory.return_value = mock_session
+
+                with patch('src.repl.core.get_provider_class') as mock_provider_class:
+                    mock_provider = Mock()
+                    mock_provider.model = "glm-4.5"
+                    mock_provider_class.return_value = Mock(return_value=mock_provider)
+
+                    repl = ClawdREPL(provider_name="glm")
+                    repl.console.print = Mock()
+
+                    with patch('src.repl.core.run_agent_loop') as mock_agent_loop:
+                        mock_agent_loop.return_value = Mock(response_text="done", usage=None, num_turns=1)
+                        with patch('src.repl.core.process_trace_to_candidate_background') as mock_background:
+                            repl.chat("Do something reusable")
+
+                    mock_background.assert_not_called()
+
+    def test_chat_traces_once_and_resets_learn_mode(self):
+        """Once learn mode traces one task and then returns to off."""
+        with patch('src.config.get_config_path', return_value=self.config_dir / "config.json"):
+            with patch('src.repl.core.Session.create') as mock_session_factory:
+                mock_session = Mock()
+                mock_session.session_id = "s1"
+                mock_session.conversation = Conversation()
+                mock_session_factory.return_value = mock_session
+
+                with patch('src.repl.core.get_provider_class') as mock_provider_class:
+                    mock_provider = Mock()
+                    mock_provider.model = "glm-4.5"
+                    mock_provider_class.return_value = Mock(return_value=mock_provider)
+
+                    repl = ClawdREPL(provider_name="glm")
+                    repl.console.print = Mock()
+                    repl.learn_mode = "once"
+
+                    with patch('src.repl.core.Path.cwd', return_value=Path(self.temp_dir)):
+                        with patch('src.repl.core.run_agent_loop') as mock_agent_loop:
+                            mock_agent_loop.return_value = Mock(response_text="done", usage=None, num_turns=1)
+                            with patch('src.repl.core.process_trace_to_candidate_background') as mock_background:
+                                repl.chat("Do something reusable")
+
+                    self.assertEqual(repl.learn_mode, "off")
+                    mock_background.assert_called_once()
+                    traces = list((Path(self.temp_dir) / ".clawd" / "traces").glob("*.json"))
+                    self.assertEqual(len(traces), 1)
+
     def test_handle_command_render_last_renders_markdown(self):
         """Test /render-last re-renders the last assistant response."""
         with patch('src.config.get_config_path', return_value=self.config_dir / "config.json"):
