@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="760" viewBox="0 0 1100 760">
+<style>
+text { font-family: 'Microsoft YaHei', 'Noto Sans CJK SC', Arial, sans-serif; fill: #111827; }
+.axis { stroke: #111827; stroke-width: 1.6; }
+.grid { stroke: #e5e7eb; stroke-width: 1; }
+.tick { font-size: 13px; fill: #374151; }
+.label { font-size: 17px; font-weight: 600; }
+.title { font-size: 26px; font-weight: 700; }
+.subtitle { font-size: 14px; fill: #4b5563; }
+.legend { font-size: 13px; fill: #1f2937; }
+</style>
+<rect width="100%" height="100%" fill="#ffffff"/>
+<text class="title" x="96" y="38">无人机方案界限线图 — 航程1200km / 载荷500kg</text>
+<line class="grid" x1="96.00" y1="88" x2="96.00" y2="668"/>
+<text class="tick" text-anchor="middle" x="96.00" y="692">30.0</text>
+<line class="grid" x1="234.80" y1="88" x2="234.80" y2="668"/>
+<text class="tick" text-anchor="middle" x="234.80" y="692">74.0</text>
+<line class="grid" x1="373.60" y1="88" x2="373.60" y2="668"/>
+<text class="tick" text-anchor="middle" x="373.60" y="692">118</text>
+<line class="grid" x1="512.40" y1="88" x2="512.40" y2="668"/>
+<text class="tick" text-anchor="middle" x="512.40" y="692">162</text>
+<line class="grid" x1="651.20" y1="88" x2="651.20" y2="668"/>
+<text class="tick" text-anchor="middle" x="651.20" y="692">206</text>
+<line class="grid" x1="790.00" y1="88" x2="790.00" y2="668"/>
+<text class="tick" text-anchor="middle" x="790.00" y="692">250</text>
+<line class="grid" x1="96" y1="668.00" x2="790" y2="668.00"/>
+<text class="tick" text-anchor="end" x="84" y="672.00">0.1</text>
+<line class="grid" x1="96" y1="552.00" x2="790" y2="552.00"/>
+<text class="tick" text-anchor="end" x="84" y="556.00">0.21</text>
+<line class="grid" x1="96" y1="436.00" x2="790" y2="436.00"/>
+<text class="tick" text-anchor="end" x="84" y="440.00">0.32</text>
+<line class="grid" x1="96" y1="320.00" x2="790" y2="320.00"/>
+<text class="tick" text-anchor="end" x="84" y="324.00">0.43</text>
+<line class="grid" x1="96" y1="204.00" x2="790" y2="204.00"/>
+<text class="tick" text-anchor="end" x="84" y="208.00">0.54</text>
+<line class="grid" x1="96" y1="88.00" x2="790" y2="88.00"/>
+<text class="tick" text-anchor="end" x="84" y="92.00">0.65</text>
+<rect x="96" y="88" width="694" height="580" fill="none" class="axis"/>
+<text class="label" text-anchor="middle" x="443.00" y="730">翼载荷 W/S (kg/m²)</text>
+<text class="label" text-anchor="middle" transform="translate(28,378.00) rotate(-90)">推重比 T/W</text>
+<polygon points="159.09,330.55 348.36,478.18 695.36,404.36 695.36,140.73 159.09,140.73" fill="#2ca02c" opacity="0.120" stroke="#2ca02c" stroke-width="1.2"/>
+<polyline points="127.55,728.11 190.64,704.91 253.73,681.71 316.82,658.51 379.91,635.31 474.55,601.56 569.18,566.76 695.36,521.42" fill="none" stroke="#1f77b4" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
+<text class="legend" x="387.91" y="627.31" fill="#1f77b4">起飞距离约束 (600m跑道, CLmax_TO=1.8)</text>
+<polyline points="840.47,668.00 840.47,88.00" fill="none" stroke="#d62728" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
+<text class="legend" x="848.47" y="80.00" fill="#d62728">着陆距离约束 (600m跑道, CLmax_L=2.2)</text>
+<polyline points="127.55,568.87 190.64,533.02 253.73,494.00 316.82,448.65 379.91,396.98 443.00,340.04 506.09,275.71 569.18,206.11" fill="none" stroke="#2ca02c" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
+<text class="legend" x="387.91" y="388.98" fill="#2ca02c">爬升率约束 (海平面 3m/s, V=45m/s)</text>
+<polyline points="127.55,596.29 190.64,552.00 253.73,504.55 316.82,453.93 379.91,400.15 443.00,343.20 506.09,282.04 569.18,217.71" fill="none" stroke="#9467bd" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
+<text class="legend" x="387.91" y="392.15" fill="#9467bd">巡航约束 (4000m, 200km/h, V=55.6m/s)</text>
+<polyline points="127.55,529.85 190.64,486.62 253.73,440.22 316.82,389.60 379.91,334.76 443.00,275.71 506.09,212.44 569.18,144.95" fill="none" stroke="#ff7f0e" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
+<text class="legend" x="387.91" y="326.76" fill="#ff7f0e">升限约束 (6000m, dh/dt=0.5m/s)</text>
+<circle cx="285.27" cy="457.09" r="6.5" fill="#111827" stroke="#ffffff" stroke-width="2"/>
+<line x1="276.27" y1="457.09" x2="294.27" y2="457.09" stroke="#111827" stroke-width="1.4"/>
+<line x1="285.27" y1="448.09" x2="285.27" y2="466.09" stroke="#111827" stroke-width="1.4"/>
+<text class="legend" x="297.27" y="447.09">推荐设计点 V0 (90, 0.3)</text>
+<text class="label" x="832" y="88">图例与可行侧</text>
+<line x1="832" y1="112" x2="860" y2="112" stroke="#1f77b4" stroke-width="3"/>
+<text class="legend" x="870" y="116">起飞距离约束 (600m跑道, CLmax_TO=1.8)；可行侧：上方</text>
+<line x1="832" y1="136" x2="860" y2="136" stroke="#d62728" stroke-width="3"/>
+<text class="legend" x="870" y="140">着陆距离约束 (600m跑道, CLmax_L=2.2)；可行侧：左侧</text>
+<line x1="832" y1="160" x2="860" y2="160" stroke="#2ca02c" stroke-width="3"/>
+<text class="legend" x="870" y="164">爬升率约束 (海平面 3m/s, V=45m/s)；可行侧：上方</text>
+<line x1="832" y1="184" x2="860" y2="184" stroke="#9467bd" stroke-width="3"/>
+<text class="legend" x="870" y="188">巡航约束 (4000m, 200km/h, V=55.6m/s)；可行侧：上方</text>
+<line x1="832" y1="208" x2="860" y2="208" stroke="#ff7f0e" stroke-width="3"/>
+<text class="legend" x="870" y="212">升限约束 (6000m, dh/dt=0.5m/s)；可行侧：上方</text>
+<rect x="832" y="223" width="28" height="14" fill="#2ca02c" opacity="0.120"/>
+<text class="legend" x="870" y="236">初选可行域</text>
+</svg>

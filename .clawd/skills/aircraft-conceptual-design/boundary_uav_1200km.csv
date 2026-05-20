@@ -1,0 +1,32 @@
+﻿type,name,sense,x,y,source
+constraint,"起飞距离约束 (≤800m, 海平面)",above,80.0,0.078,"RAG 飞机总体设计 Eq.3.22, β=1.0, α=1.0, kTO=1.2, CLmax=1.8, ρ=1.225"
+constraint,"起飞距离约束 (≤800m, 海平面)",above,120.0,0.117,"RAG 飞机总体设计 Eq.3.22, β=1.0, α=1.0, kTO=1.2, CLmax=1.8, ρ=1.225"
+constraint,"起飞距离约束 (≤800m, 海平面)",above,160.0,0.156,"RAG 飞机总体设计 Eq.3.22, β=1.0, α=1.0, kTO=1.2, CLmax=1.8, ρ=1.225"
+constraint,"起飞距离约束 (≤800m, 海平面)",above,200.0,0.195,"RAG 飞机总体设计 Eq.3.22, β=1.0, α=1.0, kTO=1.2, CLmax=1.8, ρ=1.225"
+constraint,"起飞距离约束 (≤800m, 海平面)",above,250.0,0.244,"RAG 飞机总体设计 Eq.3.22, β=1.0, α=1.0, kTO=1.2, CLmax=1.8, ρ=1.225"
+constraint,"起飞距离约束 (≤800m, 海平面)",above,300.0,0.293,"RAG 飞机总体设计 Eq.3.22, β=1.0, α=1.0, kTO=1.2, CLmax=1.8, ρ=1.225"
+constraint,着陆距离约束 (≤700m),left,240.0,0.08,"RAG 飞机总体设计 着陆翼载上限, CLmax_land=2.2, σ=1.0"
+constraint,着陆距离约束 (≤700m),left,240.0,0.55,"RAG 飞机总体设计 着陆翼载上限, CLmax_land=2.2, σ=1.0"
+constraint,爬升率约束 (≥3 m/s 海平面),above,80.0,0.075,"RAG 飞机总体设计 Eq.3.23, L/D≈18, CD0≈0.025"
+constraint,爬升率约束 (≥3 m/s 海平面),above,120.0,0.078,"RAG 飞机总体设计 Eq.3.23, L/D≈18, CD0≈0.025"
+constraint,爬升率约束 (≥3 m/s 海平面),above,160.0,0.084,"RAG 飞机总体设计 Eq.3.23, L/D≈18, CD0≈0.025"
+constraint,爬升率约束 (≥3 m/s 海平面),above,200.0,0.091,"RAG 飞机总体设计 Eq.3.23, L/D≈18, CD0≈0.025"
+constraint,爬升率约束 (≥3 m/s 海平面),above,250.0,0.102,"RAG 飞机总体设计 Eq.3.23, L/D≈18, CD0≈0.025"
+constraint,爬升率约束 (≥3 m/s 海平面),above,300.0,0.115,"RAG 飞机总体设计 Eq.3.23, L/D≈18, CD0≈0.025"
+constraint,巡航速度约束 (≥300 km/h @ 6000m),above,80.0,0.11,"RAG 飞机总体设计 Eq.3.24, σ=0.54, q=0.5×0.66×83²"
+constraint,巡航速度约束 (≥300 km/h @ 6000m),above,120.0,0.115,"RAG 飞机总体设计 Eq.3.24, σ=0.54, q=0.5×0.66×83²"
+constraint,巡航速度约束 (≥300 km/h @ 6000m),above,160.0,0.122,"RAG 飞机总体设计 Eq.3.24, σ=0.54, q=0.5×0.66×83²"
+constraint,巡航速度约束 (≥300 km/h @ 6000m),above,200.0,0.13,"RAG 飞机总体设计 Eq.3.24, σ=0.54, q=0.5×0.66×83²"
+constraint,巡航速度约束 (≥300 km/h @ 6000m),above,250.0,0.142,"RAG 飞机总体设计 Eq.3.24, σ=0.54, q=0.5×0.66×83²"
+constraint,巡航速度约束 (≥300 km/h @ 6000m),above,300.0,0.156,"RAG 飞机总体设计 Eq.3.24, σ=0.54, q=0.5×0.66×83²"
+constraint,使用升限约束 (≥8000m),above,80.0,0.145,"RAG 飞机总体设计 Eq.3.23 with dh/dt=0.5m/s, σ≈0.43"
+constraint,使用升限约束 (≥8000m),above,120.0,0.15,"RAG 飞机总体设计 Eq.3.23 with dh/dt=0.5m/s, σ≈0.43"
+constraint,使用升限约束 (≥8000m),above,160.0,0.158,"RAG 飞机总体设计 Eq.3.23 with dh/dt=0.5m/s, σ≈0.43"
+constraint,使用升限约束 (≥8000m),above,200.0,0.168,"RAG 飞机总体设计 Eq.3.23 with dh/dt=0.5m/s, σ≈0.43"
+constraint,使用升限约束 (≥8000m),above,250.0,0.182,"RAG 飞机总体设计 Eq.3.23 with dh/dt=0.5m/s, σ≈0.43"
+constraint,使用升限约束 (≥8000m),above,300.0,0.198,"RAG 飞机总体设计 Eq.3.23 with dh/dt=0.5m/s, σ≈0.43"
+region,初选可行域,,110.0,0.24,
+region,初选可行域,,220.0,0.245,
+region,初选可行域,,220.0,0.42,
+region,初选可行域,,110.0,0.42,
+design_point,推荐设计点 V0,,150.0,0.25,
