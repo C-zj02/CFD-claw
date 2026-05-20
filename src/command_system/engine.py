@@ -34,6 +34,9 @@ class CommandResult:
     should_query: bool = False
     display: str = "system"  # "skip" | "system" | "user"
     meta_messages: list[str] = field(default_factory=list)
+    progress_message: str = ""
+    max_turns: int = 20
+    allowed_tools: list[str] = field(default_factory=list)
     error: Optional[str] = None
 
     @classmethod
@@ -53,6 +56,9 @@ class CommandResult:
         command_name: str,
         prompt_content: list[dict[str, Any]],
         should_query: bool = True,
+        progress_message: str = "",
+        max_turns: int = 20,
+        allowed_tools: list[str] | None = None,
     ) -> "CommandResult":
         """Create a successful prompt result."""
         return cls(
@@ -62,6 +68,9 @@ class CommandResult:
             prompt_content=prompt_content,
             should_query=should_query,
             display="user",
+            progress_message=progress_message,
+            max_turns=max_turns,
+            allowed_tools=list(allowed_tools or []),
         )
 
     @classmethod
@@ -194,6 +203,9 @@ class CommandEngine:
                 command.name,
                 prompt_content,
                 should_query=True,
+                progress_message=command.progress_message,
+                max_turns=max(1, int(getattr(command, "max_turns", 20) or 20)),
+                allowed_tools=list(getattr(command, "allowed_tools", []) or []),
             )
         except Exception as e:
             return CommandResult.error(

@@ -123,6 +123,7 @@ class TestCommandTypes(unittest.TestCase):
         self.assertEqual(cmd.command_type, CommandType.PROMPT)
         self.assertEqual(cmd.name, "test-prompt")
         self.assertEqual(cmd.progress_message, "Testing...")
+        self.assertEqual(cmd.max_turns, 20)
 
     def test_local_command_creation(self):
         """Test creating a LocalCommand."""
@@ -420,6 +421,7 @@ class TestSkillsIntegration(unittest.TestCase):
         self.assertEqual(cmd.name, "test-skill")
         self.assertEqual(cmd.description, "Test skill")
         self.assertEqual(cmd.markdown_content, "Hello $name")
+        self.assertEqual(cmd.allowed_tools, ["Read", "Grep"])
 
 
 class TestInitCommand(unittest.TestCase):
@@ -478,6 +480,12 @@ class TestInitCommand(unittest.TestCase):
         self.assertIsNotNone(init_cmd)
         self.assertEqual(init_cmd.progress_message, "analyzing your codebase")
 
+    def test_init_command_has_high_turn_budget(self):
+        """Test that /init keeps its expanded turn budget."""
+        init_cmd = self._get_init_command()
+        self.assertIsNotNone(init_cmd)
+        self.assertEqual(init_cmd.max_turns, 100)
+
     def test_init_command_has_prompt_content(self):
         """Test that /init has the 7-step prompt content."""
         init_cmd = self._get_init_command()
@@ -518,6 +526,8 @@ class TestInitCommand(unittest.TestCase):
         self.assertTrue(result.success)
         self.assertEqual(result.command_name, "init")
         self.assertEqual(result.result_type, "prompt")
+        self.assertEqual(result.max_turns, 100)
+        self.assertEqual(result.progress_message, "analyzing your codebase")
         self.assertTrue(result.should_query)
         self.assertEqual(result.display, "user")
         # Verify prompt content was returned

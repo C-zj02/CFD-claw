@@ -428,6 +428,8 @@ python .clawd/skills/aircraft-conceptual-design/scripts/plot_constraint_boundary
   --csv /tmp/aircraft-boundary.csv
 ```
 
+如果你需要自己生成 JSON 规格，优先放到 `.clawd/generated/` 里的临时文件，不要反复覆盖仓库根目录下的 `constraint_spec.json`。
+
 预期输出：
 
 ```text
@@ -487,11 +489,30 @@ PYTHONPATH=. python -m src.cli
 
 正常情况下应停在 `❯` 提示符等待输入。
 
-### 11.4 输出参数不够精确
+### 11.4 卡在 Thinking
+
+如果已经看到多次 `Bash`、`Read` 工具执行成功，但最后长时间停在 `Thinking...`，通常表示工具阶段已经结束，模型正在综合一个较大的最终回答。建议优先用流式模式启动：
+
+```bash
+cd /Users/zejianchen/Desktop/claude_agent/Clawd-Code
+clawd code --stream
+```
+
+或者进入 REPL 后执行：
+
+```text
+/stream on
+```
+
+该技能已经限制默认工具预算：常规任务最多 3 次 RAG 检索，完整详细报告最多 4 次检索；原文 `Read` 最多 2 个片段，每段最多 80 行。若仍然很慢，可以把任务拆成两步，先让技能输出 `需求解析、依据检索、总体参数`，再单独要求 `约束图和布局校核`。
+
+当前版本还增加了运行时回合护栏：通过 slash 命令执行 `aircraft-conceptual-design` 时，默认最多允许 12 轮工具回合；`aircraft-design-rag` 默认最多 6 轮。达到工具回合上限后，运行时会强制进入无工具最终合成，避免技能在证据已经足够时继续长时间探索，也避免只停在内部工具调用标记而没有最终结果。
+
+### 11.5 输出参数不够精确
 
 这通常是因为输入缺失或本地资料没有覆盖。该技能会优先给出范围和工程假设，而不是编造精确值。想提高输出质量，可以补充巡航速度、动力形式、跑道海拔、温度、升阻比、最大升力系数、备份燃油或能量策略等信息。
 
-### 11.5 没有生成界限线图
+### 11.6 没有生成界限线图
 
 如果用户只问轻量问题，技能可能只输出相关子集。若明确需要图，请在调用中写清楚：
 

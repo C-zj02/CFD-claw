@@ -133,6 +133,105 @@ class TestAgentLoop(unittest.TestCase):
         self.assertTrue(hello_path.exists())
         self.assertEqual(hello_path.read_text(), "print('hello world')")
 
+    def test_agent_loop_forces_final_synthesis_when_max_turns_is_reached(self):
+        """When tool turns are exhausted, the loop still makes one final no-tools synthesis pass."""
+        conversation = Conversation()
+        conversation.add_user_message("Create a file hello.py with content print('hello world')")
+
+        mock_provider = MagicMock()
+        mock_provider.chat_stream_response.side_effect = NotImplementedError()
+        hello_path = self.workspace / "hello.py"
+        mock_provider.chat.side_effect = [
+            ChatResponse(
+                content="I will create the file.",
+                model="test-model",
+                usage={"input_tokens": 10, "output_tokens": 20},
+                finish_reason="tool_use",
+                tool_uses=[{
+                    "id": "toolu_123",
+                    "name": "Write",
+                    "input": {
+                        "file_path": str(hello_path),
+                        "content": "print('hello world')",
+                    },
+                }],
+            ),
+            ChatResponse(
+                content="File created successfully!",
+                model="test-model",
+                usage={"input_tokens": 30, "output_tokens": 10},
+                finish_reason="stop",
+                tool_uses=None,
+            ),
+        ]
+
+        result = run_agent_loop(
+            conversation=conversation,
+            provider=mock_provider,
+            tool_registry=self.registry,
+            tool_context=self.context,
+            max_turns=1,
+            verbose=False,
+        )
+
+        self.assertIsInstance(result, AgentLoopResult)
+        self.assertEqual(result.response_text, "File created successfully!")
+        self.assertEqual(result.num_turns, 2)
+        self.assertEqual(mock_provider.chat.call_count, 2)
+        self.assertTrue(hello_path.exists())
+
+    def test_agent_loop_falls_back_if_final_synthesis_still_requests_tool(self):
+        """Final no-tools synthesis must not leak provider-specific tool markup."""
+        conversation = Conversation()
+        conversation.add_user_message("Read README.md and summarize it")
+
+        mock_provider = MagicMock()
+        mock_provider.chat_stream_response.side_effect = NotImplementedError()
+        readme_path = self.workspace / "README.md"
+        readme_path.write_text("hello", encoding="utf-8")
+
+        mock_provider.chat.side_effect = [
+            ChatResponse(
+                content="I will read the file.",
+                model="deepseek-v4-pro",
+                usage={"input_tokens": 10, "output_tokens": 20},
+                finish_reason="tool_calls",
+                tool_uses=[{
+                    "id": "toolu_123",
+                    "name": "Read",
+                    "input": {"file_path": str(readme_path)},
+                }],
+            ),
+            ChatResponse(
+                content="Need one more read.",
+                model="deepseek-v4-pro",
+                usage={"input_tokens": 30, "output_tokens": 10},
+                finish_reason="tool_calls",
+                tool_uses=[{
+                    "id": "dsml_tool_call_1",
+                    "name": "Read",
+                    "input": {"file_path": str(readme_path), "offset": 2, "limit": 2},
+                }],
+            ),
+        ]
+
+        chunks: list[str] = []
+        result = run_agent_loop(
+            conversation=conversation,
+            provider=mock_provider,
+            tool_registry=self.registry,
+            tool_context=self.context,
+            max_turns=1,
+            stream=True,
+            verbose=False,
+            on_text_chunk=chunks.append,
+        )
+
+        self.assertIn("工具预算已用尽", result.response_text)
+        self.assertIn("工具预算已用尽", "".join(chunks))
+        self.assertNotIn("DSML", result.response_text)
+        self.assertEqual(mock_provider.chat.call_count, 2)
+
     def test_agent_loop_stream_emits_final_text_chunks(self):
         """Streaming mode emits final response chunks without changing the result."""
         conversation = Conversation()
@@ -298,6 +397,98 @@ class TestAgentLoop(unittest.TestCase):
         self.assertEqual("".join(chunks), "Hello from fallback!")
         self.assertEqual(result.response_text, "Hello from fallback!")
         provider.chat.assert_called_once()
+
+    def test_agent_loop_emits_assistant_turn_event_after_tool_results(self):
+        """A second model turn after tools should surface an assistant-turn event."""
+        conversation = Conversation()
+        conversation.add_user_message("Create a file hello.py with content print('hello world')")
+
+        provider = MagicMock()
+        provider.chat_stream_response.side_effect = NotImplementedError()
+        hello_path = self.workspace / "hello.py"
+        provider.chat.side_effect = [
+            ChatResponse(
+                content="I will create the file.",
+                model="test-model",
+                usage={"input_tokens": 10, "output_tokens": 20},
+                finish_reason="tool_use",
+                tool_uses=[{
+                    "id": "toolu_123",
+                    "name": "Write",
+                    "input": {
+                        "file_path": str(hello_path),
+                        "content": "print('hello world')",
+                    },
+                }],
+            ),
+            ChatResponse(
+                content="File created successfully!",
+                model="test-model",
+                usage={"input_tokens": 30, "output_tokens": 10},
+                finish_reason="stop",
+                tool_uses=None,
+            ),
+        ]
+
+        events = []
+        result = run_agent_loop(
+            conversation=conversation,
+            provider=provider,
+            tool_registry=self.registry,
+            tool_context=self.context,
+            verbose=False,
+            on_event=events.append,
+        )
+
+        self.assertEqual(result.response_text, "File created successfully!")
+        assistant_turns = [event for event in events if event.kind == "assistant_turn"]
+        self.assertEqual(len(assistant_turns), 1)
+        self.assertEqual(assistant_turns[0].tool_name, "Assistant")
+
+    def test_agent_loop_preserves_openai_reasoning_content_across_tool_turns(self):
+        """Thinking-mode providers require reasoning_content to be echoed with tool-call history."""
+        conversation = Conversation()
+        conversation.add_user_message("Read README.md")
+
+        provider = MagicMock()
+        provider.chat_stream_response.side_effect = NotImplementedError()
+        readme_path = self.workspace / "README.md"
+        readme_path.write_text("hello", encoding="utf-8")
+
+        response_with_tool = ChatResponse(
+            content="I will read the file.",
+            model="deepseek-v4-pro",
+            usage={"input_tokens": 10, "output_tokens": 20},
+            finish_reason="tool_calls",
+            reasoning_content="Need to inspect the requested file.",
+            tool_uses=[{
+                "id": "call_1",
+                "name": "Read",
+                "input": {"file_path": str(readme_path)},
+            }],
+        )
+        final_response = ChatResponse(
+            content="The file says hello.",
+            model="deepseek-v4-pro",
+            usage={"input_tokens": 30, "output_tokens": 10},
+            finish_reason="stop",
+            tool_uses=None,
+        )
+        provider.chat.side_effect = [response_with_tool, final_response]
+
+        result = run_agent_loop(
+            conversation=conversation,
+            provider=provider,
+            tool_registry=self.registry,
+            tool_context=self.context,
+            verbose=False,
+        )
+
+        self.assertEqual(result.response_text, "The file says hello.")
+        second_call_messages = provider.chat.call_args_list[1].args[0]
+        assistant_messages = [m for m in second_call_messages if m.get("role") == "assistant"]
+        self.assertEqual(assistant_messages[0]["reasoning_content"], "Need to inspect the requested file.")
+        self.assertEqual(conversation.messages[1].reasoning_content, "Need to inspect the requested file.")
 
 
 if __name__ == "__main__":

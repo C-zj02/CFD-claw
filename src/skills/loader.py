@@ -89,6 +89,7 @@ def load_skills_from_dir(base_dir: str | Path, *, loaded_from: str = "skills") -
         version = str(version) if version is not None else None
         model = fm.get("model")
         model = str(model) if model is not None else None
+        max_turns = _as_int(fm.get("max-turns") if fm.get("max-turns") is not None else fm.get("max_turns"))
         run_command = fm.get("run-command") or fm.get("run_command")
         run_command = str(run_command) if run_command is not None else None
 
@@ -115,6 +116,7 @@ def load_skills_from_dir(base_dir: str | Path, *, loaded_from: str = "skills") -
             when_to_use=when_to_use,
             version=version,
             model=model,
+            max_turns=max_turns,
             run_command=run_command,
             allowed_tools=allowed_tools,
             arg_names=arg_names,
@@ -191,3 +193,21 @@ def _as_str_list(val) -> List[str]:
             return [x.strip() for x in s.split(",") if x.strip()]
         return [s]
     return [str(val)]
+
+
+def _as_int(val) -> Optional[int]:
+    if val is None:
+        return None
+    if isinstance(val, bool):
+        return None
+    if isinstance(val, int):
+        return val
+    if isinstance(val, str):
+        stripped = val.strip()
+        if not stripped:
+            return None
+        try:
+            return int(stripped)
+        except ValueError:
+            return None
+    return None

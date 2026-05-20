@@ -26,6 +26,21 @@ def _build_openai_tool_result_content(result_output: Any) -> str:
         return result_output
     return json.dumps(result_output, ensure_ascii=False)
 
+
+def _append_reasoning_content(openai_message: dict[str, Any], reasoning_content: str | None) -> None:
+    if isinstance(reasoning_content, str) and reasoning_content.strip():
+        openai_message["reasoning_content"] = reasoning_content
+
+
+def _build_final_synthesis_prompt() -> str:
+    return (
+        "工具预算已经用尽，后续不允许再调用任何工具。"
+        "请仅基于已经收集到的证据、计算和文件结果，直接输出最终结论。"
+        "不要输出任何工具调用标记、XML、DSML、伪代码块或内部推理过程。"
+        "如果信息仍然不足，请明确说明缺口并给出能落地的下一步。"
+    )
+
+
 def summarize_tool_result(name: str, output: Any) -> str:
     """Create a concise, single-line summary for tool result output."""
     if not isinstance(output, dict):
@@ -284,7 +299,9 @@ def run_agent_loop(
     # Seed OpenAI messages from initial conversation messages
     for msg in conversation.messages:
         if isinstance(msg.content, str):
-            openai_messages.append({"role": msg.role, "content": msg.content})
+            openai_message: dict[str, Any] = {"role": msg.role, "content": msg.content}
+            _append_reasoning_content(openai_message, getattr(msg, "reasoning_content", None))
+            openai_messages.append(openai_message)
         else:
             # If there are already block messages, we are probably Anthropic; leave as is
             pass
@@ -293,7 +310,56 @@ def run_agent_loop(
     total_usage: dict[str, int] = {"input_tokens": 0, "output_tokens": 0}
     turn_count = 0
 
+    def _persist_assistant_response(response: ChatResponse) -> str:
+        """Persist the assistant response into conversation state."""
+        final_assistant_content = response.content or ""
+
+        if _is_anthropic_provider(provider):
+            assistant_blocks: list = []
+            if response.content:
+                assistant_blocks.append(TextContentBlock(type="text", text=response.content))
+
+            tool_uses = response.tool_uses or []
+            for tool_use in tool_uses:
+                assistant_blocks.append(ToolUseContentBlock(
+                    type="tool_use",
+                    id=tool_use["id"],
+                    name=tool_use["name"],
+                    input=tool_use["input"],
+                ))
+
+            conversation.add_assistant_message(assistant_blocks if assistant_blocks else "")
+        else:
+            conversation.add_assistant_message(final_assistant_content)
+            if conversation.messages:
+                conversation.messages[-1].reasoning_content = response.reasoning_content
+            openai_assistant_msg: dict[str, Any] = {"role": "assistant", "content": final_assistant_content}
+            _append_reasoning_content(openai_assistant_msg, response.reasoning_content)
+            if response.tool_uses:
+                tool_calls = []
+                for tu in response.tool_uses:
+                    tool_calls.append({
+                        "id": tu["id"],
+                        "type": "function",
+                        "function": {
+                            "name": tu["name"],
+                            "arguments": json.dumps(tu["input"], ensure_ascii=False)
+                        }
+                })
+                openai_assistant_msg["tool_calls"] = tool_calls
+            openai_messages.append(openai_assistant_msg)
+        return final_assistant_content
+
     for turn in range(max_turns):
+        if turn > 0:
+            _safe_call_handler(
+                on_event,
+                ToolEvent(
+                    kind="assistant_turn",
+                    tool_name="Assistant",
+                    tool_input={"turn": turn + 1},
+                ),
+            )
         if _is_anthropic_provider(provider):
             api_messages = conversation.get_messages()
         else:
@@ -321,44 +387,7 @@ def run_agent_loop(
             total_usage["output_tokens"] += response.usage.get("output_tokens", 0)
 
         # Build assistant content for Anthropic or just text for OpenAI
-        final_assistant_content = response.content or ""
-
-        if _is_anthropic_provider(provider):
-            assistant_blocks: list = []
-            if response.content:
-                assistant_blocks.append(TextContentBlock(type="text", text=response.content))
-
-            tool_uses = response.tool_uses or []
-            for tool_use in tool_uses:
-                assistant_blocks.append(ToolUseContentBlock(
-                    type="tool_use",
-                    id=tool_use["id"],
-                    name=tool_use["name"],
-                    input=tool_use["input"],
-                ))
-
-            conversation.add_assistant_message(assistant_blocks if assistant_blocks else "")
-        else:
-            # Persist assistant text for session history features like /render-last
-            # and for subsequent non-Anthropic turns seeded from conversation.
-            conversation.add_assistant_message(final_assistant_content)
-            # Add assistant message to OpenAI messages (text only)
-            openai_assistant_msg: dict[str, Any] = {"role": "assistant", "content": final_assistant_content}
-            # If there are tool_uses, add them in OpenAI format
-            if response.tool_uses:
-                # Build OpenAI tool_calls
-                tool_calls = []
-                for tu in response.tool_uses:
-                    tool_calls.append({
-                        "id": tu["id"],
-                        "type": "function",
-                        "function": {
-                            "name": tu["name"],
-                            "arguments": json.dumps(tu["input"], ensure_ascii=False)
-                        }
-                    })
-                openai_assistant_msg["tool_calls"] = tool_calls
-            openai_messages.append(openai_assistant_msg)
+        final_assistant_content = _persist_assistant_response(response)
 
         tool_uses = response.tool_uses or []
 
@@ -367,13 +396,11 @@ def run_agent_loop(
             if stream and final_assistant_content and not streamed_live_text:
                 _emit_text_chunks(on_text_chunk, final_assistant_content)
             if (final_assistant_content or "").strip() == "" and last_user_visible_message is not None:
-                return AgentLoopResult(
-                    response_text=last_user_visible_message,
-                    usage=total_usage if total_usage["input_tokens"] > 0 or total_usage["output_tokens"] > 0 else None,
-                    num_turns=turn_count,
-                )
+                response_text = last_user_visible_message
+            else:
+                response_text = final_assistant_content
             return AgentLoopResult(
-                response_text=final_assistant_content,
+                response_text=response_text,
                 usage=total_usage if total_usage["input_tokens"] > 0 or total_usage["output_tokens"] > 0 else None,
                 num_turns=turn_count,
             )
@@ -460,9 +487,50 @@ def run_agent_loop(
                         "content": error_str
                     })
 
-    # Reached max turns
+    # Reached max turns with tools still pending. Make one final synthesis pass
+    # without tools so the user gets a usable answer instead of a silent stop.
+    if _is_anthropic_provider(provider):
+        final_api_messages = conversation.get_messages()
+        final_call_kwargs = {"system": f"{effective_system_prompt}\n\n{_build_final_synthesis_prompt()}"}
+    else:
+        final_api_messages = [
+            {"role": "system", "content": f"{effective_system_prompt}\n\n{_build_final_synthesis_prompt()}"},
+            *openai_messages,
+        ]
+        final_call_kwargs = {}
+
+    final_response, final_streamed_live_text = _call_provider_for_turn(
+        provider=provider,
+        api_messages=final_api_messages,
+        call_kwargs=final_call_kwargs,
+        stream=stream,
+        on_text_chunk=on_text_chunk,
+    )
+    turn_count += 1
+
+    if final_response.usage:
+        total_usage["input_tokens"] += final_response.usage.get("input_tokens", 0)
+        total_usage["output_tokens"] += final_response.usage.get("output_tokens", 0)
+
+    final_assistant_content = _persist_assistant_response(final_response)
+    should_emit_final_content = not final_streamed_live_text
+    if final_response.tool_uses:
+        final_assistant_content = (
+            "工具预算已用尽，模型仍尝试继续调用工具。"
+            "我已停止继续执行工具，以避免无限检索或内部工具标记泄漏。"
+            "请基于上方已经完成的检索和读取结果重新发起一次更小范围的问题，"
+            "或提高该技能的 max-turns 后重试。"
+        )
+        conversation.add_assistant_message(final_assistant_content)
+        should_emit_final_content = True
+    if stream and final_assistant_content and should_emit_final_content:
+        _emit_text_chunks(on_text_chunk, final_assistant_content)
+    if (final_assistant_content or "").strip() == "" and last_user_visible_message is not None:
+        response_text = last_user_visible_message
+    else:
+        response_text = final_assistant_content
     return AgentLoopResult(
-        response_text="[Max tool turns reached]",
+        response_text=response_text,
         usage=total_usage if total_usage["input_tokens"] > 0 or total_usage["output_tokens"] > 0 else None,
         num_turns=turn_count,
     )

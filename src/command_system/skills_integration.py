@@ -43,6 +43,7 @@ def skill_to_prompt_command(skill: PromptSkill) -> PromptCommand:
         arg_names=list(skill.arg_names),
         allowed_tools=list(skill.allowed_tools),
         model=skill.model,
+        max_turns=skill.max_turns if skill.max_turns is not None else 20,
         run_command=skill.run_command,
         source=skill.loaded_from,
         skill_root=skill.skill_root,

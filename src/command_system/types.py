@@ -100,6 +100,7 @@ class PromptCommand(CommandBase):
     arg_names: list[str] = field(default_factory=list)
     allowed_tools: list[str] = field(default_factory=list)
     model: Optional[str] = None
+    max_turns: int = 20
     run_command: Optional[str] = None
     source: str = "builtin"
     plugin_info: Optional[dict[str, Any]] = None

@@ -684,6 +684,7 @@ INIT_COMMAND = PromptCommand(
     markdown_content=NEW_INIT_PROMPT,
     progress_message="analyzing your codebase",
     content_length=0,
+    max_turns=100,
     source="builtin",
 )
 

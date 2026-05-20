@@ -40,6 +40,7 @@ class Message:
     """Conversation message."""
     role: str  # "user", "assistant", "system"
     content: Union[str, list[ContentBlock]]
+    reasoning_content: str | None = None
     timestamp: str = field(default_factory=lambda: datetime.now().isoformat())
     # Internal marker for messages that should be filtered from API (e.g., compact boundary)
     _is_internal: bool = field(default=False, repr=False)
@@ -139,6 +140,7 @@ class Conversation:
             messages_data.append({
                 "role": msg.role,
                 "content": content_data,
+                "reasoning_content": msg.reasoning_content,
                 "timestamp": msg.timestamp,
                 "_is_internal": getattr(msg, "_is_internal", False),
             })
@@ -178,6 +180,7 @@ class Conversation:
             conv.messages.append(Message(
                 role=msg_data["role"],
                 content=msg_content,
+                reasoning_content=msg_data.get("reasoning_content"),
                 timestamp=msg_data.get("timestamp", ""),
                 _is_internal=msg_data.get("_is_internal", False),
             ))

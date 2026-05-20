@@ -77,7 +77,7 @@ from src.config import get_provider_config, load_config
 from src.outputStyles import resolve_output_style
 from src.providers import get_provider_class
 from src.providers.anthropic_provider import AnthropicProvider
-from src.providers.base import ChatMessage
+from src.providers.base import BaseProvider, ChatMessage
 from src.providers.minimax_provider import MinimaxProvider
 from src.skill_memory import (
     TraceRecorder,
@@ -476,10 +476,18 @@ class ClawdREPL:
                     break
 
             if prompt_text:
-                # Send the prompt to the LLM for interactive execution
-                # Use higher max_turns for complex commands like /init
-                self.console.print("[dim]Initializing workspace setup...[/dim]")
-                self.chat(prompt_text, max_turns=100)
+                progress_text = (result.progress_message or f"Running /{result.command_name}...").strip()
+                self.console.print(f"[dim]{progress_text}[/dim]")
+                stream_override = None
+                if result.command_name in getattr(self, "_registered_skill_names", set()) and not self.stream:
+                    self.console.print("[dim]Live output enabled for this skill run.[/dim]")
+                    stream_override = True
+                self.chat(
+                    prompt_text,
+                    max_turns=max(1, int(result.max_turns or 20)),
+                    stream_override=stream_override,
+                    allowed_tools=result.allowed_tools,
+                )
             return True
 
         elif result.result_type == "skip":
@@ -1161,13 +1169,17 @@ class ClawdREPL:
         messages: list[dict[str, Any]] = []
         for msg in self.session.conversation.messages:
             if isinstance(msg.content, str):
-                messages.append({"role": msg.role, "content": msg.content})
+                api_message: dict[str, Any] = {"role": msg.role, "content": msg.content}
+                reasoning_content = getattr(msg, "reasoning_content", None)
+                if isinstance(reasoning_content, str) and reasoning_content.strip():
+                    api_message["reasoning_content"] = reasoning_content
+                messages.append(api_message)
         if style_prompt.strip():
             messages = [{"role": "system", "content": style_prompt}, *messages]
         return messages, {}
 
-    def _should_try_direct_stream(self, user_input: str) -> bool:
-        if not self.stream:
+    def _should_try_direct_stream(self, user_input: str, use_stream: bool) -> bool:
+        if not use_stream:
             return False
         text = user_input.strip().lower()
         if not text or text.startswith("/"):
@@ -1190,9 +1202,25 @@ class ClawdREPL:
 
     def _stream_direct_response(self, on_text_chunk=None) -> str | None:
         streamed_chunks: list[str] = []
-
         try:
             api_messages, call_kwargs = self._build_direct_stream_payload()
+            if isinstance(self.provider, BaseProvider):
+                try:
+                    response = self.provider.chat_stream_response(
+                        api_messages,
+                        tools=None,
+                        on_text_chunk=on_text_chunk,
+                        **call_kwargs,
+                    )
+                    if not response.content:
+                        return None
+                    self.session.conversation.add_assistant_message(response.content)
+                    if self.session.conversation.messages:
+                        self.session.conversation.messages[-1].reasoning_content = response.reasoning_content
+                    return response.content
+                except NotImplementedError:
+                    pass
+
             stream_iter = self.provider.chat_stream(api_messages, tools=None, **call_kwargs)
             for chunk in stream_iter:
                 if not chunk:
@@ -1242,16 +1270,24 @@ class ClawdREPL:
         self.console.print()
         return True
 
-    def chat(self, user_input: str, max_turns: int = 20):
+    def chat(
+        self,
+        user_input: str,
+        max_turns: int = 20,
+        stream_override: bool | None = None,
+        allowed_tools: list[str] | None = None,
+    ):
         """Send message to LLM and display response.
 
         Args:
             user_input: The user message to send.
             max_turns: Maximum number of tool call turns (default 20, higher for complex commands).
+            stream_override: Override REPL stream mode for this request only.
         """
         # Add user message
         self.session.conversation.add_user_message(user_input)
         trace_recorder = self._start_trace_if_learning(user_input)
+        use_stream = self.stream if stream_override is None else stream_override
 
         try:
             self.console.print("\n[bold]Assistant[/bold]")
@@ -1276,6 +1312,15 @@ class ClawdREPL:
                         summary = self._shorten_path_text(summary)
                     suffix = f" [dim]({summary})[/dim]" if summary else ""
                     self.console.print(f"[dim]•[/dim] [cyan]{ev.tool_name}[/cyan]{suffix} [dim]running...[/dim]")
+                    return
+                if ev.kind == "assistant_turn":
+                    turn_num = None
+                    if isinstance(ev.tool_input, dict):
+                        turn_num = ev.tool_input.get("turn")
+                    label = "Assistant"
+                    if isinstance(turn_num, int) and turn_num > 1:
+                        label = f"Assistant turn {turn_num}"
+                    self.console.print(f"[dim]•[/dim] [magenta]{label}[/magenta] [dim]integrating tool results...[/dim]")
                     return
                 if ev.kind == "tool_result":
                     if ev.is_error:
@@ -1304,7 +1349,7 @@ class ClawdREPL:
                 _stop_status_once()
                 self.console.print(chunk, end="", markup=False, highlight=False, soft_wrap=True)
 
-            if self._should_try_direct_stream(user_input):
+            if self._should_try_direct_stream(user_input, use_stream):
                 self._current_status = self.console.status("[dim]Thinking...[/dim]", spinner="dots")
                 with self._current_status:
                     direct_response = self._stream_direct_response(on_text_chunk=on_text_chunk)
@@ -1323,17 +1368,18 @@ class ClawdREPL:
 
             # Use agent loop with tools for any provider that supports it
             self._current_status = self.console.status("[dim]Thinking...[/dim]", spinner="dots")
+            tool_registry = self.tool_registry.filtered(allowed_tools)
             with self._current_status:
                 result = run_agent_loop(
                     conversation=self.session.conversation,
                     provider=self.provider,
-                    tool_registry=self.tool_registry,
+                    tool_registry=tool_registry,
                     tool_context=self.tool_context,
                     max_turns=max_turns,
-                    stream=self.stream,
+                    stream=use_stream,
                     verbose=False,
                     on_event=on_event,
-                    on_text_chunk=on_text_chunk if self.stream else None,
+                    on_text_chunk=on_text_chunk if use_stream else None,
                 )
             self._current_status = None
 
@@ -1350,7 +1396,7 @@ class ClawdREPL:
                     if hasattr(self, 'command_context') and self.command_context:
                         self.command_context.cost_tracker = self.cost_tracker
 
-            if self.stream and stream_started:
+            if use_stream and stream_started:
                 self.console.print()
                 self.console.print()
             else:

@@ -47,8 +47,11 @@ PROVIDER_INFO: dict[str, ProviderInfo] = {
     "openai": {
         "label": "OpenAI GPT",
         "default_base_url": "https://api.openai.com/v1",
-        "default_model": "gpt-5.4",
+        "default_model": "deepseek-v4-pro",
         "available_models": [
+            # DeepSeek models (OpenAI-compatible endpoints)
+            "deepseek-v4-pro",
+            "deepseek-v4-flash",
             # GPT-5.4 series (latest flagship)
             "gpt-5.4",
             "gpt-5.4-pro",

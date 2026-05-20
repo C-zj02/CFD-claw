@@ -28,6 +28,7 @@ Examples:
   clawd login              Configure API keys
   clawd config             Show current configuration
   clawd web                Start the browser UI
+  clawd code               Start interactive REPL
   clawd --stream           Start REPL with live response rendering
   clawd                    Start interactive REPL
 """
@@ -57,6 +58,14 @@ Examples:
     # config subcommand
     config_parser = subparsers.add_parser('config', help='Show current configuration')
 
+    # code subcommand, for users who prefer an explicit "clawd code" launcher
+    code_parser = subparsers.add_parser('code', help='Start interactive REPL')
+    code_parser.add_argument(
+        '--stream',
+        action='store_true',
+        help='Enable live response rendering in the REPL'
+    )
+
     # web subcommand
     web_parser = subparsers.add_parser('web', help='Start the browser UI')
     web_parser.add_argument('--host', default='127.0.0.1', help='Host to bind the web UI server to')
@@ -79,6 +88,8 @@ Examples:
         return handle_login()
     elif args.command == 'config':
         return show_config()
+    elif args.command == 'code':
+        return start_repl(stream=args.stream)
     elif args.command == 'web':
         return start_web(host=args.host, port=args.port)
 

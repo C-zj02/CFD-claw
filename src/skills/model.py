@@ -21,6 +21,7 @@ class PromptSkill(Skill):
     when_to_use: Optional[str]
     version: Optional[str]
     model: Optional[str]
+    max_turns: Optional[int]
     run_command: Optional[str]
     allowed_tools: Sequence[str]
     arg_names: Sequence[str]

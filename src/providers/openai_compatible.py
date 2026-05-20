@@ -7,6 +7,7 @@ OpenAI-style /chat/completions API (OpenAI, GLM, Minimax, etc.).
 from __future__ import annotations
 
 import json
+import re
 from abc import abstractmethod
 from typing import Any, Generator, Optional
 
@@ -36,6 +37,83 @@ def _convert_to_openai_tool_schema(anthropic_tool: dict[str, Any]) -> dict[str, 
             "parameters": input_schema,
         },
     }
+
+
+_DSML_TOOL_CALLS_RE = re.compile(
+    r"<｜｜DSML｜｜tool_calls>\s*(?P<body>.*?)\s*</｜｜DSML｜｜tool_calls>",
+    re.DOTALL,
+)
+_DSML_INVOKE_RE = re.compile(
+    r"<｜｜DSML｜｜invoke\s+name=\"(?P<name>[^\"]+)\">\s*"
+    r"(?P<body>.*?)\s*</｜｜DSML｜｜invoke>",
+    re.DOTALL,
+)
+_DSML_PARAMETER_RE = re.compile(
+    r"<｜｜DSML｜｜parameter\s+name=\"(?P<name>[^\"]+)\"\s+string=\"(?P<string>true|false)\">"
+    r"(?P<value>.*?)"
+    r"</｜｜DSML｜｜parameter>",
+    re.DOTALL,
+)
+
+
+def _parse_dsml_value(value: str, *, is_string: bool) -> Any:
+    value = value.strip()
+    if is_string:
+        return value
+    try:
+        return json.loads(value)
+    except Exception:
+        lowered = value.lower()
+        if lowered == "true":
+            return True
+        if lowered == "false":
+            return False
+        if lowered == "null":
+            return None
+        try:
+            return int(value)
+        except ValueError:
+            pass
+        try:
+            return float(value)
+        except ValueError:
+            return value
+
+
+def _extract_dsml_tool_calls(content: str) -> tuple[str, list[dict[str, Any]]]:
+    """Extract DeepSeek-style DSML tool calls that some gateways emit as text."""
+    if not content or "<｜｜DSML｜｜tool_calls>" not in content:
+        return content, []
+
+    tool_uses: list[dict[str, Any]] = []
+    for tool_block in _DSML_TOOL_CALLS_RE.finditer(content):
+        for idx, invoke in enumerate(_DSML_INVOKE_RE.finditer(tool_block.group("body"))):
+            tool_input: dict[str, Any] = {}
+            for param in _DSML_PARAMETER_RE.finditer(invoke.group("body")):
+                param_name = param.group("name")
+                is_string = param.group("string") == "true"
+                tool_input[param_name] = _parse_dsml_value(param.group("value"), is_string=is_string)
+            tool_uses.append({
+                "id": f"dsml_tool_call_{len(tool_uses) + idx}",
+                "name": invoke.group("name"),
+                "input": tool_input,
+            })
+
+    cleaned = _DSML_TOOL_CALLS_RE.sub("", content).strip()
+    return cleaned, tool_uses
+
+
+def _strip_partial_dsml_tool_block(content: str) -> str:
+    """Remove an incomplete DSML tool block from streamed user-visible text."""
+    marker = "<｜｜DSML｜｜tool_calls>"
+    idx = content.find(marker)
+    if idx != -1:
+        return content[:idx]
+    max_prefix = min(len(marker) - 1, len(content))
+    for size in range(max_prefix, 0, -1):
+        if marker.startswith(content[-size:]):
+            return content[:-size]
+    return content
 
 
 class OpenAICompatibleProvider(BaseProvider):
@@ -150,8 +228,12 @@ class OpenAICompatibleProvider(BaseProvider):
                     "input": args,
                 })
 
+        content, dsml_tool_uses = _extract_dsml_tool_calls(choice.message.content or "")
+        if dsml_tool_uses:
+            tool_uses = (tool_uses or []) + dsml_tool_uses
+
         return ChatResponse(
-            content=choice.message.content or "",
+            content=content,
             model=response.model,
             usage=self._build_usage_dict(getattr(response, "usage", None)),
             finish_reason=choice.finish_reason,
@@ -223,7 +305,8 @@ class OpenAICompatibleProvider(BaseProvider):
             **{k: v for k, v in kwargs.items() if k not in ["model", "tools"]},
         )
 
-        content_parts: list[str] = []
+        raw_content_parts: list[str] = []
+        emitted_content_len = 0
         response_model = model
         finish_reason = "stop"
         reasoning_parts: list[str] = []
@@ -249,10 +332,12 @@ class OpenAICompatibleProvider(BaseProvider):
 
             content_piece = getattr(delta, "content", None)
             if content_piece:
-                piece = str(content_piece)
-                content_parts.append(piece)
+                raw_content_parts.append(str(content_piece))
                 if on_text_chunk is not None:
-                    on_text_chunk(piece)
+                    visible_content = _strip_partial_dsml_tool_block("".join(raw_content_parts))
+                    if len(visible_content) > emitted_content_len:
+                        on_text_chunk(visible_content[emitted_content_len:])
+                        emitted_content_len = len(visible_content)
 
             reasoning_piece = getattr(delta, "reasoning_content", None)
             if reasoning_piece:
@@ -291,9 +376,12 @@ class OpenAICompatibleProvider(BaseProvider):
                 "input": parsed_args,
             })
 
+        content, dsml_tool_uses = _extract_dsml_tool_calls("".join(raw_content_parts))
+        tool_uses.extend(dsml_tool_uses)
+
         reasoning_content = "".join(reasoning_parts) if reasoning_parts else None
         return ChatResponse(
-            content="".join(content_parts),
+            content=content,
             model=response_model,
             usage=self._build_usage_dict(usage_obj),
             finish_reason=finish_reason,

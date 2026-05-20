@@ -65,6 +65,18 @@ class ToolRegistry:
     def list_specs(self) -> list[ToolSpec]:
         return [tool.spec() for tool in self._tools]
 
+    def filtered(self, allowed_names: Iterable[str] | None) -> "ToolRegistry":
+        if not allowed_names:
+            return self
+        allowed = {name.lower() for name in allowed_names}
+        tools: list[Tool] = []
+        for tool in self._tools:
+            spec = tool.spec()
+            names = {spec.name.lower(), *(alias.lower() for alias in spec.aliases)}
+            if names & allowed:
+                tools.append(tool)
+        return ToolRegistry(tools=tools)
+
     def get(self, name: str) -> Tool | None:
         return self._by_name.get(name.lower())
 
@@ -131,4 +143,3 @@ class ToolRegistry:
                 content_type=result.content_type,
             )
         return result
-

@@ -175,7 +175,7 @@ class TestOpenAIProvider(unittest.TestCase):
     def test_initialization(self):
         """Test provider initialization."""
         provider = OpenAIProvider(api_key="test_key")
-        self.assertEqual(provider.model, "gpt-5.4")
+        self.assertEqual(provider.model, "deepseek-v4-pro")
 
     def test_custom_model(self):
         """Test provider with custom model."""
@@ -186,8 +186,21 @@ class TestOpenAIProvider(unittest.TestCase):
         """Test getting available models."""
         provider = OpenAIProvider(api_key="test_key")
         models = provider.get_available_models()
+        self.assertIn("deepseek-v4-pro", models)
         self.assertIn("gpt-4", models)
         self.assertIn("gpt-4o", models)
+
+    @patch("src.providers.openai_provider.OpenAI")
+    def test_client_ignores_environment_proxies_by_default(self, mock_openai):
+        """OpenAI-compatible gateways should direct-connect unless proxies are explicitly enabled."""
+        provider = OpenAIProvider(api_key="test_key", base_url="https://api.zhizengzeng.com/v1")
+
+        _ = provider.client
+
+        kwargs = mock_openai.call_args.kwargs
+        self.assertEqual(kwargs["timeout"], 120.0)
+        self.assertEqual(kwargs["base_url"], "https://api.zhizengzeng.com/v1")
+        self.assertFalse(kwargs["http_client"]._trust_env)
 
     @patch("src.providers.openai_provider.OpenAI")
     def test_chat(self, mock_openai):
@@ -240,6 +253,37 @@ class TestOpenAIProvider(unittest.TestCase):
         )
 
     @patch("src.providers.openai_provider.OpenAI")
+    def test_chat_extracts_dsml_tool_calls_from_text(self, mock_openai):
+        """Some OpenAI-compatible gateways emit tool calls as DSML text."""
+        mock_client = MagicMock()
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message.content = (
+            "Let me read that."
+            "<｜｜DSML｜｜tool_calls>"
+            "<｜｜DSML｜｜invoke name=\"Read\">"
+            "<｜｜DSML｜｜parameter name=\"file_path\" string=\"true\">README.md</｜｜DSML｜｜parameter>"
+            "<｜｜DSML｜｜parameter name=\"limit\" string=\"false\">60</｜｜DSML｜｜parameter>"
+            "</｜｜DSML｜｜invoke>"
+            "</｜｜DSML｜｜tool_calls>"
+        )
+        mock_response.choices[0].message.reasoning_content = None
+        mock_response.choices[0].message.tool_calls = None
+        mock_response.model = "deepseek-v4-pro"
+        mock_response.usage = None
+        mock_response.choices[0].finish_reason = "stop"
+        mock_client.chat.completions.create.return_value = mock_response
+        mock_openai.return_value = mock_client
+
+        provider = OpenAIProvider(api_key="test_key")
+        response = provider.chat([ChatMessage(role="user", content="Read README")])
+
+        self.assertEqual(response.content, "Let me read that.")
+        self.assertEqual(response.tool_uses[0]["name"], "Read")
+        self.assertEqual(response.tool_uses[0]["input"]["file_path"], "README.md")
+        self.assertEqual(response.tool_uses[0]["input"]["limit"], 60)
+
+    @patch("src.providers.openai_provider.OpenAI")
     def test_chat_stream_response_rebuilds_tool_calls(self, mock_openai):
         """Streaming chunks are rebuilt into a final response with tool calls."""
         mock_client = MagicMock()
@@ -285,6 +329,43 @@ class TestOpenAIProvider(unittest.TestCase):
         self.assertEqual(response.finish_reason, "tool_calls")
         self.assertEqual(response.tool_uses[0]["name"], "Read")
         self.assertEqual(response.usage["total_tokens"], 15)
+
+    @patch("src.providers.openai_provider.OpenAI")
+    def test_chat_stream_response_suppresses_dsml_tool_call_text(self, mock_openai):
+        """DSML tool-call markup should not leak into live terminal output."""
+        mock_client = MagicMock()
+
+        chunk = MagicMock()
+        chunk.model = "deepseek-v4-pro"
+        chunk.usage = None
+        chunk.choices = [MagicMock()]
+        chunk.choices[0].finish_reason = "stop"
+        chunk.choices[0].delta.content = (
+            "Need one more read."
+            "<｜｜DSML｜｜tool_calls>"
+            "<｜｜DSML｜｜invoke name=\"Read\">"
+            "<｜｜DSML｜｜parameter name=\"file_path\" string=\"true\">README.md</｜｜DSML｜｜parameter>"
+            "</｜｜DSML｜｜invoke>"
+            "</｜｜DSML｜｜tool_calls>"
+        )
+        chunk.choices[0].delta.reasoning_content = None
+        chunk.choices[0].delta.tool_calls = []
+
+        mock_client.chat.completions.create.return_value = iter([chunk])
+        mock_openai.return_value = mock_client
+
+        provider = OpenAIProvider(api_key="test_key")
+        chunks: list[str] = []
+        response = provider.chat_stream_response(
+            [ChatMessage(role="user", content="Read README")],
+            tools=[{"name": "Read", "description": "", "input_schema": {"type": "object"}}],
+            on_text_chunk=chunks.append,
+        )
+
+        self.assertEqual("".join(chunks), "Need one more read.")
+        self.assertEqual(response.content, "Need one more read.")
+        self.assertEqual(response.tool_uses[0]["name"], "Read")
+        self.assertEqual(response.tool_uses[0]["input"]["file_path"], "README.md")
 
 
 class TestGLMProvider(unittest.TestCase):

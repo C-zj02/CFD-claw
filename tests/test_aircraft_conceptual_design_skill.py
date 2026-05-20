@@ -28,9 +28,20 @@ def test_aircraft_conceptual_design_skill_is_discoverable_and_invocable() -> Non
     skill = skills["aircraft-conceptual-design"]
     assert skill.loaded_from == "project"
     assert skill.skill_root == str(SKILL_DIR)
+    assert skill.max_turns == 12
     assert "--top-docs" not in skill.markdown_content
     assert "--max-hits-per-file" not in skill.markdown_content
     assert "--format json" in skill.markdown_content
+    assert "可见推理规范" in skill.markdown_content
+    assert "设计推理记录" in skill.markdown_content
+    assert "工具预算" in skill.markdown_content
+    assert "--top-k 4" in skill.markdown_content
+    assert "--max-snippet-chars 450" in skill.markdown_content
+    assert "最多 4 次" in skill.markdown_content
+    assert ".clawd/generated" in skill.markdown_content
+    assert "constraint_spec-<run-id>.json" in skill.markdown_content
+    assert "不要读取本技能自己的 `SKILL.md`" in skill.markdown_content
+    assert "不要调用 `TodoWrite`" in skill.markdown_content
 
     context = ToolContext(workspace_root=PROJECT_ROOT)
     result = SkillTool().run(
@@ -44,6 +55,9 @@ def test_aircraft_conceptual_design_skill_is_discoverable_and_invocable() -> Non
     assert design_brief in result["prompt"]
     assert f"{PROJECT_ROOT}/RAG-data" in result["prompt"]
     assert f"{SKILL_DIR}/scripts/plot_constraint_boundary.py" in result["prompt"]
+    assert "设计推理记录" in result["prompt"]
+    assert "工具预算" in result["prompt"]
+    assert ".clawd/generated" in result["prompt"]
 
 
 def test_aircraft_conceptual_design_registers_as_slash_command() -> None:
@@ -54,6 +68,7 @@ def test_aircraft_conceptual_design_registers_as_slash_command() -> None:
     command = commands["aircraft-conceptual-design"]
     assert command.loaded_from == "project"
     assert command.skill_root == str(SKILL_DIR)
+    assert command.max_turns == 12
 
     context = CommandContext(
         workspace_root=PROJECT_ROOT,
@@ -69,6 +84,8 @@ def test_aircraft_conceptual_design_registers_as_slash_command() -> None:
     assert design_brief in prompt
     assert f"{PROJECT_ROOT}/RAG-data" in prompt
     assert f"{SKILL_DIR}/scripts/plot_constraint_boundary.py" in prompt
+    assert "设计推理记录" in prompt
+    assert "工具预算" in prompt
 
 
 def test_aircraft_conceptual_design_plot_script_renders_example(tmp_path: Path) -> None:

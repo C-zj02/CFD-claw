@@ -350,6 +350,29 @@ class TestREPL(unittest.TestCase):
                         for args, _kwargs in repl.console.print.call_args_list
                     ))
 
+    def test_chat_honors_stream_override(self):
+        """Per-call stream override should enable direct streaming even if REPL default is off."""
+        with patch('src.config.get_config_path', return_value=self.config_dir / "config.json"):
+            with patch('src.repl.core.Session.create') as mock_session_factory:
+                mock_session = Mock()
+                mock_session.conversation = Conversation()
+                mock_session_factory.return_value = mock_session
+
+                with patch('src.repl.core.get_provider_class') as mock_provider_class:
+                    mock_provider = Mock()
+                    mock_provider.model = "glm-4.5"
+                    mock_provider.chat_stream.return_value = iter(["你", "好"])
+                    mock_provider_class.return_value = Mock(return_value=mock_provider)
+
+                    repl = ClawdREPL(provider_name="glm", stream=False)
+                    repl.console.print = Mock()
+
+                    with patch('src.repl.core.run_agent_loop') as mock_agent_loop:
+                        repl.chat("你是谁", stream_override=True)
+
+                    mock_provider.chat_stream.assert_called_once()
+                    mock_agent_loop.assert_not_called()
+
     def test_chat_stream_falls_back_to_agent_loop_on_stream_init_failure(self):
         """If real streaming fails before any chunk, fall back to the stable agent loop."""
         with patch('src.config.get_config_path', return_value=self.config_dir / "config.json"):
@@ -435,6 +458,8 @@ class TestREPL(unittest.TestCase):
             "---\n"
             "description: say hello\n"
             "arguments: [name]\n"
+            "allowed-tools: [Read, Bash]\n"
+            "max-turns: 7\n"
             "---\n"
             "Hello $name\n",
             encoding="utf-8",
@@ -452,6 +477,9 @@ class TestREPL(unittest.TestCase):
                         repl.handle_command("/hello bob")
                         args, _kwargs = repl.chat.call_args
                         self.assertIn("Hello bob", args[0])
+                        self.assertEqual(repl.chat.call_args.kwargs["max_turns"], 7)
+                        self.assertTrue(repl.chat.call_args.kwargs["stream_override"])
+                        self.assertEqual(repl.chat.call_args.kwargs["allowed_tools"], ["Read", "Bash"])
 
     def test_handle_command_project_skill_registers_and_expands_skill_dir(self):
         project_root = Path(self.temp_dir) / "repo"
@@ -463,6 +491,7 @@ class TestREPL(unittest.TestCase):
             "---\n"
             "description: search the local project RAG corpus\n"
             "arguments: [query]\n"
+            "max-turns: 5\n"
             "---\n"
             "Run `python \"${CLAUDE_SKILL_DIR}/scripts/search_rag.py\" --query \"$query\"`\n",
             encoding="utf-8",
@@ -483,6 +512,32 @@ class TestREPL(unittest.TestCase):
                         expected_script = str((scripts_dir / "search_rag.py").resolve()).replace("\\", "/")
                         self.assertIn(expected_script, args[0])
                         self.assertIn("YF-21", args[0])
+                        self.assertEqual(repl.chat.call_args.kwargs["max_turns"], 5)
+                        self.assertTrue(repl.chat.call_args.kwargs["stream_override"])
+                        self.assertEqual(repl.chat.call_args.kwargs["allowed_tools"], [])
+
+    def test_chat_filters_tool_registry_when_allowed_tools_are_provided(self):
+        with patch('src.config.get_config_path', return_value=self.config_dir / "config.json"):
+            with patch('src.repl.core.Session.create') as mock_session_factory:
+                mock_session = Mock()
+                mock_session.conversation = Conversation()
+                mock_session_factory.return_value = mock_session
+
+                with patch('src.repl.core.get_provider_class') as mock_provider_class:
+                    mock_provider = Mock()
+                    mock_provider.model = "glm-4.5"
+                    mock_provider_class.return_value = Mock(return_value=mock_provider)
+
+                    repl = ClawdREPL(provider_name="glm")
+                    repl.console.print = Mock()
+
+                    with patch('src.repl.core.run_agent_loop') as mock_agent_loop:
+                        mock_agent_loop.return_value = Mock(response_text="ok", usage=None, num_turns=1)
+                        repl.chat("Use restricted tools", allowed_tools=["Read", "Bash"])
+
+                    registry = mock_agent_loop.call_args.kwargs["tool_registry"]
+                    tool_names = {spec.name for spec in registry.list_specs()}
+                    self.assertEqual(tool_names, {"Read", "Bash"})
 
     def test_save_session(self):
         """Test session saving."""
@@ -604,16 +659,19 @@ class TestConversation(unittest.TestCase):
         conv = Conversation()
         conv.add_message("user", "Test")
         conv.add_message("assistant", "Response")
+        conv.messages[-1].reasoning_content = "Thinking about the response."
 
         # Serialize
         data = conv.to_dict()
         self.assertIn("messages", data)
         self.assertEqual(len(data["messages"]), 2)
+        self.assertEqual(data["messages"][1]["reasoning_content"], "Thinking about the response.")
 
         # Deserialize
         conv2 = Conversation.from_dict(data)
         self.assertEqual(len(conv2.messages), 2)
         self.assertEqual(conv2.messages[0].content, "Test")
+        self.assertEqual(conv2.messages[1].reasoning_content, "Thinking about the response.")
 
 
 class TestSession(unittest.TestCase):

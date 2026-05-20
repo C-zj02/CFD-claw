@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from typing import Any, Optional
 
 try:
@@ -9,7 +10,29 @@ try:
 except ModuleNotFoundError:  # pragma: no cover
     OpenAI = None
 
+try:
+    import httpx  # type: ignore
+except ModuleNotFoundError:  # pragma: no cover
+    httpx = None
+
 from .openai_compatible import OpenAICompatibleProvider
+
+
+def _env_flag(name: str, *, default: bool = False) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _env_float(name: str, *, default: float) -> float:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    try:
+        return float(value)
+    except ValueError:
+        return default
 
 
 class OpenAIProvider(OpenAICompatibleProvider):
@@ -23,9 +46,9 @@ class OpenAIProvider(OpenAICompatibleProvider):
         Args:
             api_key: OpenAI API key
             base_url: Base URL (optional, for custom endpoints)
-            model: Default model (default: gpt-5.4)
+            model: Default model (default: deepseek-v4-pro)
         """
-        super().__init__(api_key, base_url, model or "gpt-5.4")
+        super().__init__(api_key, base_url, model or "deepseek-v4-pro")
 
     def _create_client(self) -> Any:
         """Create OpenAI SDK client."""
@@ -33,7 +56,22 @@ class OpenAIProvider(OpenAICompatibleProvider):
             raise ModuleNotFoundError(
                 "openai package is not installed. Install optional dependencies to use OpenAIProvider."
             )
-        kwargs: dict[str, Any] = {"api_key": self.api_key}
+        timeout = _env_float("CLAWD_OPENAI_TIMEOUT", default=120.0)
+        kwargs: dict[str, Any] = {
+            "api_key": self.api_key,
+            # Some OpenAI-compatible gateways are slow to complete TLS handshakes,
+            # especially when a local proxy is involved.
+            "timeout": timeout,
+        }
+        if httpx is not None:
+            # The OpenAI SDK/httpx respects HTTP(S)_PROXY by default. A broken
+            # local proxy commonly causes TLS handshake resets for OpenAI-compatible
+            # gateways, so Clawd defaults to direct connections. Users who need
+            # environment proxies can opt back in with CLAWD_OPENAI_TRUST_ENV=1.
+            kwargs["http_client"] = httpx.Client(
+                timeout=timeout,
+                trust_env=_env_flag("CLAWD_OPENAI_TRUST_ENV", default=False),
+            )
         if self.base_url:
             kwargs["base_url"] = self.base_url
         return OpenAI(**kwargs)
@@ -45,6 +83,9 @@ class OpenAIProvider(OpenAICompatibleProvider):
             List of model names
         """
         return [
+            # DeepSeek models (OpenAI-compatible endpoints)
+            "deepseek-v4-pro",
+            "deepseek-v4-flash",
             # GPT-5.4 series (latest flagship)
             "gpt-5.4",
             "gpt-5.4-pro",

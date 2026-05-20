@@ -77,7 +77,7 @@ class TestDefaultConfig(unittest.TestCase):
         )
         self.assertEqual(
             config["providers"]["openai"]["default_model"],
-            "gpt-5.4"
+            "deepseek-v4-pro"
         )
         self.assertEqual(
             config["providers"]["glm"]["default_model"],
