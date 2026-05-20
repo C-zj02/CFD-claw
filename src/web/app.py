@@ -529,6 +529,103 @@ INDEX_HTML = """<!doctype html>
       white-space: pre;
     }
 
+    .math-inline,
+    .math-display {
+      font-family: Georgia, "Times New Roman", serif;
+      color: #15362b;
+      letter-spacing: 0;
+      line-height: 1.35;
+    }
+
+    .math-inline {
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+      margin: 0 2px;
+      vertical-align: middle;
+      white-space: nowrap;
+    }
+
+    .math-display {
+      display: block;
+      margin: 14px 0;
+      padding: 14px 16px;
+      overflow-x: auto;
+      text-align: center;
+      background: rgba(31, 109, 85, 0.06);
+      border: 1px solid rgba(31, 109, 85, 0.14);
+      border-radius: 8px;
+      font-size: 1.08em;
+      white-space: nowrap;
+    }
+
+    .math-frac {
+      display: inline-flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-width: 1.2em;
+      vertical-align: middle;
+      line-height: 1.1;
+    }
+
+    .math-num,
+    .math-den {
+      display: block;
+      padding: 0 0.18em;
+      text-align: center;
+    }
+
+    .math-den {
+      margin-top: 0.08em;
+      border-top: 1px solid currentColor;
+      padding-top: 0.08em;
+    }
+
+    .math-script {
+      display: inline-flex;
+      align-items: center;
+      white-space: nowrap;
+    }
+
+    .math-script sub,
+    .math-script sup {
+      font-size: 0.68em;
+      line-height: 1;
+    }
+
+    .math-script-stack {
+      display: inline-flex;
+      flex-direction: column;
+      margin-left: 0.03em;
+      line-height: 0.9;
+    }
+
+    .math-sqrt {
+      display: inline-flex;
+      align-items: stretch;
+      vertical-align: middle;
+    }
+
+    .math-root {
+      padding-right: 0.04em;
+      font-size: 1.08em;
+    }
+
+    .math-radicand {
+      border-top: 1px solid currentColor;
+      padding: 0.02em 0.12em 0;
+    }
+
+    .math-roman {
+      font-family: "IBM Plex Sans", "Avenir Next", "Segoe UI", sans-serif;
+      font-style: normal;
+    }
+
+    .math-operator {
+      padding: 0 0.16em;
+    }
+
     .message-tools {
       display: flex;
       justify-content: flex-end;
@@ -560,6 +657,16 @@ INDEX_HTML = """<!doctype html>
       background: linear-gradient(135deg, var(--user), #335f7f);
       color: white;
       border-bottom-right-radius: 6px;
+    }
+
+    .message.user .math-inline,
+    .message.user .math-display {
+      color: #f6fbff;
+    }
+
+    .message.user .math-display {
+      background: rgba(255, 255, 255, 0.12);
+      border-color: rgba(255, 255, 255, 0.18);
     }
 
     .message.assistant .bubble {
@@ -1121,9 +1228,208 @@ INDEX_HTML = """<!doctype html>
     }
 
     function inlineMarkdown(text) {
-      return escapeHtml(text)
-        .replace(/`([^`]+)`/g, "<code>$1</code>")
-        .replace(/\\*\\*([^*]+)\\*\\*/g, "<strong>$1</strong>");
+      return renderInlineWithMath(text);
+    }
+
+    function splitInlineMath(text) {
+      const parts = [];
+      let index = 0;
+      while (index < text.length) {
+        const inlineParen = text.indexOf("\\\\(", index);
+        const dollar = text.indexOf("$", index);
+        const candidates = [inlineParen, dollar].filter((item) => item >= 0);
+        const next = candidates.length ? Math.min(...candidates) : -1;
+        if (next < 0) {
+          parts.push({ type: "text", value: text.slice(index) });
+          break;
+        }
+        if (next > index) parts.push({ type: "text", value: text.slice(index, next) });
+        if (next === inlineParen) {
+          const end = text.indexOf("\\\\)", next + 2);
+          if (end < 0) {
+            parts.push({ type: "text", value: text.slice(next) });
+            break;
+          }
+          parts.push({ type: "math", value: text.slice(next + 2, end) });
+          index = end + 2;
+          continue;
+        }
+        if (text[next + 1] === "$") {
+          parts.push({ type: "text", value: "$$" });
+          index = next + 2;
+          continue;
+        }
+        const end = text.indexOf("$", next + 1);
+        if (end < 0) {
+          parts.push({ type: "text", value: text.slice(next) });
+          break;
+        }
+        parts.push({ type: "math", value: text.slice(next + 1, end) });
+        index = end + 1;
+      }
+      return parts;
+    }
+
+    function renderInlineWithMath(text) {
+      const codeParts = text.split(/`([^`]+)`/g);
+      return codeParts.map((part, index) => {
+        if (index % 2 === 1) return "<code>" + escapeHtml(part) + "</code>";
+        return splitInlineMath(part).map((innerPart) => {
+          if (innerPart.type === "math") return renderLatex(innerPart.value, false);
+          return renderInlineMarkdownText(innerPart.value);
+        }).join("");
+      }).join("");
+    }
+
+    function renderInlineMarkdownText(text) {
+      return escapeHtml(text).replace(/(^|\\s)\\*\\*([^*]+)\\*\\*(?=\\s|$|[,.，。；;:：!?！？])/g, "$1<strong>$2</strong>");
+    }
+
+    function splitDisplayMath(text) {
+      const parts = [];
+      let index = 0;
+      while (index < text.length) {
+        const dollar = text.indexOf("$$", index);
+        const bracket = text.indexOf("\\\\[", index);
+        const candidates = [dollar, bracket].filter((item) => item >= 0);
+        const next = candidates.length ? Math.min(...candidates) : -1;
+        if (next < 0) {
+          parts.push({ type: "text", value: text.slice(index) });
+          break;
+        }
+        if (next > index) parts.push({ type: "text", value: text.slice(index, next) });
+        if (next === dollar) {
+          const end = text.indexOf("$$", next + 2);
+          if (end < 0) {
+            parts.push({ type: "text", value: text.slice(next) });
+            break;
+          }
+          parts.push({ type: "math", value: text.slice(next + 2, end) });
+          index = end + 2;
+          continue;
+        }
+        const end = text.indexOf("\\\\]", next + 2);
+        if (end < 0) {
+          parts.push({ type: "text", value: text.slice(next) });
+          break;
+        }
+        parts.push({ type: "math", value: text.slice(next + 2, end) });
+        index = end + 2;
+      }
+      return parts;
+    }
+
+    function normalizeLatex(source) {
+      return String(source || "")
+        .replace(/\\s+/g, " ")
+        .replace(/\\\\left/g, "")
+        .replace(/\\\\right/g, "")
+        .trim();
+    }
+
+    function findMatchingBrace(source, openIndex) {
+      let depth = 0;
+      for (let index = openIndex; index < source.length; index += 1) {
+        const char = source[index];
+        if (char === "{" && source[index - 1] !== "\\\\") depth += 1;
+        if (char === "}" && source[index - 1] !== "\\\\") {
+          depth -= 1;
+          if (depth === 0) return index;
+        }
+      }
+      return -1;
+    }
+
+    function readLatexGroup(source, start) {
+      if (source[start] !== "{") return null;
+      const end = findMatchingBrace(source, start);
+      if (end < 0) return null;
+      return { value: source.slice(start + 1, end), end };
+    }
+
+    function renderLatex(source, display = false) {
+      return '<span class="' + (display ? "math-display" : "math-inline") + '">' + renderLatexContent(normalizeLatex(source)) + "</span>";
+    }
+
+    function renderLatexContent(source) {
+      const greek = {
+        alpha: "α", beta: "β", gamma: "γ", Gamma: "Γ", delta: "δ", Delta: "Δ",
+        epsilon: "ε", varepsilon: "ε", zeta: "ζ", eta: "η", theta: "θ", Theta: "Θ",
+        lambda: "λ", Lambda: "Λ", mu: "μ", nu: "ν", xi: "ξ", pi: "π", Pi: "Π",
+        rho: "ρ", sigma: "σ", Sigma: "Σ", tau: "τ", phi: "φ", varphi: "φ",
+        Phi: "Φ", chi: "χ", psi: "ψ", Psi: "Ψ", omega: "ω", Omega: "Ω",
+      };
+      const commands = {
+        cdot: "·", times: "×", pm: "±", mp: "∓", le: "≤", leq: "≤", ge: "≥", geq: "≥",
+        approx: "≈", sim: "∼", neq: "≠", ne: "≠", infty: "∞", partial: "∂", nabla: "∇",
+        degree: "°", circ: "°", to: "→", rightarrow: "→", leftarrow: "←",
+      };
+      let html = "";
+      let index = 0;
+      while (index < source.length) {
+        if (source.startsWith("\\\\frac", index)) {
+          const numerator = readLatexGroup(source, index + 5);
+          const denominator = numerator ? readLatexGroup(source, numerator.end + 1) : null;
+          if (numerator && denominator) {
+            html += '<span class="math-frac"><span class="math-num">' + renderLatexContent(numerator.value) + '</span><span class="math-den">' + renderLatexContent(denominator.value) + "</span></span>";
+            index = denominator.end + 1;
+            continue;
+          }
+        }
+        if (source.startsWith("\\\\sqrt", index)) {
+          const group = readLatexGroup(source, index + 5);
+          if (group) {
+            html += '<span class="math-sqrt"><span class="math-root">√</span><span class="math-radicand">' + renderLatexContent(group.value) + "</span></span>";
+            index = group.end + 1;
+            continue;
+          }
+        }
+        if (source.startsWith("\\\\text", index) || source.startsWith("\\\\mathrm", index)) {
+          const offset = source.startsWith("\\\\text", index) ? 5 : 7;
+          const group = readLatexGroup(source, index + offset);
+          if (group) {
+            html += '<span class="math-roman">' + escapeHtml(group.value) + "</span>";
+            index = group.end + 1;
+            continue;
+          }
+        }
+        if (source[index] === "\\\\") {
+          const match = source.slice(index + 1).match(/^[A-Za-z]+/);
+          if (match) {
+            const command = match[0];
+            html += greek[command] || commands[command] || escapeHtml(command);
+            index += command.length + 1;
+            continue;
+          }
+          html += escapeHtml(source[index + 1] || "");
+          index += 2;
+          continue;
+        }
+        if (source[index] === "^" || source[index] === "_") {
+          const isSup = source[index] === "^";
+          const group = source[index + 1] === "{" ? readLatexGroup(source, index + 1) : null;
+          const value = group ? group.value : source[index + 1] || "";
+          html += (isSup ? "<sup>" : "<sub>") + renderLatexContent(value) + (isSup ? "</sup>" : "</sub>");
+          index = group ? group.end + 1 : index + 2;
+          continue;
+        }
+        if ("+-=<>≈≤≥×·/()[]|,".includes(source[index])) {
+          html += '<span class="math-operator">' + escapeHtml(source[index]) + "</span>";
+          index += 1;
+          continue;
+        }
+        if (source[index] === "{") {
+          const group = readLatexGroup(source, index);
+          if (group) {
+            html += renderLatexContent(group.value);
+            index = group.end + 1;
+            continue;
+          }
+        }
+        html += source[index] === " " ? " " : escapeHtml(source[index]);
+        index += 1;
+      }
+      return html;
     }
 
     function addCopyButton(container, text, label = "复制") {
@@ -1151,9 +1457,7 @@ INDEX_HTML = """<!doctype html>
 
       function flushParagraph() {
         if (!paragraph.length) return;
-        const p = document.createElement("p");
-        p.innerHTML = inlineMarkdown(paragraph.join(" "));
-        container.appendChild(p);
+        appendMarkdownText(container, paragraph.join("\\n"));
         paragraph = [];
       }
 
@@ -1208,6 +1512,23 @@ INDEX_HTML = """<!doctype html>
       }
       flushParagraph();
       flushList();
+    }
+
+    function appendMarkdownText(container, text) {
+      for (const part of splitDisplayMath(text)) {
+        if (!part.value) continue;
+        if (part.type === "math") {
+          const wrapper = document.createElement("div");
+          wrapper.innerHTML = renderLatex(part.value, true);
+          container.appendChild(wrapper.firstChild);
+          continue;
+        }
+        const lines = part.value.split("\\n").map((line) => line.trim()).filter(Boolean);
+        if (!lines.length) continue;
+        const p = document.createElement("p");
+        p.innerHTML = inlineMarkdown(lines.join(" "));
+        container.appendChild(p);
+      }
     }
 
     function renderMarkdownInto(container, text) {
