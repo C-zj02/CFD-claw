@@ -27,14 +27,18 @@ from src.tool_system.registry import ToolRegistry
 from src.web.rag_service import RagIndexService
 
 
-AUTO_SKILL_SYSTEM_TEMPLATE = """Web session skill policy:
-- The user selected the `{skill_name}` skill for this browser session.
-- For every user request that can benefit from local project knowledge or retrieval, proactively call the Skill tool before answering.
-- Invoke it as: Skill({{"skill": "{skill_name}", "args": <the user's latest request>}}).
-- Treat the skill output as grounding evidence and mention when the selected skill does not contain enough evidence.
-- If this message already includes browser-attached RAG evidence for `{skill_name}`, treat that evidence as the skill having already been used for this turn; call the Skill tool again only if the attached evidence is insufficient.
-- If the attached RAG evidence says the local index is building or not ready, do not call the Skill tool again in this turn; tell the user retrieval is warming up and answer only from clearly available context.
-- Do not wait for the user to type the slash command manually."""
+WEB_AIRCRAFT_SKILL_NAME = "aircraft-design"
+INTERNAL_AIRCRAFT_RAG_SKILL_NAME = "aircraft-design-rag"
+LEGACY_AIRCRAFT_DESIGN_SKILL_NAME = "aircraft-conceptual-design"
+AIRCRAFT_SKILL_DISPLAY_NAME = "飞行器设计"
+
+
+AUTO_CAPABILITY_SYSTEM_TEMPLATE = """Web session capability policy:
+- The user selected the “飞行器设计” capability for this browser session.
+- Use the browser-attached local aircraft-design evidence when it is present, and treat it as grounding material rather than as the user's own words.
+- If the attached local evidence says the local index is building or not ready, tell the user retrieval is warming up and answer only from clearly available context.
+- Keep the answer focused on aircraft-design reasoning, assumptions, constraints, and next-step calculations.
+- Do not mention internal retrieval implementation names unless the user explicitly asks about system internals."""
 
 
 INDEX_HTML = """<!doctype html>
@@ -269,34 +273,6 @@ INDEX_HTML = """<!doctype html>
         var(--panel-strong);
     }
 
-    .settings-panel {
-      margin: 12px 0;
-      border: 1px solid rgba(31, 109, 85, 0.12);
-      border-radius: 10px;
-      background: rgba(255, 255, 255, 0.52);
-    }
-
-    .settings-panel summary {
-      cursor: pointer;
-      padding: 11px 12px;
-      color: var(--primary-strong);
-      font-size: 13px;
-      font-weight: 700;
-      list-style: none;
-    }
-
-    .settings-panel summary::-webkit-details-marker {
-      display: none;
-    }
-
-    .settings-panel[open] summary {
-      border-bottom: 1px solid rgba(31, 109, 85, 0.1);
-    }
-
-    .settings-panel-body {
-      padding: 12px;
-    }
-
     .skill-status {
       display: flex;
       align-items: center;
@@ -315,27 +291,6 @@ INDEX_HTML = """<!doctype html>
       border-radius: 999px;
       background: var(--primary);
       box-shadow: 0 0 0 4px rgba(31, 109, 85, 0.1);
-    }
-
-    .rag-index-status {
-      margin-top: 10px;
-      padding: 10px 12px;
-      border: 1px solid rgba(31, 109, 85, 0.12);
-      border-radius: 10px;
-      background: rgba(255, 255, 255, 0.58);
-      color: var(--muted);
-      font-size: 12px;
-      line-height: 1.45;
-    }
-
-    .rag-index-status strong {
-      display: block;
-      color: var(--primary-strong);
-      font-size: 13px;
-    }
-
-    .rag-index-status.warning strong {
-      color: var(--danger);
     }
 
     .session-list {
@@ -384,15 +339,6 @@ INDEX_HTML = """<!doctype html>
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
-    }
-
-    .rag-results {
-      display: none;
-      margin-top: 12px;
-    }
-
-    .rag-results.visible {
-      display: block;
     }
 
     .actions {
@@ -850,7 +796,7 @@ INDEX_HTML = """<!doctype html>
       <section class="brand">
         <div class="eyebrow">飞行器设计智能体</div>
         <h1>飞行器设计工作台</h1>
-        <p>面向总体方案、约束分析、RAG 证据检索和方案界限线图的本地设计界面。</p>
+        <p>面向总体方案、约束分析、本地资料辅助和方案界限线图的设计界面。</p>
         <div class="workspace" id="workspaceRoot">正在加载工作区...</div>
       </section>
 
@@ -886,53 +832,19 @@ INDEX_HTML = """<!doctype html>
       </section>
 
       <section class="card skill-card">
-        <h2>飞行器资料检索</h2>
+        <h2>设计能力</h2>
         <div class="field">
-          <label for="skillSelect">自动使用技能</label>
+          <label for="skillSelect">自动使用能力</label>
           <select id="skillSelect"></select>
-          <p class="field-help">启用后，模型会在回答飞行器设计问题前优先调用所选技能。</p>
+          <p class="field-help">选择“飞行器设计”后，回答会结合本地飞行器设计资料；默认不自动使用。</p>
         </div>
-        <div class="toggle">
-          <input id="ragAutoRetrieveToggle" type="checkbox" checked>
-          <label for="ragAutoRetrieveToggle">回答前附加本地 RAG 证据</label>
-        </div>
-        <details class="settings-panel">
-          <summary>检索参数</summary>
-          <div class="settings-panel-body">
-            <div class="compact-grid">
-              <div class="field inline-field">
-                <label for="ragTopKInput">命中数量</label>
-                <input id="ragTopKInput" type="number" min="1" max="20" value="5">
-              </div>
-              <div class="field inline-field">
-                <label for="ragSnippetInput">片段字数</label>
-                <input id="ragSnippetInput" type="number" min="80" max="3000" value="280">
-              </div>
-              <div class="field inline-field">
-                <label for="ragCandidateInput">候选片段</label>
-                <input id="ragCandidateInput" type="number" min="50" max="10000" value="1200">
-              </div>
-            </div>
-            <div class="toggle">
-              <input id="ragCacheToggle" type="checkbox" checked>
-              <label for="ragCacheToggle">使用本地索引缓存</label>
-            </div>
-          </div>
-        </details>
-        <div class="actions">
-          <button id="ragSearchBtn" class="secondary mini-button" type="button">测试检索</button>
-          <button id="ragRebuildBtn" class="secondary mini-button" type="button">重建索引</button>
-          <button id="ragRefreshBtn" class="secondary mini-button" type="button">刷新状态</button>
-        </div>
-        <div class="skill-status" id="skillStatus">未选择技能</div>
-        <div class="rag-index-status" id="ragIndexStatus">索引状态未知。</div>
-        <div id="ragSearchResults" class="rag-results"></div>
+        <div class="skill-status" id="skillStatus">未启用设计能力</div>
       </section>
 
       <section class="card tips">
         <h2>说明</h2>
         <p class="hint">网页端使用与命令行相同的模型服务配置；如未配置 API Key，请先运行 <code>clawd login</code>。</p>
-        <p class="hint">飞行器设计问题建议选择 <code>aircraft-design-rag</code>，以便基于本地 <code>RAG-data</code> 检索资料。</p>
+        <p class="hint">需要结合本地资料时，在“设计能力”中选择“飞行器设计”。</p>
         <p class="hint">网页端会隐藏问卷式工具提示，保证会话响应更稳定。</p>
       </section>
     </aside>
@@ -954,7 +866,7 @@ INDEX_HTML = """<!doctype html>
       <section id="chatLog" class="chat">
         <div class="hero">
           <strong>飞行器设计流程</strong>
-          围绕任务需求、总体参数、约束边界、动力与布局方案开展对话；每轮回答下方可展开查看检索证据和工具活动。
+          围绕任务需求、总体参数、约束边界、动力与布局方案开展对话；每轮回答下方可展开查看资料证据和工具活动。
         </div>
       </section>
 
@@ -978,8 +890,9 @@ INDEX_HTML = """<!doctype html>
   </div>
 
   <script>
-    const STORAGE_KEY = "clawd-web-console";
+    const LOCAL_STATE_KEY = "clawd-web-console";
     const WEB_MODEL = "deepseek-v4-pro";
+    const WEB_AIRCRAFT_SKILL = "aircraft-design";
     const state = {
       config: null,
       sessionId: null,
@@ -989,23 +902,12 @@ INDEX_HTML = """<!doctype html>
       sessions: [],
       busy: false,
       abortController: null,
-      ragStatus: null,
-      ragPollTimer: null,
     };
 
     const providerSelect = document.getElementById("providerSelect");
     const modelInput = document.getElementById("modelInput");
     const modelDatalist = document.getElementById("modelDatalist");
     const skillSelect = document.getElementById("skillSelect");
-    const ragAutoRetrieveToggle = document.getElementById("ragAutoRetrieveToggle");
-    const ragTopKInput = document.getElementById("ragTopKInput");
-    const ragSnippetInput = document.getElementById("ragSnippetInput");
-    const ragCandidateInput = document.getElementById("ragCandidateInput");
-    const ragCacheToggle = document.getElementById("ragCacheToggle");
-    const ragSearchBtn = document.getElementById("ragSearchBtn");
-    const ragRebuildBtn = document.getElementById("ragRebuildBtn");
-    const ragRefreshBtn = document.getElementById("ragRefreshBtn");
-    const ragSearchResults = document.getElementById("ragSearchResults");
     const autoApproveToggle = document.getElementById("autoApproveToggle");
     const newSessionBtn = document.getElementById("newSessionBtn");
     const resetSessionBtn = document.getElementById("resetSessionBtn");
@@ -1024,7 +926,6 @@ INDEX_HTML = """<!doctype html>
     const sessionMeta = document.getElementById("sessionMeta");
     const workspaceRoot = document.getElementById("workspaceRoot");
     const skillStatus = document.getElementById("skillStatus");
-    const ragIndexStatus = document.getElementById("ragIndexStatus");
 
     function setBusy(isBusy, label = "处理中...") {
       state.busy = isBusy;
@@ -1034,14 +935,6 @@ INDEX_HTML = """<!doctype html>
       providerSelect.disabled = isBusy;
       modelInput.disabled = isBusy;
       skillSelect.disabled = isBusy;
-      ragAutoRetrieveToggle.disabled = isBusy;
-      ragTopKInput.disabled = isBusy;
-      ragSnippetInput.disabled = isBusy;
-      ragCandidateInput.disabled = isBusy;
-      ragCacheToggle.disabled = isBusy;
-      ragSearchBtn.disabled = isBusy;
-      ragRebuildBtn.disabled = isBusy;
-      ragRefreshBtn.disabled = isBusy;
       autoApproveToggle.disabled = isBusy;
       stopBtn.disabled = !isBusy;
       statusBadge.textContent = isBusy ? label : "空闲";
@@ -1073,14 +966,13 @@ INDEX_HTML = """<!doctype html>
         model: WEB_MODEL,
         autoSkill: skillSelect.value || null,
         autoApprove: autoApproveToggle.checked,
-        ragSettings: getRagSettings(),
       };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+      localStorage.setItem(LOCAL_STATE_KEY, JSON.stringify(payload));
     }
 
     function loadLocalState() {
       try {
-        const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
+        const saved = JSON.parse(localStorage.getItem(LOCAL_STATE_KEY) || "null");
         if (saved) saved.autoSkill = null;
         return saved;
       } catch (_err) {
@@ -1088,30 +980,13 @@ INDEX_HTML = """<!doctype html>
       }
     }
 
-    function clampNumber(value, fallback, min, max) {
-      const parsed = Number.parseInt(value, 10);
-      if (Number.isNaN(parsed)) return fallback;
-      return Math.min(max, Math.max(min, parsed));
+    function toUiSkillName(name) {
+      return name || "";
     }
 
-    function getRagSettings() {
-      return {
-        auto_retrieve: ragAutoRetrieveToggle.checked,
-        top_k: clampNumber(ragTopKInput.value, 5, 1, 20),
-        max_snippet_chars: clampNumber(ragSnippetInput.value, 280, 80, 3000),
-        candidate_limit: clampNumber(ragCandidateInput.value, 1200, 50, 10000),
-        use_cache: ragCacheToggle.checked,
-      };
-    }
-
-    function applyRagSettings(settings) {
-      const defaults = state.config?.rag?.defaults || {};
-      const merged = { ...defaults, ...(settings || {}) };
-      ragAutoRetrieveToggle.checked = merged.auto_retrieve ?? true;
-      ragTopKInput.value = merged.top_k ?? 5;
-      ragSnippetInput.value = merged.max_snippet_chars ?? 280;
-      ragCandidateInput.value = merged.candidate_limit ?? 1200;
-      ragCacheToggle.checked = merged.use_cache ?? true;
+    function toInternalSkillName(name) {
+      if (name === WEB_AIRCRAFT_SKILL) return WEB_AIRCRAFT_SKILL;
+      return name || null;
     }
 
     async function api(path, options = {}) {
@@ -1174,13 +1049,14 @@ INDEX_HTML = """<!doctype html>
       skillSelect.innerHTML = "";
       const noneOption = document.createElement("option");
       noneOption.value = "";
-      noneOption.textContent = "不自动使用技能";
+      noneOption.textContent = "不自动使用";
       skillSelect.appendChild(noneOption);
 
       for (const skill of state.config.skills || []) {
+        if (skill.name !== WEB_AIRCRAFT_SKILL) continue;
         const option = document.createElement("option");
-        option.value = skill.name;
-        option.textContent = skillDisplayName(skill.name);
+        option.value = WEB_AIRCRAFT_SKILL;
+        option.textContent = skillDisplayName(WEB_AIRCRAFT_SKILL);
         if (skill.description) option.title = skill.description;
         skillSelect.appendChild(option);
       }
@@ -1188,33 +1064,22 @@ INDEX_HTML = """<!doctype html>
 
     function skillDisplayName(name) {
       if (!name) return "无";
-      if (name === "aircraft-design-rag") return "飞行器设计资料检索（/aircraft-design-rag）";
-      if (name === "aircraft-conceptual-design") return "飞行器概念设计（/aircraft-conceptual-design）";
+      if (name === WEB_AIRCRAFT_SKILL) return "飞行器设计";
       return "/" + name;
     }
 
     function updateSkillStatus() {
       const selected = skillSelect.value;
-      const ragSelected = selected === "aircraft-design-rag";
-      ragAutoRetrieveToggle.disabled = state.busy || !ragSelected;
-      ragTopKInput.disabled = state.busy || !ragSelected;
-      ragSnippetInput.disabled = state.busy || !ragSelected;
-      ragCandidateInput.disabled = state.busy || !ragSelected;
-      ragCacheToggle.disabled = state.busy || !ragSelected;
-      ragSearchBtn.disabled = state.busy || !ragSelected;
-      ragRebuildBtn.disabled = state.busy || !ragSelected;
-      ragRefreshBtn.disabled = state.busy || !ragSelected;
+      const ragSelected = selected === WEB_AIRCRAFT_SKILL;
       if (!selected) {
-        skillStatus.textContent = "未选择技能";
+        skillStatus.textContent = "未启用设计能力";
         skillStatus.title = "";
-        renderRagStatus(null);
         return;
       }
       const skill = (state.config?.skills || []).find((item) => item.name === selected);
-      const ragNote = ragSelected && state.config?.rag?.available ? " · 检索器就绪" : "";
-      skillStatus.textContent = "已启用自动技能：" + skillDisplayName(selected) + ragNote;
+      const ragNote = ragSelected ? " · 本地资料可用" : "";
+      skillStatus.textContent = "已启用：" + skillDisplayName(selected) + ragNote;
       if (skill?.description) skillStatus.title = skill.description;
-      renderRagStatus(ragSelected ? state.ragStatus : null);
     }
 
     function applyConfigDefaults(preferred) {
@@ -1222,28 +1087,26 @@ INDEX_HTML = """<!doctype html>
       providerSelect.value = provider?.name || state.config.default_provider;
       modelInput.value = WEB_MODEL;
       updateModelSuggestions();
-      const preferredSkill = preferred?.autoSkill || "";
-      const skillExists = preferredSkill && (state.config.skills || []).some((item) => item.name === preferredSkill);
+      const preferredSkill = toUiSkillName(preferred?.autoSkill || "");
+      const skillExists = preferredSkill && Array.from(skillSelect.options).some((item) => item.value === preferredSkill);
       skillSelect.value = skillExists ? preferredSkill : "";
       updateSkillStatus();
       autoApproveToggle.checked = preferred?.autoApprove ?? true;
-      applyRagSettings(preferred?.ragSettings);
     }
 
     function updateMeta(session) {
       sessionTitle.textContent = session.messages.length ? "飞行器设计会话" : "新的设计会话";
       providerMeta.textContent = "模型服务：" + session.provider;
       modelMeta.textContent = "模型：" + WEB_MODEL;
-      skillMeta.textContent = "技能：" + skillDisplayName(session.auto_skill);
+      skillMeta.textContent = "技能：" + skillDisplayName(toUiSkillName(session.auto_skill));
       sessionMeta.textContent = "会话：" + session.session_id;
       state.sessionId = session.session_id;
       state.provider = session.provider;
       state.model = WEB_MODEL;
-      state.autoSkill = session.auto_skill || "";
+      state.autoSkill = toUiSkillName(session.auto_skill);
       providerSelect.value = session.provider;
       modelInput.value = WEB_MODEL;
       skillSelect.value = state.autoSkill;
-      applyRagSettings(session.rag_settings);
       updateSkillStatus();
       saveLocalState();
     }
@@ -1393,43 +1256,6 @@ INDEX_HTML = """<!doctype html>
       return number.toLocaleString();
     }
 
-    function renderRagStatus(status) {
-      state.ragStatus = status || null;
-      if (!skillSelect.value || skillSelect.value !== "aircraft-design-rag") {
-        ragIndexStatus.className = "rag-index-status";
-        ragIndexStatus.innerHTML = "<strong>RAG 索引</strong>选择 aircraft-design-rag 后可查看本地资料索引状态。";
-        return;
-      }
-      if (!status) {
-        ragIndexStatus.className = "rag-index-status";
-        ragIndexStatus.innerHTML = "<strong>RAG 索引</strong>状态未知，请点击“刷新状态”。";
-        return;
-      }
-
-      const rebuild = status.rebuild || {};
-      const cache = status.cache || {};
-      const running = Boolean(rebuild.running);
-      const ready = Boolean(status.cache_ready);
-      const stale = Boolean(status.cache_stale);
-      const parts = [
-        formatCount(status.markdown_files) + " 个文件",
-        formatCount(cache.chunk_count) + " 个片段",
-        "清单 " + formatMs(status.timings?.manifest_ms),
-      ];
-      if (running) parts.push("正在构建");
-      if (rebuild.timings?.index_build_ms) parts.push("上次构建 " + formatMs(rebuild.timings.index_build_ms));
-
-      let title = "索引就绪";
-      if (running) title = "索引构建中";
-      else if (!status.cache_exists) title = "索引不存在";
-      else if (stale) title = "索引需要更新";
-      ragIndexStatus.className = "rag-index-status" + (ready || running ? "" : " warning");
-      ragIndexStatus.innerHTML = "<strong>" + escapeHtml(title) + "</strong>" + escapeHtml(parts.join(" · "));
-      if (rebuild.error) {
-        ragIndexStatus.innerHTML += "<br>" + escapeHtml("上次重建失败：" + rebuild.error);
-      }
-    }
-
     function createEvidencePanel(rag) {
       const panel = document.createElement("div");
       panel.className = "evidence-panel";
@@ -1440,7 +1266,7 @@ INDEX_HTML = """<!doctype html>
         ? (rag.cache.ready === false ? "索引预热中" : (rag.cache.hit ? "缓存命中" : "缓存未命中"))
         : "缓存关闭";
       summary.textContent = [
-        "RAG 证据",
+        "资料证据",
         "命中 " + hits.length,
         "文件 " + (rag?.markdown_files_scanned ?? "--"),
         "片段 " + (rag?.chunks_indexed ?? "--"),
@@ -1490,16 +1316,6 @@ INDEX_HTML = """<!doctype html>
       return panel;
     }
 
-    function renderRagResults(rag) {
-      ragSearchResults.innerHTML = "";
-      if (!rag) {
-        ragSearchResults.classList.remove("visible");
-        return;
-      }
-      ragSearchResults.appendChild(createEvidencePanel(rag));
-      ragSearchResults.classList.add("visible");
-    }
-
     function createMessage(role, text, events = []) {
       const wrapper = document.createElement("article");
       wrapper.className = "message " + role;
@@ -1537,7 +1353,7 @@ INDEX_HTML = """<!doctype html>
           item.className = "event" + (event.is_error ? " is-error" : "");
           const title = document.createElement("strong");
           title.textContent = event.kind === "rag_retrieval"
-            ? "RAG · 检索"
+            ? "资料检索"
             : event.kind === "permission"
             ? "权限 · " + event.tool_name
             : event.tool_name + " · " + event.kind;
@@ -1575,7 +1391,7 @@ INDEX_HTML = """<!doctype html>
     function renderHero() {
       const hero = document.createElement("div");
       hero.className = "hero";
-      hero.innerHTML = "<strong>飞行器设计流程</strong><span>围绕任务需求、总体参数、约束边界、动力与布局方案开展对话；每轮回答下方可展开查看检索证据和工具活动。</span>";
+      hero.innerHTML = "<strong>飞行器设计流程</strong><span>围绕任务需求、总体参数、约束边界、动力与布局方案开展对话；每轮回答下方可展开查看资料证据和工具活动。</span>";
       chatLog.appendChild(hero);
     }
 
@@ -1639,60 +1455,6 @@ INDEX_HTML = """<!doctype html>
       }
     }
 
-    async function refreshRagStatus(options = {}) {
-      if (!state.config?.rag?.available) {
-        renderRagStatus(null);
-        return null;
-      }
-      try {
-        const payload = await api("/api/rag/status");
-        renderRagStatus(payload.rag || null);
-        if (!options.quiet && payload.rag) {
-          const ready = payload.rag.cache_ready ? "就绪" : "未就绪";
-          setStatus("RAG 索引状态：" + ready + "。");
-        }
-        return payload.rag || null;
-      } catch (error) {
-        if (!options.quiet) setStatus(error.message, true);
-        renderRagStatus(null);
-        return null;
-      }
-    }
-
-    function pollRagStatusUntilDone() {
-      if (state.ragPollTimer) window.clearInterval(state.ragPollTimer);
-      state.ragPollTimer = window.setInterval(async () => {
-        const status = await refreshRagStatus({ quiet: true });
-        const running = Boolean(status?.rebuild?.running);
-        if (!running) {
-          window.clearInterval(state.ragPollTimer);
-          state.ragPollTimer = null;
-          if (status?.cache_ready) setStatus("RAG 索引已就绪，后续检索将走快速路径。");
-          if (status?.rebuild?.error) setStatus("RAG 索引重建失败：" + status.rebuild.error, true);
-        }
-      }, 1800);
-    }
-
-    async function startRagRebuild(options = {}) {
-      if (!state.config?.rag?.available) return null;
-      try {
-        const payload = await api("/api/rag/rebuild", {
-          method: "POST",
-          body: JSON.stringify({
-            force: options.force ?? true,
-            rag_settings: getRagSettings(),
-          }),
-        });
-        renderRagStatus(payload.rag || null);
-        pollRagStatusUntilDone();
-        if (!options.quiet) setStatus("RAG 索引已开始在后台重建。");
-        return payload.rag || null;
-      } catch (error) {
-        if (!options.quiet) setStatus(error.message, true);
-        return null;
-      }
-    }
-
     async function createSession(options = {}) {
       setBusy(true, "正在启动...");
       try {
@@ -1701,9 +1463,8 @@ INDEX_HTML = """<!doctype html>
           body: JSON.stringify({
             provider: providerSelect.value,
             model: WEB_MODEL,
-            auto_skill: skillSelect.value || null,
+            auto_skill: toInternalSkillName(skillSelect.value),
             auto_approve: autoApproveToggle.checked,
-            rag_settings: getRagSettings(),
           }),
         });
         updateMeta(payload.session);
@@ -1732,8 +1493,7 @@ INDEX_HTML = """<!doctype html>
           method: "POST",
           body: JSON.stringify({
             auto_approve: autoApproveToggle.checked,
-            auto_skill: skillSelect.value || null,
-            rag_settings: getRagSettings(),
+            auto_skill: toInternalSkillName(skillSelect.value),
           }),
         });
         updateMeta(payload.session);
@@ -1845,8 +1605,7 @@ INDEX_HTML = """<!doctype html>
           {
             message,
             auto_approve: autoApproveToggle.checked,
-            auto_skill: skillSelect.value || null,
-            rag_settings: getRagSettings(),
+            auto_skill: toInternalSkillName(skillSelect.value),
           },
           {
             onChunk: (chunk) => {
@@ -1860,7 +1619,6 @@ INDEX_HTML = """<!doctype html>
               chatLog.scrollTop = chatLog.scrollHeight;
             },
             onTool: (toolEvent) => {
-              if (toolEvent.rag) renderRagResults(toolEvent.rag);
               if (toolEvent.summary) setStatus(toolEvent.summary);
             },
           },
@@ -1886,43 +1644,6 @@ INDEX_HTML = """<!doctype html>
       }
     }
 
-    async function runRagSearch() {
-      const query = promptInput.value.trim();
-      if (!query) {
-        setStatus("请先在输入框中输入检索问题。", true);
-        promptInput.focus();
-        return;
-      }
-      setBusy(true, "正在检索...");
-      setStatus("");
-      try {
-        if (getRagSettings().use_cache) {
-          const status = await refreshRagStatus({ quiet: true });
-          if (status && !status.cache_ready) {
-            await startRagRebuild({ quiet: true, force: false });
-            setStatus("RAG 索引尚未就绪，已开始后台重建；索引就绪后请重试检索。", true);
-            return;
-          }
-        }
-        const payload = await api("/api/rag/search", {
-          method: "POST",
-          body: JSON.stringify({
-            query,
-            rag_settings: getRagSettings(),
-          }),
-        });
-        renderRagResults(payload.rag);
-        const hits = Array.isArray(payload.rag?.hits) ? payload.rag.hits.length : 0;
-        setStatus("RAG 检索完成：" + hits + " 条命中。");
-        await refreshRagStatus({ quiet: true });
-      } catch (error) {
-        renderRagResults(null);
-        setStatus(error.message, true);
-      } finally {
-        setBusy(false);
-      }
-    }
-
     providerSelect.addEventListener("change", () => {
       const provider = providerByName(providerSelect.value);
       if (provider) {
@@ -1938,24 +1659,9 @@ INDEX_HTML = """<!doctype html>
     });
     modelInput.addEventListener("change", saveLocalState);
     autoApproveToggle.addEventListener("change", saveLocalState);
-    ragAutoRetrieveToggle.addEventListener("change", saveLocalState);
-    ragTopKInput.addEventListener("change", saveLocalState);
-    ragSnippetInput.addEventListener("change", saveLocalState);
-    ragCandidateInput.addEventListener("change", saveLocalState);
-    ragCacheToggle.addEventListener("change", saveLocalState);
 
     newSessionBtn.addEventListener("click", createSession);
     resetSessionBtn.addEventListener("click", resetSession);
-    ragSearchBtn.addEventListener("click", runRagSearch);
-    ragRebuildBtn.addEventListener("click", async () => {
-      setBusy(true, "正在启动索引...");
-      try {
-        await startRagRebuild({ force: true });
-      } finally {
-        setBusy(false);
-      }
-    });
-    ragRefreshBtn.addEventListener("click", () => refreshRagStatus());
     stopBtn.addEventListener("click", () => {
       state.abortController?.abort();
       setStatus("正在停止本地请求...", true);
@@ -1986,7 +1692,6 @@ INDEX_HTML = """<!doctype html>
         populateSkills();
         const local = loadLocalState();
         applyConfigDefaults(local);
-        await refreshRagStatus({ quiet: true });
         if (local?.sessionId) {
           try {
             await loadSession(local.sessionId);
@@ -2014,7 +1719,7 @@ INDEX_HTML = """<!doctype html>
 
 @dataclass
 class WebRagSettings:
-    """Browser-controlled retrieval settings for the local RAG skill."""
+    """Internal retrieval settings for the local aircraft-design evidence path."""
 
     top_k: int = 5
     max_snippet_chars: int = 280
@@ -2078,9 +1783,8 @@ class ClawdWebService:
             "workspace_root": str(self.workspace_root),
             "default_provider": "openai" if configured.get("openai", {}).get("api_key") else config.get("default_provider", "anthropic"),
             "providers": providers,
-            "skills": self._list_project_skills(),
+            "skills": self._list_browser_skills(),
             "default_auto_skill": None,
-            "rag": self._rag_bootstrap_payload(),
         }
 
     def create_session(
@@ -2110,7 +1814,7 @@ class ClawdWebService:
             model=resolved_model,
         )
 
-        resolved_skill = self._normalize_skill_name(auto_skill)
+        resolved_skill = self._normalize_browser_skill_name(auto_skill)
         resolved_rag_settings = self._normalize_rag_settings(rag_settings)
 
         tool_context = ToolContext(workspace_root=self.workspace_root, cwd=self.workspace_root)
@@ -2166,7 +1870,7 @@ class ClawdWebService:
             if auto_approve is not None:
                 state.auto_approve = auto_approve
             if auto_skill is not None:
-                state.auto_skill = self._normalize_skill_name(auto_skill)
+                state.auto_skill = self._normalize_browser_skill_name(auto_skill)
             if rag_settings is not None:
                 state.rag_settings = self._normalize_rag_settings(rag_settings, base=state.rag_settings)
             state.session.conversation.clear()
@@ -2200,7 +1904,7 @@ class ClawdWebService:
             if auto_approve is not None:
                 state.auto_approve = auto_approve
             if auto_skill is not None:
-                state.auto_skill = self._normalize_skill_name(auto_skill)
+                state.auto_skill = self._normalize_browser_skill_name(auto_skill)
             if rag_settings is not None:
                 state.rag_settings = self._normalize_rag_settings(rag_settings, base=state.rag_settings)
 
@@ -2253,7 +1957,7 @@ class ClawdWebService:
         *,
         rag_settings: dict[str, Any] | WebRagSettings | None = None,
     ) -> dict[str, Any]:
-        """Run the project RAG retriever directly for preview or browser preflight."""
+        """Run the project retriever directly for preview or browser preflight."""
         cleaned = query.strip()
         if not cleaned:
             raise ValueError("query must not be empty")
@@ -2262,7 +1966,7 @@ class ClawdWebService:
         return {"rag": rag_payload, "settings": settings.to_dict()}
 
     def rag_status(self) -> dict[str, Any]:
-        """Return readiness information for the local RAG SQLite index."""
+        """Return readiness information for the local retrieval SQLite index."""
         service = self._get_aircraft_rag_service()
         return {"rag": service.status(WebRagSettings())}
 
@@ -2272,7 +1976,7 @@ class ClawdWebService:
         rag_settings: dict[str, Any] | WebRagSettings | None = None,
         force: bool = True,
     ) -> dict[str, Any]:
-        """Start a background rebuild of the local RAG SQLite index."""
+        """Start a background rebuild of the local retrieval SQLite index."""
         settings = self._normalize_rag_settings(rag_settings)
         service = self._get_aircraft_rag_service()
         return {"rag": service.rebuild(settings, force=force), "settings": settings.to_dict()}
@@ -2284,7 +1988,7 @@ class ClawdWebService:
         events: list[dict[str, Any]],
         on_tool_event: Any | None = None,
     ) -> dict[str, Any] | None:
-        if state.auto_skill != "aircraft-design-rag" or not state.rag_settings.auto_retrieve:
+        if state.auto_skill != INTERNAL_AIRCRAFT_RAG_SKILL_NAME or not state.rag_settings.auto_retrieve:
             return None
         try:
             service = self._get_aircraft_rag_service()
@@ -2296,9 +2000,9 @@ class ClawdWebService:
         except Exception as exc:
             event = {
                     "kind": "rag_retrieval",
-                    "tool_name": state.auto_skill,
-                    "summary": f"RAG 检索失败：{exc}",
-                    "preview": {"query": query, "settings": state.rag_settings.to_dict()},
+                    "tool_name": WEB_AIRCRAFT_SKILL_NAME,
+                    "summary": f"本地资料检索失败：{exc}",
+                    "preview": {"query": query},
                     "error": str(exc),
                     "is_error": True,
                 }
@@ -2314,8 +2018,8 @@ class ClawdWebService:
         hit_count = len(hits) if isinstance(hits, list) else 0
         event = {
                 "kind": "rag_retrieval",
-                "tool_name": state.auto_skill,
-                "summary": f"已附加 RAG 证据 · 命中={hit_count}",
+                "tool_name": WEB_AIRCRAFT_SKILL_NAME,
+                "summary": f"已附加本地资料证据 · 命中={hit_count}",
                 "preview": payload,
                 "rag": payload,
                 "error": None,
@@ -2333,9 +2037,9 @@ class ClawdWebService:
         return self._get_aircraft_rag_service().search(query, settings)
 
     def _get_aircraft_rag_service(self) -> RagIndexService:
-        skill = self._get_project_skill("aircraft-design-rag")
+        skill = self._get_project_skill(INTERNAL_AIRCRAFT_RAG_SKILL_NAME)
         if skill is None or not skill.skill_root:
-            raise ValueError("aircraft-design-rag skill is not available in this workspace")
+            raise ValueError("飞行器设计资料能力在当前工作区不可用")
 
         script_path = Path(skill.skill_root) / "scripts" / "search_rag.py"
         if not script_path.exists():
@@ -2377,8 +2081,7 @@ class ClawdWebService:
             "provider": state.provider_name,
             "model": state.provider.model or state.session.model,
             "auto_approve": state.auto_approve,
-            "auto_skill": state.auto_skill,
-            "rag_settings": state.rag_settings.to_dict(),
+            "auto_skill": self._to_browser_skill_name(state.auto_skill),
             "messages": self._serialize_messages(state.session),
             "created_at": state.session.created_at,
             "updated_at": state.session.updated_at,
@@ -2396,7 +2099,7 @@ class ClawdWebService:
             "session_id": state.session.session_id,
             "provider": state.provider_name,
             "model": state.provider.model or state.session.model,
-            "auto_skill": state.auto_skill,
+            "auto_skill": self._to_browser_skill_name(state.auto_skill),
             "message_count": len(messages),
             "last_message": last_message,
             "created_at": state.session.created_at,
@@ -2415,23 +2118,23 @@ class ClawdWebService:
         if value is None:
             return WebRagSettings(**settings.to_dict())
         if not isinstance(value, dict):
-            raise ValueError("rag_settings 必须是对象")
+            raise ValueError("资料检索设置必须是对象")
 
-        top_k = self._bounded_int(value.get("top_k", settings.top_k), "rag_settings.top_k", 1, 20)
+        top_k = self._bounded_int(value.get("top_k", settings.top_k), "资料检索设置.top_k", 1, 20)
         max_snippet_chars = self._bounded_int(
             value.get("max_snippet_chars", settings.max_snippet_chars),
-            "rag_settings.max_snippet_chars",
+            "资料检索设置.max_snippet_chars",
             80,
             3000,
         )
-        use_cache = self._bool_setting(value.get("use_cache", settings.use_cache), "rag_settings.use_cache")
+        use_cache = self._bool_setting(value.get("use_cache", settings.use_cache), "资料检索设置.use_cache")
         auto_retrieve = self._bool_setting(
             value.get("auto_retrieve", settings.auto_retrieve),
-            "rag_settings.auto_retrieve",
+            "资料检索设置.auto_retrieve",
         )
         candidate_limit = self._bounded_int(
             value.get("candidate_limit", settings.candidate_limit),
-            "rag_settings.candidate_limit",
+            "资料检索设置.candidate_limit",
             50,
             10000,
         )
@@ -2460,14 +2163,29 @@ class ClawdWebService:
         return value
 
     def _rag_bootstrap_payload(self) -> dict[str, Any]:
-        skill = self._get_project_skill("aircraft-design-rag")
+        skill = self._get_project_skill(INTERNAL_AIRCRAFT_RAG_SKILL_NAME)
         script_path = Path(skill.skill_root) / "scripts" / "search_rag.py" if skill and skill.skill_root else None
         return {
             "available": bool(skill and script_path and script_path.exists()),
-            "skill_name": "aircraft-design-rag",
+            "skill_name": WEB_AIRCRAFT_SKILL_NAME,
             "data_dir": str(self.workspace_root / "RAG-data"),
             "defaults": WebRagSettings().to_dict(),
         }
+
+    def _list_browser_skills(self) -> list[dict[str, Any]]:
+        skill = self._get_project_skill(INTERNAL_AIRCRAFT_RAG_SKILL_NAME)
+        if skill is None:
+            return []
+        return [
+            {
+                "name": WEB_AIRCRAFT_SKILL_NAME,
+                "display_name": AIRCRAFT_SKILL_DISPLAY_NAME,
+                "description": "结合本地飞行器设计资料辅助回答总体方案、约束分析和动力布局问题。",
+                "when_to_use": "当问题涉及飞行器总体设计、概念方案、约束分析、动力或布局评估时使用。",
+                "allowed_tools": [],
+                "loaded_from": skill.loaded_from,
+            }
+        ]
 
     def _list_project_skills(self) -> list[dict[str, Any]]:
         try:
@@ -2502,6 +2220,25 @@ class ClawdWebService:
     def _default_auto_skill(self) -> str | None:
         return None
 
+    def _to_internal_skill_name(self, skill_name: str | None) -> str | None:
+        if skill_name is None:
+            return None
+        normalized = skill_name.strip().removeprefix("/")
+        if not normalized:
+            return None
+        if normalized in {WEB_AIRCRAFT_SKILL_NAME, INTERNAL_AIRCRAFT_RAG_SKILL_NAME, LEGACY_AIRCRAFT_DESIGN_SKILL_NAME}:
+            return INTERNAL_AIRCRAFT_RAG_SKILL_NAME
+        return normalized
+
+    def _to_browser_skill_name(self, skill_name: str | None) -> str | None:
+        if skill_name in {INTERNAL_AIRCRAFT_RAG_SKILL_NAME, LEGACY_AIRCRAFT_DESIGN_SKILL_NAME, WEB_AIRCRAFT_SKILL_NAME}:
+            return WEB_AIRCRAFT_SKILL_NAME
+        return skill_name
+
+    def _normalize_browser_skill_name(self, skill_name: str | None) -> str | None:
+        internal = self._to_internal_skill_name(skill_name)
+        return self._normalize_skill_name(internal)
+
     def _normalize_skill_name(self, skill_name: str | None) -> str | None:
         if skill_name is None:
             return None
@@ -2521,10 +2258,10 @@ class ClawdWebService:
     ) -> str:
         if not auto_skill:
             return message
-        parts = [AUTO_SKILL_SYSTEM_TEMPLATE.format(skill_name=auto_skill)]
+        parts = [AUTO_CAPABILITY_SYSTEM_TEMPLATE]
         if attached_rag is not None:
             parts.append(
-                "Browser-attached RAG evidence for this turn:\n"
+                "Browser-attached local aircraft-design evidence for this turn:\n"
                 "```json\n"
                 f"{json.dumps(attached_rag, ensure_ascii=False, indent=2)}\n"
                 "```"

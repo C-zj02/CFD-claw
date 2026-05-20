@@ -105,7 +105,7 @@ class TestClawdWebService(unittest.TestCase):
             session = created["session"]
 
             self.assertEqual(session["provider"], "openai")
-            self.assertEqual(session["model"], "qwen3-4b")
+            self.assertEqual(session["model"], "deepseek-v4-pro")
             self.assertEqual(session["messages"], [])
 
             reply = service.send_message(session["session_id"], "Hello from the browser")
@@ -140,15 +140,16 @@ class TestClawdWebService(unittest.TestCase):
             created = service.create_session(
                 provider_name="openai",
                 model="qwen3-4b",
-                auto_skill="aircraft-design-rag",
+                auto_skill="aircraft-design",
             )
             reply = service.send_message(created["session"]["session_id"], "What is RD-170?")
 
-        self.assertEqual(payload["default_auto_skill"], "aircraft-design-rag")
-        self.assertEqual(payload["skills"][0]["name"], "aircraft-design-rag")
-        self.assertEqual(created["session"]["auto_skill"], "aircraft-design-rag")
-        self.assertIn("Skill tool", reply["reply"]["text"])
-        self.assertIn("aircraft-design-rag", reply["reply"]["text"])
+        self.assertEqual(payload["default_auto_skill"], None)
+        self.assertEqual(payload["skills"][0]["name"], "aircraft-design")
+        self.assertEqual(payload["skills"][0]["display_name"], "飞行器设计")
+        self.assertEqual(created["session"]["auto_skill"], "aircraft-design")
+        self.assertIn("飞行器设计", reply["reply"]["text"])
+        self.assertNotIn("aircraft-design-rag", reply["reply"]["text"])
 
     def test_bootstrap_payload_marks_configured_providers(self) -> None:
         with patch("src.config.Path.home", return_value=self.home):
@@ -160,12 +161,12 @@ class TestClawdWebService(unittest.TestCase):
         self.assertTrue(providers["openai"]["configured"])
         self.assertFalse(providers["anthropic"]["configured"])
         self.assertIn("skills", payload)
-        self.assertIn("rag", payload)
+        self.assertNotIn("rag", payload)
 
     @patch("src.agent.session.Path.home")
     @patch("src.web.app.build_default_registry", side_effect=lambda **_kwargs: ToolRegistry())
     @patch("src.web.app.get_provider_class", return_value=FakeProvider)
-    def test_rag_settings_are_serialized_and_sessions_are_listed(
+    def test_rag_settings_are_internal_and_sessions_are_listed(
         self,
         _mock_provider_class,
         _mock_build_registry,
@@ -187,11 +188,7 @@ class TestClawdWebService(unittest.TestCase):
             )
             listed = service.list_sessions_payload()
 
-        self.assertEqual(created["session"]["rag_settings"]["top_k"], 3)
-        self.assertEqual(created["session"]["rag_settings"]["max_snippet_chars"], 160)
-        self.assertEqual(created["session"]["rag_settings"]["candidate_limit"], 600)
-        self.assertFalse(created["session"]["rag_settings"]["use_cache"])
-        self.assertFalse(created["session"]["rag_settings"]["auto_retrieve"])
+        self.assertNotIn("rag_settings", created["session"])
         self.assertEqual(len(listed["sessions"]), 1)
         self.assertEqual(listed["sessions"][0]["session_id"], created["session"]["session_id"])
 
@@ -348,14 +345,16 @@ class TestClawdWebService(unittest.TestCase):
             created = service.create_session(
                 provider_name="openai",
                 model="qwen3-4b",
-                auto_skill="aircraft-design-rag",
+                auto_skill="aircraft-design",
             )
             reply = service.send_message(created["session"]["session_id"], "What is RD-170?")
 
         events = reply["reply"]["events"]
         self.assertEqual(events[0]["kind"], "rag_retrieval")
+        self.assertEqual(events[0]["tool_name"], "aircraft-design")
         self.assertEqual(events[0]["rag"]["hits"][0]["file"], "RAG-data/engine.md")
-        self.assertIn("Browser-attached RAG evidence", reply["reply"]["text"])
+        self.assertIn("Browser-attached local aircraft-design evidence", reply["reply"]["text"])
+        self.assertEqual(reply["session"]["auto_skill"], "aircraft-design")
 
     @patch("src.agent.session.Path.home")
     @patch("src.web.app.RagIndexService.search")
@@ -400,13 +399,15 @@ class TestClawdWebService(unittest.TestCase):
             created = service.create_session(
                 provider_name="openai",
                 model="qwen3-4b",
-                auto_skill="aircraft-design-rag",
+                auto_skill="aircraft-design",
             )
             reply = service.send_message(created["session"]["session_id"], "What is RD-170?")
 
         events = reply["reply"]["events"]
         self.assertEqual(events[0]["kind"], "rag_retrieval")
+        self.assertEqual(events[0]["tool_name"], "aircraft-design")
         self.assertTrue(events[0]["rag"]["cache"]["build_in_progress"])
+        self.assertEqual(reply["session"]["auto_skill"], "aircraft-design")
         mock_rebuild.assert_called_once()
         mock_search.assert_not_called()
 
