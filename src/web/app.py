@@ -1567,8 +1567,13 @@ INDEX_HTML = """<!doctype html>
           if (parsed.event === "chunk") handlers.onChunk?.(parsed.data.text || "");
           if (parsed.event === "tool") handlers.onTool?.(parsed.data);
           if (parsed.event === "error") throw new Error(parsed.data.error || "流式请求失败");
-          if (parsed.event === "done") finalPayload = parsed.data;
+          if (parsed.event === "done") {
+            finalPayload = parsed.data;
+            await reader.cancel().catch(() => {});
+            break;
+          }
         }
+        if (finalPayload) break;
       }
       if (buffer.trim()) {
         const parsed = parseSseBlock(buffer);
@@ -2620,7 +2625,7 @@ class ClawdWebRequestHandler(BaseHTTPRequestHandler):
             self.wfile.write(f"event: {event}\ndata: {data}\n\n".encode("utf-8"))
             self.wfile.flush()
         except (BrokenPipeError, ConnectionResetError):
-            raise
+            return
 
     def _send_bytes(self, status: HTTPStatus, payload: bytes, content_type: str) -> None:
         self.send_response(status.value)
