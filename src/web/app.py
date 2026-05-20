@@ -1080,7 +1080,9 @@ INDEX_HTML = """<!doctype html>
 
     function loadLocalState() {
       try {
-        return JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
+        const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
+        if (saved) saved.autoSkill = null;
+        return saved;
       } catch (_err) {
         return null;
       }
@@ -1220,7 +1222,7 @@ INDEX_HTML = """<!doctype html>
       providerSelect.value = provider?.name || state.config.default_provider;
       modelInput.value = WEB_MODEL;
       updateModelSuggestions();
-      const preferredSkill = preferred?.autoSkill || state.config.default_auto_skill || "";
+      const preferredSkill = preferred?.autoSkill || "";
       const skillExists = preferredSkill && (state.config.skills || []).some((item) => item.name === preferredSkill);
       skillSelect.value = skillExists ? preferredSkill : "";
       updateSkillStatus();
@@ -2077,7 +2079,7 @@ class ClawdWebService:
             "default_provider": "openai" if configured.get("openai", {}).get("api_key") else config.get("default_provider", "anthropic"),
             "providers": providers,
             "skills": self._list_project_skills(),
-            "default_auto_skill": self._default_auto_skill(),
+            "default_auto_skill": None,
             "rag": self._rag_bootstrap_payload(),
         }
 
@@ -2498,9 +2500,6 @@ class ClawdWebService:
         return next((skill for skill in skills if skill.name == name), None)
 
     def _default_auto_skill(self) -> str | None:
-        names = {skill["name"] for skill in self._list_project_skills()}
-        if "aircraft-design-rag" in names:
-            return "aircraft-design-rag"
         return None
 
     def _normalize_skill_name(self, skill_name: str | None) -> str | None:
