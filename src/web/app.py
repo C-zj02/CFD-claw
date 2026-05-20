@@ -38,30 +38,31 @@ AUTO_SKILL_SYSTEM_TEMPLATE = """Web session skill policy:
 
 
 INDEX_HTML = """<!doctype html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Clawd Web Console</title>
+  <title>飞行器设计工作台</title>
   <style>
     :root {
-      --bg: #f3ede3;
-      --bg-accent: #d8e5d0;
-      --panel: rgba(255, 251, 245, 0.92);
-      --panel-strong: #fffdf8;
+      --bg: #f4f6f2;
+      --bg-accent: #dce8e0;
+      --panel: rgba(255, 253, 248, 0.94);
+      --panel-strong: #fffefa;
       --ink: #1d2a24;
       --muted: #5b6b63;
       --line: rgba(39, 58, 49, 0.12);
       --primary: #1f6d55;
       --primary-strong: #124c3b;
+      --sky: #2f6f8f;
       --warm: #d9895b;
       --user: #193b52;
       --tool-bg: #eef5f1;
       --danger: #a53c30;
-      --shadow: 0 20px 60px rgba(32, 47, 40, 0.12);
-      --radius-xl: 26px;
-      --radius-lg: 18px;
-      --radius-md: 14px;
+      --shadow: 0 18px 44px rgba(32, 47, 40, 0.1);
+      --radius-xl: 18px;
+      --radius-lg: 10px;
+      --radius-md: 8px;
     }
 
     * { box-sizing: border-box; }
@@ -78,14 +79,14 @@ INDEX_HTML = """<!doctype html>
     }
 
     body {
-      padding: 24px;
+      padding: 16px;
     }
 
     .shell {
       display: grid;
-      grid-template-columns: 340px minmax(0, 1fr);
-      gap: 20px;
-      height: calc(100vh - 48px);
+      grid-template-columns: 380px minmax(0, 1fr);
+      gap: 14px;
+      height: calc(100vh - 32px);
     }
 
     .panel {
@@ -97,19 +98,19 @@ INDEX_HTML = """<!doctype html>
     }
 
     .sidebar {
-      padding: 22px;
+      padding: 18px;
       display: flex;
       flex-direction: column;
-      gap: 18px;
+      gap: 14px;
       overflow: auto;
     }
 
     .brand {
-      padding: 18px;
+      padding: 16px;
       border-radius: var(--radius-lg);
       background:
-        linear-gradient(145deg, rgba(255,255,255,0.92), rgba(245, 238, 228, 0.95)),
-        linear-gradient(145deg, rgba(31, 109, 85, 0.12), rgba(217, 137, 91, 0.14));
+        linear-gradient(145deg, rgba(255,255,255,0.94), rgba(245, 240, 231, 0.96)),
+        linear-gradient(145deg, rgba(31, 109, 85, 0.1), rgba(47, 111, 143, 0.08));
       border: 1px solid rgba(31, 109, 85, 0.12);
     }
 
@@ -117,21 +118,20 @@ INDEX_HTML = """<!doctype html>
       display: inline-flex;
       align-items: center;
       gap: 8px;
-      padding: 6px 10px;
+      padding: 5px 9px;
       border-radius: 999px;
       background: rgba(31, 109, 85, 0.1);
       color: var(--primary-strong);
       font-size: 12px;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
+      letter-spacing: 0;
     }
 
     .brand h1 {
-      margin: 14px 0 8px;
+      margin: 12px 0 8px;
       font-family: "Iowan Old Style", "Palatino Linotype", serif;
-      font-size: 34px;
-      line-height: 1;
-      letter-spacing: -0.03em;
+      font-size: 29px;
+      line-height: 1.08;
+      letter-spacing: 0;
     }
 
     .brand p {
@@ -141,17 +141,17 @@ INDEX_HTML = """<!doctype html>
     }
 
     .workspace {
-      margin-top: 14px;
-      padding: 12px;
+      margin-top: 12px;
+      padding: 10px;
       background: rgba(31, 109, 85, 0.07);
       border-radius: var(--radius-md);
-      font-size: 13px;
+      font-size: 12px;
       color: var(--primary-strong);
       word-break: break-word;
     }
 
     .card {
-      padding: 16px;
+      padding: 14px;
       border: 1px solid var(--line);
       border-radius: var(--radius-lg);
       background: var(--panel-strong);
@@ -183,7 +183,7 @@ INDEX_HTML = """<!doctype html>
 
     .compact-grid {
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 10px;
     }
 
@@ -213,7 +213,7 @@ INDEX_HTML = """<!doctype html>
     textarea {
       width: 100%;
       border: 1px solid rgba(29, 42, 36, 0.14);
-      border-radius: 14px;
+      border-radius: 10px;
       background: #fffdf9;
       color: var(--ink);
       font: inherit;
@@ -221,8 +221,15 @@ INDEX_HTML = """<!doctype html>
       transition: border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
     }
 
+    input[readonly] {
+      color: var(--primary-strong);
+      background: rgba(31, 109, 85, 0.06);
+      border-color: rgba(31, 109, 85, 0.18);
+    }
+
     textarea {
-      min-height: 92px;
+      min-height: 76px;
+      max-height: 220px;
       resize: vertical;
       line-height: 1.45;
     }
@@ -243,8 +250,8 @@ INDEX_HTML = """<!doctype html>
       display: flex;
       align-items: center;
       gap: 12px;
-      padding: 12px 14px;
-      border-radius: 14px;
+      padding: 11px 12px;
+      border-radius: 10px;
       background: rgba(31, 109, 85, 0.07);
       color: var(--primary-strong);
       font-size: 14px;
@@ -258,8 +265,36 @@ INDEX_HTML = """<!doctype html>
 
     .skill-card {
       background:
-        linear-gradient(145deg, rgba(31, 109, 85, 0.08), rgba(217, 137, 91, 0.1)),
+        linear-gradient(145deg, rgba(31, 109, 85, 0.06), rgba(47, 111, 143, 0.06)),
         var(--panel-strong);
+    }
+
+    .settings-panel {
+      margin: 12px 0;
+      border: 1px solid rgba(31, 109, 85, 0.12);
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.52);
+    }
+
+    .settings-panel summary {
+      cursor: pointer;
+      padding: 11px 12px;
+      color: var(--primary-strong);
+      font-size: 13px;
+      font-weight: 700;
+      list-style: none;
+    }
+
+    .settings-panel summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .settings-panel[open] summary {
+      border-bottom: 1px solid rgba(31, 109, 85, 0.1);
+    }
+
+    .settings-panel-body {
+      padding: 12px;
     }
 
     .skill-status {
@@ -270,6 +305,7 @@ INDEX_HTML = """<!doctype html>
       color: var(--primary-strong);
       font-size: 13px;
       font-weight: 700;
+      line-height: 1.4;
     }
 
     .skill-status::before {
@@ -285,7 +321,7 @@ INDEX_HTML = """<!doctype html>
       margin-top: 10px;
       padding: 10px 12px;
       border: 1px solid rgba(31, 109, 85, 0.12);
-      border-radius: 14px;
+      border-radius: 10px;
       background: rgba(255, 255, 255, 0.58);
       color: var(--muted);
       font-size: 12px;
@@ -312,7 +348,7 @@ INDEX_HTML = """<!doctype html>
 
     .session-item {
       width: 100%;
-      border-radius: 14px;
+      border-radius: 10px;
       padding: 10px 12px;
       text-align: left;
       background: rgba(31, 109, 85, 0.06);
@@ -367,7 +403,7 @@ INDEX_HTML = """<!doctype html>
 
     button {
       border: 0;
-      border-radius: 999px;
+      border-radius: 10px;
       padding: 12px 18px;
       font: inherit;
       font-weight: 700;
@@ -388,7 +424,7 @@ INDEX_HTML = """<!doctype html>
     .primary {
       background: linear-gradient(135deg, var(--primary), var(--primary-strong));
       color: white;
-      box-shadow: 0 16px 24px rgba(18, 76, 59, 0.18);
+      box-shadow: 0 12px 20px rgba(18, 76, 59, 0.16);
     }
 
     .secondary {
@@ -408,7 +444,7 @@ INDEX_HTML = """<!doctype html>
       align-items: center;
       justify-content: space-between;
       gap: 16px;
-      padding: 18px 22px;
+      padding: 16px 20px;
       border-bottom: 1px solid var(--line);
       background: rgba(255, 252, 247, 0.92);
     }
@@ -422,16 +458,20 @@ INDEX_HTML = """<!doctype html>
     .meta {
       display: flex;
       flex-wrap: wrap;
-      gap: 10px;
+      gap: 8px;
+      margin-top: 8px;
       color: var(--muted);
       font-size: 13px;
     }
 
     .meta span {
-      max-width: 360px;
+      max-width: min(540px, 48vw);
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: rgba(31, 109, 85, 0.06);
     }
 
     .badge {
@@ -444,21 +484,25 @@ INDEX_HTML = """<!doctype html>
       color: var(--primary-strong);
       font-size: 13px;
       font-weight: 700;
+      flex: 0 0 auto;
+      justify-content: center;
+      min-width: 70px;
+      white-space: nowrap;
     }
 
     .chat {
-      padding: 24px;
+      padding: 20px;
       overflow: auto;
       display: flex;
       flex-direction: column;
-      gap: 16px;
+      gap: 14px;
     }
 
     .hero {
-      padding: 22px;
-      border: 1px dashed rgba(29, 42, 36, 0.18);
-      border-radius: 20px;
-      background: linear-gradient(145deg, rgba(255,255,255,0.72), rgba(223, 236, 228, 0.82));
+      padding: 18px 20px;
+      border: 1px solid rgba(29, 42, 36, 0.12);
+      border-radius: 10px;
+      background: linear-gradient(145deg, rgba(255,255,255,0.78), rgba(223, 236, 228, 0.78));
       color: var(--muted);
     }
 
@@ -482,7 +526,7 @@ INDEX_HTML = """<!doctype html>
     }
 
     .bubble {
-      border-radius: 22px;
+      border-radius: 14px;
       padding: 16px 18px;
       box-shadow: 0 10px 22px rgba(22, 34, 28, 0.08);
       border: 1px solid rgba(20, 40, 32, 0.08);
@@ -569,12 +613,12 @@ INDEX_HTML = """<!doctype html>
     .message.user .bubble {
       background: linear-gradient(135deg, var(--user), #335f7f);
       color: white;
-      border-bottom-right-radius: 10px;
+      border-bottom-right-radius: 6px;
     }
 
     .message.assistant .bubble {
       background: rgba(255, 253, 249, 0.98);
-      border-bottom-left-radius: 10px;
+      border-bottom-left-radius: 6px;
     }
 
     .message.system .bubble {
@@ -591,7 +635,7 @@ INDEX_HTML = """<!doctype html>
     }
 
     details.tool-events {
-      border-radius: 18px;
+      border-radius: 10px;
       background: var(--tool-bg);
       border: 1px solid rgba(31, 109, 85, 0.1);
       overflow: hidden;
@@ -618,7 +662,7 @@ INDEX_HTML = """<!doctype html>
 
     .event {
       padding: 12px 14px;
-      border-radius: 14px;
+      border-radius: 10px;
       background: white;
       border: 1px solid rgba(29, 42, 36, 0.08);
     }
@@ -668,7 +712,7 @@ INDEX_HTML = """<!doctype html>
 
     .evidence-card {
       padding: 12px;
-      border-radius: 14px;
+      border-radius: 10px;
       background: rgba(255, 253, 249, 0.94);
       border: 1px solid rgba(31, 109, 85, 0.12);
     }
@@ -694,22 +738,46 @@ INDEX_HTML = """<!doctype html>
     }
 
     .composer {
-      padding: 18px 22px 22px;
+      padding: 14px 20px 18px;
       border-top: 1px solid var(--line);
       background: rgba(255, 252, 247, 0.94);
     }
 
+    .prompt-strip {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .prompt-chip {
+      padding: 7px 10px;
+      border: 1px solid rgba(47, 111, 143, 0.16);
+      background: rgba(47, 111, 143, 0.07);
+      color: #24546d;
+      box-shadow: none;
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
     .composer-row {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
-      gap: 14px;
-      align-items: end;
+      grid-template-columns: minmax(0, 1fr) 92px;
+      gap: 12px;
+      align-items: stretch;
     }
 
     .composer-actions {
       display: flex;
       flex-direction: column;
-      gap: 10px;
+      gap: 8px;
+    }
+
+    .composer-actions button {
+      width: 100%;
+      min-height: 38px;
+      padding: 9px 12px;
     }
 
     .hint {
@@ -721,7 +789,7 @@ INDEX_HTML = """<!doctype html>
     .status {
       color: var(--muted);
       font-size: 13px;
-      min-height: 20px;
+      min-height: 18px;
     }
 
     .warning {
@@ -756,6 +824,23 @@ INDEX_HTML = """<!doctype html>
       .composer-actions {
         flex-direction: row;
       }
+
+      .compact-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .topbar {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .badge {
+        align-self: flex-start;
+      }
+
+      .prompt-chip {
+        white-space: normal;
+      }
     }
   </style>
 </head>
@@ -763,118 +848,129 @@ INDEX_HTML = """<!doctype html>
   <div class="shell">
     <aside class="panel sidebar">
       <section class="brand">
-        <div class="eyebrow">Clawd Codex</div>
-        <h1>Web Console</h1>
-        <p>Use the local agent from a browser while keeping the existing CLI intact.</p>
-        <div class="workspace" id="workspaceRoot">Loading workspace...</div>
+        <div class="eyebrow">飞行器设计智能体</div>
+        <h1>飞行器设计工作台</h1>
+        <p>面向总体方案、约束分析、RAG 证据检索和方案界限线图的本地设计界面。</p>
+        <div class="workspace" id="workspaceRoot">正在加载工作区...</div>
       </section>
 
       <section class="card">
-        <h2>Session Setup</h2>
+        <h2>设计会话</h2>
         <div class="field">
-          <label for="providerSelect">Provider</label>
+          <label for="providerSelect">模型服务</label>
           <select id="providerSelect"></select>
         </div>
         <div class="field">
-          <label for="modelInput">Model</label>
+          <label for="modelInput">模型</label>
           <div class="model-picker">
-            <input id="modelInput" type="text" list="modelDatalist" placeholder="Enter or pick a model name">
+            <input id="modelInput" type="text" list="modelDatalist" value="deepseek-v4-pro" placeholder="deepseek-v4-pro" readonly>
             <datalist id="modelDatalist"></datalist>
           </div>
+          <p class="field-help">当前网页端固定使用 deepseek-v4-pro。</p>
         </div>
         <div class="toggle">
           <input id="autoApproveToggle" type="checkbox" checked>
-          <label for="autoApproveToggle">Auto-approve tool permission prompts inside this workspace</label>
+          <label for="autoApproveToggle">自动批准当前工作区内的工具权限请求</label>
         </div>
         <div class="actions">
-          <button id="newSessionBtn" class="primary" type="button">New Session</button>
-          <button id="resetSessionBtn" class="secondary" type="button">Reset Chat</button>
+          <button id="newSessionBtn" class="primary" type="button">新建设计会话</button>
+          <button id="resetSessionBtn" class="secondary" type="button">清空对话</button>
         </div>
       </section>
 
       <section class="card">
-        <h2>Sessions</h2>
+        <h2>会话记录</h2>
         <div id="sessionList" class="session-list">
-          <p class="hint">No active browser sessions yet.</p>
+          <p class="hint">暂无活动的浏览器会话。</p>
         </div>
       </section>
 
       <section class="card skill-card">
-        <h2>RAG Skill</h2>
+        <h2>飞行器资料检索</h2>
         <div class="field">
-          <label for="skillSelect">Auto-use skill</label>
+          <label for="skillSelect">自动使用技能</label>
           <select id="skillSelect"></select>
-          <p class="field-help">When enabled, the model is instructed to call the selected skill before answering relevant questions.</p>
+          <p class="field-help">启用后，模型会在回答飞行器设计问题前优先调用所选技能。</p>
         </div>
         <div class="toggle">
           <input id="ragAutoRetrieveToggle" type="checkbox" checked>
-          <label for="ragAutoRetrieveToggle">Attach RAG evidence before each answer</label>
+          <label for="ragAutoRetrieveToggle">回答前附加本地 RAG 证据</label>
         </div>
-        <div class="compact-grid">
-          <div class="field inline-field">
-            <label for="ragTopKInput">Top K</label>
-            <input id="ragTopKInput" type="number" min="1" max="20" value="5">
+        <details class="settings-panel">
+          <summary>检索参数</summary>
+          <div class="settings-panel-body">
+            <div class="compact-grid">
+              <div class="field inline-field">
+                <label for="ragTopKInput">命中数量</label>
+                <input id="ragTopKInput" type="number" min="1" max="20" value="5">
+              </div>
+              <div class="field inline-field">
+                <label for="ragSnippetInput">片段字数</label>
+                <input id="ragSnippetInput" type="number" min="80" max="3000" value="280">
+              </div>
+              <div class="field inline-field">
+                <label for="ragCandidateInput">候选片段</label>
+                <input id="ragCandidateInput" type="number" min="50" max="10000" value="1200">
+              </div>
+            </div>
+            <div class="toggle">
+              <input id="ragCacheToggle" type="checkbox" checked>
+              <label for="ragCacheToggle">使用本地索引缓存</label>
+            </div>
           </div>
-          <div class="field inline-field">
-            <label for="ragSnippetInput">Snippet chars</label>
-            <input id="ragSnippetInput" type="number" min="80" max="3000" value="280">
-          </div>
-          <div class="field inline-field">
-            <label for="ragCandidateInput">Candidates</label>
-            <input id="ragCandidateInput" type="number" min="50" max="10000" value="1200">
-          </div>
-        </div>
-        <div class="toggle">
-          <input id="ragCacheToggle" type="checkbox" checked>
-          <label for="ragCacheToggle">Use local index cache</label>
-        </div>
+        </details>
         <div class="actions">
-          <button id="ragSearchBtn" class="secondary mini-button" type="button">Test Retrieval</button>
-          <button id="ragRebuildBtn" class="secondary mini-button" type="button">Rebuild Index</button>
-          <button id="ragRefreshBtn" class="secondary mini-button" type="button">Refresh Status</button>
+          <button id="ragSearchBtn" class="secondary mini-button" type="button">测试检索</button>
+          <button id="ragRebuildBtn" class="secondary mini-button" type="button">重建索引</button>
+          <button id="ragRefreshBtn" class="secondary mini-button" type="button">刷新状态</button>
         </div>
-        <div class="skill-status" id="skillStatus">No skill selected</div>
-        <div class="rag-index-status" id="ragIndexStatus">Index status unknown.</div>
+        <div class="skill-status" id="skillStatus">未选择技能</div>
+        <div class="rag-index-status" id="ragIndexStatus">索引状态未知。</div>
         <div id="ragSearchResults" class="rag-results"></div>
       </section>
 
       <section class="card tips">
-        <h2>Notes</h2>
-        <p class="hint">The web UI uses the same configured provider credentials as the CLI. If a provider has no API key, create one with <code>clawd login</code>.</p>
-        <p class="hint">Pick <code>aircraft-design-rag</code> for aerospace questions grounded in local <code>RAG-data</code>.</p>
-        <p class="hint">Questionnaire-style tool prompts are intentionally hidden from the web tool list for now, so the browser session stays responsive.</p>
+        <h2>说明</h2>
+        <p class="hint">网页端使用与命令行相同的模型服务配置；如未配置 API Key，请先运行 <code>clawd login</code>。</p>
+        <p class="hint">飞行器设计问题建议选择 <code>aircraft-design-rag</code>，以便基于本地 <code>RAG-data</code> 检索资料。</p>
+        <p class="hint">网页端会隐藏问卷式工具提示，保证会话响应更稳定。</p>
       </section>
     </aside>
 
     <main class="panel main">
       <header class="topbar">
         <div>
-          <h2 id="sessionTitle">Ready to chat</h2>
+          <h2 id="sessionTitle">准备开始设计</h2>
           <div class="meta">
-            <span id="providerMeta">Provider: --</span>
-            <span id="modelMeta">Model: --</span>
-            <span id="skillMeta">Skill: none</span>
-            <span id="sessionMeta">Session: --</span>
+            <span id="providerMeta">模型服务：--</span>
+            <span id="modelMeta">模型：--</span>
+            <span id="skillMeta">技能：无</span>
+            <span id="sessionMeta">会话：--</span>
           </div>
         </div>
-        <div class="badge" id="statusBadge">Idle</div>
+        <div class="badge" id="statusBadge">空闲</div>
       </header>
 
       <section id="chatLog" class="chat">
         <div class="hero">
-          <strong>Browser-first workflow</strong>
-          Ask about the current workspace, inspect files, or request edits. Tool activity for each answer appears in expandable notes below the assistant response.
+          <strong>飞行器设计流程</strong>
+          围绕任务需求、总体参数、约束边界、动力与布局方案开展对话；每轮回答下方可展开查看检索证据和工具活动。
         </div>
       </section>
 
       <footer class="composer">
         <div class="status" id="statusLine"></div>
+        <div class="prompt-strip" aria-label="常用飞行器设计任务">
+          <button class="prompt-chip" type="button" data-prompt="设计一架航程 1200 km、载荷 500 kg 的固定翼无人机，给出总体参数、翼载、推重比和约束分析思路。">固定翼无人机总体方案</button>
+          <button class="prompt-chip" type="button" data-prompt="基于本地资料，比较电推进、涡桨和活塞动力在中小型无人机方案中的适用边界。">动力方案对比</button>
+          <button class="prompt-chip" type="button" data-prompt="为一架低速长航时飞行器梳理约束边界：失速、爬升、巡航、起飞距离和续航。">约束边界梳理</button>
+        </div>
         <form id="composerForm" class="composer-row">
-          <textarea id="promptInput" placeholder="Ask Clawd to inspect the project, explain code, or make a change..."></textarea>
+          <textarea id="promptInput" placeholder="输入飞行器设计需求，例如：设计一架航程 1200 km、载荷 500 kg 的固定翼无人机..."></textarea>
           <div class="composer-actions">
-            <button id="sendBtn" class="primary" type="submit">Send</button>
-            <button id="stopBtn" class="secondary" type="button" disabled>Stop</button>
-            <button id="clearDraftBtn" class="secondary" type="button">Clear</button>
+            <button id="sendBtn" class="primary" type="submit">发送</button>
+            <button id="stopBtn" class="secondary" type="button" disabled>停止</button>
+            <button id="clearDraftBtn" class="secondary" type="button">清空</button>
           </div>
         </form>
       </footer>
@@ -883,6 +979,7 @@ INDEX_HTML = """<!doctype html>
 
   <script>
     const STORAGE_KEY = "clawd-web-console";
+    const WEB_MODEL = "deepseek-v4-pro";
     const state = {
       config: null,
       sessionId: null,
@@ -929,7 +1026,7 @@ INDEX_HTML = """<!doctype html>
     const skillStatus = document.getElementById("skillStatus");
     const ragIndexStatus = document.getElementById("ragIndexStatus");
 
-    function setBusy(isBusy, label = "Working...") {
+    function setBusy(isBusy, label = "处理中...") {
       state.busy = isBusy;
       sendBtn.disabled = isBusy;
       newSessionBtn.disabled = isBusy;
@@ -947,8 +1044,8 @@ INDEX_HTML = """<!doctype html>
       ragRefreshBtn.disabled = isBusy;
       autoApproveToggle.disabled = isBusy;
       stopBtn.disabled = !isBusy;
-      statusBadge.textContent = isBusy ? label : "Idle";
-      statusLine.textContent = isBusy ? "Running the agent loop..." : "";
+      statusBadge.textContent = isBusy ? label : "空闲";
+      statusLine.textContent = isBusy ? "正在运行设计智能体..." : "";
       if (state.config) updateSkillStatus();
     }
 
@@ -957,11 +1054,23 @@ INDEX_HTML = """<!doctype html>
       statusLine.className = "status" + (isError ? " warning" : "");
     }
 
+    function autosizePrompt() {
+      promptInput.style.height = "auto";
+      promptInput.style.height = Math.min(promptInput.scrollHeight, 220) + "px";
+    }
+
+    function setPromptDraft(text) {
+      promptInput.value = text || "";
+      autosizePrompt();
+      promptInput.focus();
+      setStatus("已填入常用设计任务，可继续补充约束后发送。");
+    }
+
     function saveLocalState() {
       const payload = {
         sessionId: state.sessionId,
         provider: providerSelect.value || state.provider,
-        model: modelInput.value.trim() || state.model,
+        model: WEB_MODEL,
         autoSkill: skillSelect.value || null,
         autoApprove: autoApproveToggle.checked,
         ragSettings: getRagSettings(),
@@ -1033,7 +1142,7 @@ INDEX_HTML = """<!doctype html>
       for (const provider of state.config.providers) {
         const option = document.createElement("option");
         option.value = provider.name;
-        option.textContent = provider.label + (provider.configured ? "" : " (missing API key)");
+        option.textContent = provider.label + (provider.configured ? "" : "（未配置 API Key）");
         option.disabled = !provider.configured;
         providerSelect.appendChild(option);
       }
@@ -1041,6 +1150,12 @@ INDEX_HTML = """<!doctype html>
 
     function firstConfiguredProvider() {
       return (state.config?.providers || []).find((item) => item.configured) || null;
+    }
+
+    function preferredWebProvider() {
+      const openaiProvider = providerByName("openai");
+      if (openaiProvider?.configured) return openaiProvider;
+      return firstConfiguredProvider();
     }
 
     function updateModelSuggestions() {
@@ -1057,16 +1172,23 @@ INDEX_HTML = """<!doctype html>
       skillSelect.innerHTML = "";
       const noneOption = document.createElement("option");
       noneOption.value = "";
-      noneOption.textContent = "No automatic skill";
+      noneOption.textContent = "不自动使用技能";
       skillSelect.appendChild(noneOption);
 
       for (const skill of state.config.skills || []) {
         const option = document.createElement("option");
         option.value = skill.name;
-        option.textContent = skill.name;
+        option.textContent = skillDisplayName(skill.name);
         if (skill.description) option.title = skill.description;
         skillSelect.appendChild(option);
       }
+    }
+
+    function skillDisplayName(name) {
+      if (!name) return "无";
+      if (name === "aircraft-design-rag") return "飞行器设计资料检索（/aircraft-design-rag）";
+      if (name === "aircraft-conceptual-design") return "飞行器概念设计（/aircraft-conceptual-design）";
+      return "/" + name;
     }
 
     function updateSkillStatus() {
@@ -1081,28 +1203,22 @@ INDEX_HTML = """<!doctype html>
       ragRebuildBtn.disabled = state.busy || !ragSelected;
       ragRefreshBtn.disabled = state.busy || !ragSelected;
       if (!selected) {
-        skillStatus.textContent = "No skill selected";
+        skillStatus.textContent = "未选择技能";
         skillStatus.title = "";
         renderRagStatus(null);
         return;
       }
       const skill = (state.config?.skills || []).find((item) => item.name === selected);
-      const ragNote = ragSelected && state.config?.rag?.available ? " · retriever ready" : "";
-      skillStatus.textContent = "Auto-use enabled: /" + selected + ragNote;
+      const ragNote = ragSelected && state.config?.rag?.available ? " · 检索器就绪" : "";
+      skillStatus.textContent = "已启用自动技能：" + skillDisplayName(selected) + ragNote;
       if (skill?.description) skillStatus.title = skill.description;
       renderRagStatus(ragSelected ? state.ragStatus : null);
     }
 
     function applyConfigDefaults(preferred) {
-      const configuredProvider = firstConfiguredProvider();
-      const providerName = preferred?.provider || state.config.default_provider;
-      const preferredProvider = providerByName(providerName);
-      providerSelect.value = preferredProvider?.configured
-        ? providerName
-        : configuredProvider?.name || state.config.default_provider;
-      const provider = providerByName(providerSelect.value);
-      const model = preferred?.model || provider?.default_model || "";
-      modelInput.value = model;
+      const provider = preferredWebProvider();
+      providerSelect.value = provider?.name || state.config.default_provider;
+      modelInput.value = WEB_MODEL;
       updateModelSuggestions();
       const preferredSkill = preferred?.autoSkill || state.config.default_auto_skill || "";
       const skillExists = preferredSkill && (state.config.skills || []).some((item) => item.name === preferredSkill);
@@ -1113,17 +1229,17 @@ INDEX_HTML = """<!doctype html>
     }
 
     function updateMeta(session) {
-      sessionTitle.textContent = session.messages.length ? "Workspace conversation" : "Fresh session";
-      providerMeta.textContent = "Provider: " + session.provider;
-      modelMeta.textContent = "Model: " + session.model;
-      skillMeta.textContent = "Skill: " + (session.auto_skill || "none");
-      sessionMeta.textContent = "Session: " + session.session_id;
+      sessionTitle.textContent = session.messages.length ? "飞行器设计会话" : "新的设计会话";
+      providerMeta.textContent = "模型服务：" + session.provider;
+      modelMeta.textContent = "模型：" + WEB_MODEL;
+      skillMeta.textContent = "技能：" + skillDisplayName(session.auto_skill);
+      sessionMeta.textContent = "会话：" + session.session_id;
       state.sessionId = session.session_id;
       state.provider = session.provider;
-      state.model = session.model;
+      state.model = WEB_MODEL;
       state.autoSkill = session.auto_skill || "";
       providerSelect.value = session.provider;
-      modelInput.value = session.model;
+      modelInput.value = WEB_MODEL;
       skillSelect.value = state.autoSkill;
       applyRagSettings(session.rag_settings);
       updateSkillStatus();
@@ -1145,19 +1261,19 @@ INDEX_HTML = """<!doctype html>
         .replace(/\\*\\*([^*]+)\\*\\*/g, "<strong>$1</strong>");
     }
 
-    function addCopyButton(container, text, label = "Copy") {
+    function addCopyButton(container, text, label = "复制") {
       const button = document.createElement("button");
       button.type = "button";
-      button.className = label === "Copy code" ? "code-copy" : "message-tool-button";
+      button.className = label === "复制代码" ? "code-copy" : "message-tool-button";
       button.textContent = label;
       button.addEventListener("click", async () => {
         try {
           await navigator.clipboard.writeText(text || "");
           const old = button.textContent;
-          button.textContent = "Copied";
+          button.textContent = "已复制";
           window.setTimeout(() => { button.textContent = old; }, 900);
         } catch (_err) {
-          button.textContent = "Copy failed";
+          button.textContent = "复制失败";
         }
       });
       container.appendChild(button);
@@ -1247,7 +1363,7 @@ INDEX_HTML = """<!doctype html>
         const code = document.createElement("code");
         code.textContent = raw.trimEnd();
         pre.appendChild(code);
-        addCopyButton(pre, code.textContent, "Copy code");
+        addCopyButton(pre, code.textContent, "复制代码");
         container.appendChild(pre);
       }
     }
@@ -1279,12 +1395,12 @@ INDEX_HTML = """<!doctype html>
       state.ragStatus = status || null;
       if (!skillSelect.value || skillSelect.value !== "aircraft-design-rag") {
         ragIndexStatus.className = "rag-index-status";
-        ragIndexStatus.innerHTML = "<strong>RAG index</strong>Select aircraft-design-rag to inspect local retrieval status.";
+        ragIndexStatus.innerHTML = "<strong>RAG 索引</strong>选择 aircraft-design-rag 后可查看本地资料索引状态。";
         return;
       }
       if (!status) {
         ragIndexStatus.className = "rag-index-status";
-        ragIndexStatus.innerHTML = "<strong>RAG index</strong>Status unknown. Click Refresh Status.";
+        ragIndexStatus.innerHTML = "<strong>RAG 索引</strong>状态未知，请点击“刷新状态”。";
         return;
       }
 
@@ -1294,21 +1410,21 @@ INDEX_HTML = """<!doctype html>
       const ready = Boolean(status.cache_ready);
       const stale = Boolean(status.cache_stale);
       const parts = [
-        formatCount(status.markdown_files) + " files",
-        formatCount(cache.chunk_count) + " chunks",
-        "manifest " + formatMs(status.timings?.manifest_ms),
+        formatCount(status.markdown_files) + " 个文件",
+        formatCount(cache.chunk_count) + " 个片段",
+        "清单 " + formatMs(status.timings?.manifest_ms),
       ];
-      if (running) parts.push("building now");
-      if (rebuild.timings?.index_build_ms) parts.push("last build " + formatMs(rebuild.timings.index_build_ms));
+      if (running) parts.push("正在构建");
+      if (rebuild.timings?.index_build_ms) parts.push("上次构建 " + formatMs(rebuild.timings.index_build_ms));
 
-      let title = "Index ready";
-      if (running) title = "Index building";
-      else if (!status.cache_exists) title = "Index missing";
-      else if (stale) title = "Index stale";
+      let title = "索引就绪";
+      if (running) title = "索引构建中";
+      else if (!status.cache_exists) title = "索引不存在";
+      else if (stale) title = "索引需要更新";
       ragIndexStatus.className = "rag-index-status" + (ready || running ? "" : " warning");
       ragIndexStatus.innerHTML = "<strong>" + escapeHtml(title) + "</strong>" + escapeHtml(parts.join(" · "));
       if (rebuild.error) {
-        ragIndexStatus.innerHTML += "<br>" + escapeHtml("Last rebuild failed: " + rebuild.error);
+        ragIndexStatus.innerHTML += "<br>" + escapeHtml("上次重建失败：" + rebuild.error);
       }
     }
 
@@ -1319,15 +1435,15 @@ INDEX_HTML = """<!doctype html>
       const summary = document.createElement("div");
       summary.className = "evidence-summary";
       const cache = rag?.cache?.enabled
-        ? (rag.cache.ready === false ? "index warming" : (rag.cache.hit ? "cache hit" : "cache miss"))
-        : "cache off";
+        ? (rag.cache.ready === false ? "索引预热中" : (rag.cache.hit ? "缓存命中" : "缓存未命中"))
+        : "缓存关闭";
       summary.textContent = [
-        "RAG evidence",
-        "hits " + hits.length,
-        "files " + (rag?.markdown_files_scanned ?? "--"),
-        "chunks " + (rag?.chunks_indexed ?? "--"),
-        "candidates " + (rag?.candidate_chunks ?? "--"),
-        "retrieval " + formatMs(rag?.timings?.total_ms),
+        "RAG 证据",
+        "命中 " + hits.length,
+        "文件 " + (rag?.markdown_files_scanned ?? "--"),
+        "片段 " + (rag?.chunks_indexed ?? "--"),
+        "候选 " + (rag?.candidate_chunks ?? "--"),
+        "检索 " + formatMs(rag?.timings?.total_ms),
         cache,
       ].join(" · ");
       panel.appendChild(summary);
@@ -1342,7 +1458,7 @@ INDEX_HTML = """<!doctype html>
       if (!hits.length && !rag?.message) {
         const empty = document.createElement("div");
         empty.className = "evidence-card";
-        empty.textContent = "No matching local evidence was found.";
+        empty.textContent = "未找到匹配的本地证据。";
         panel.appendChild(empty);
         return panel;
       }
@@ -1353,9 +1469,9 @@ INDEX_HTML = """<!doctype html>
         const header = document.createElement("header");
         const path = document.createElement("span");
         path.className = "evidence-path";
-        path.textContent = (hit.file || "unknown") + ":" + (hit.start_line || "?") + "-" + (hit.end_line || "?");
+        path.textContent = (hit.file || "未知文件") + ":" + (hit.start_line || "?") + "-" + (hit.end_line || "?");
         const score = document.createElement("span");
-        score.textContent = "score " + (hit.score ?? "--");
+        score.textContent = "得分 " + (hit.score ?? "--");
         header.appendChild(path);
         header.appendChild(score);
         card.appendChild(header);
@@ -1388,12 +1504,12 @@ INDEX_HTML = """<!doctype html>
 
       const label = document.createElement("div");
       label.className = "message-label";
-      label.textContent = role === "user" ? "You" : role === "assistant" ? "Clawd" : "System";
+      label.textContent = role === "user" ? "你" : role === "assistant" ? "设计助手" : "系统";
       wrapper.appendChild(label);
 
       const bubble = document.createElement("div");
       bubble.className = "bubble";
-      renderMarkdownInto(bubble, text || (role === "assistant" ? "[No text response]" : ""));
+      renderMarkdownInto(bubble, text || (role === "assistant" ? "[没有文本响应]" : ""));
       wrapper.appendChild(bubble);
 
       if (text) {
@@ -1408,7 +1524,7 @@ INDEX_HTML = """<!doctype html>
         details.className = "tool-events";
 
         const summary = document.createElement("summary");
-        summary.textContent = "Tool activity (" + events.length + ")";
+        summary.textContent = "工具活动（" + events.length + "）";
         details.appendChild(summary);
 
         const eventList = document.createElement("div");
@@ -1419,9 +1535,9 @@ INDEX_HTML = """<!doctype html>
           item.className = "event" + (event.is_error ? " is-error" : "");
           const title = document.createElement("strong");
           title.textContent = event.kind === "rag_retrieval"
-            ? "RAG · retrieval"
+            ? "RAG · 检索"
             : event.kind === "permission"
-            ? "Permission · " + event.tool_name
+            ? "权限 · " + event.tool_name
             : event.tool_name + " · " + event.kind;
           item.appendChild(title);
 
@@ -1457,7 +1573,7 @@ INDEX_HTML = """<!doctype html>
     function renderHero() {
       const hero = document.createElement("div");
       hero.className = "hero";
-      hero.innerHTML = "<strong>Browser-first workflow</strong><span>Use the same local agent from your browser. The current workspace and tool output stay attached to this session.</span>";
+      hero.innerHTML = "<strong>飞行器设计流程</strong><span>围绕任务需求、总体参数、约束边界、动力与布局方案开展对话；每轮回答下方可展开查看检索证据和工具活动。</span>";
       chatLog.appendChild(hero);
     }
 
@@ -1491,7 +1607,7 @@ INDEX_HTML = """<!doctype html>
       if (!state.sessions.length) {
         const empty = document.createElement("p");
         empty.className = "hint";
-        empty.textContent = "No active browser sessions yet.";
+        empty.textContent = "暂无活动的浏览器会话。";
         sessionList.appendChild(empty);
         return;
       }
@@ -1502,7 +1618,7 @@ INDEX_HTML = """<!doctype html>
         const title = document.createElement("strong");
         title.textContent = session.provider + " · " + session.model;
         const subtitle = document.createElement("span");
-        subtitle.textContent = (session.last_message || "Fresh session") + " · " + session.message_count + " msgs";
+        subtitle.textContent = (session.last_message || "新的设计会话") + " · " + session.message_count + " 条消息";
         button.appendChild(title);
         button.appendChild(subtitle);
         button.addEventListener("click", () => loadSession(session.session_id));
@@ -1530,8 +1646,8 @@ INDEX_HTML = """<!doctype html>
         const payload = await api("/api/rag/status");
         renderRagStatus(payload.rag || null);
         if (!options.quiet && payload.rag) {
-          const ready = payload.rag.cache_ready ? "ready" : "not ready";
-          setStatus("RAG index status: " + ready + ".");
+          const ready = payload.rag.cache_ready ? "就绪" : "未就绪";
+          setStatus("RAG 索引状态：" + ready + "。");
         }
         return payload.rag || null;
       } catch (error) {
@@ -1549,8 +1665,8 @@ INDEX_HTML = """<!doctype html>
         if (!running) {
           window.clearInterval(state.ragPollTimer);
           state.ragPollTimer = null;
-          if (status?.cache_ready) setStatus("RAG index ready. Retrieval should now stay in the fast path.");
-          if (status?.rebuild?.error) setStatus("RAG rebuild failed: " + status.rebuild.error, true);
+          if (status?.cache_ready) setStatus("RAG 索引已就绪，后续检索将走快速路径。");
+          if (status?.rebuild?.error) setStatus("RAG 索引重建失败：" + status.rebuild.error, true);
         }
       }, 1800);
     }
@@ -1567,7 +1683,7 @@ INDEX_HTML = """<!doctype html>
         });
         renderRagStatus(payload.rag || null);
         pollRagStatusUntilDone();
-        if (!options.quiet) setStatus("RAG index rebuild started in the background.");
+        if (!options.quiet) setStatus("RAG 索引已开始在后台重建。");
         return payload.rag || null;
       } catch (error) {
         if (!options.quiet) setStatus(error.message, true);
@@ -1576,13 +1692,13 @@ INDEX_HTML = """<!doctype html>
     }
 
     async function createSession(options = {}) {
-      setBusy(true, "Starting...");
+      setBusy(true, "正在启动...");
       try {
         const payload = await api("/api/sessions", {
           method: "POST",
           body: JSON.stringify({
             provider: providerSelect.value,
-            model: modelInput.value.trim(),
+            model: WEB_MODEL,
             auto_skill: skillSelect.value || null,
             auto_approve: autoApproveToggle.checked,
             rag_settings: getRagSettings(),
@@ -1591,7 +1707,7 @@ INDEX_HTML = """<!doctype html>
         updateMeta(payload.session);
         renderMessages(payload.session.messages);
         await refreshSessions();
-        setStatus("New session ready.");
+        setStatus("新设计会话已就绪。");
       } catch (error) {
         setStatus(error.message, true);
       } finally {
@@ -1608,7 +1724,7 @@ INDEX_HTML = """<!doctype html>
 
     async function resetSession() {
       if (!state.sessionId) return;
-      setBusy(true, "Resetting...");
+      setBusy(true, "正在清空...");
       try {
         const payload = await api("/api/sessions/" + encodeURIComponent(state.sessionId) + "/reset", {
           method: "POST",
@@ -1621,7 +1737,7 @@ INDEX_HTML = """<!doctype html>
         updateMeta(payload.session);
         renderMessages(payload.session.messages);
         await refreshSessions();
-        setStatus("Conversation cleared.");
+        setStatus("对话已清空。");
       } catch (error) {
         setStatus(error.message, true);
       } finally {
@@ -1634,7 +1750,7 @@ INDEX_HTML = """<!doctype html>
         await createSession({ keepBusy: true });
         return;
       }
-      if (providerSelect.value !== state.provider || modelInput.value.trim() !== state.model) {
+      if (providerSelect.value !== state.provider || WEB_MODEL !== state.model) {
         await createSession({ keepBusy: true });
         return;
       }
@@ -1688,7 +1804,7 @@ INDEX_HTML = """<!doctype html>
           if (!parsed) continue;
           if (parsed.event === "chunk") handlers.onChunk?.(parsed.data.text || "");
           if (parsed.event === "tool") handlers.onTool?.(parsed.data);
-          if (parsed.event === "error") throw new Error(parsed.data.error || "Streaming request failed");
+          if (parsed.event === "error") throw new Error(parsed.data.error || "流式请求失败");
           if (parsed.event === "done") finalPayload = parsed.data;
         }
       }
@@ -1696,7 +1812,7 @@ INDEX_HTML = """<!doctype html>
         const parsed = parseSseBlock(buffer);
         if (parsed?.event === "done") finalPayload = parsed.data;
       }
-      if (!finalPayload) throw new Error("Streaming response ended before completion.");
+      if (!finalPayload) throw new Error("流式响应在完成前中断。");
       return finalPayload;
     }
 
@@ -1705,19 +1821,20 @@ INDEX_HTML = """<!doctype html>
       const message = promptInput.value.trim();
       if (!message || state.busy) return;
 
-      setBusy(true, "Thinking...");
+      setBusy(true, "正在思考...");
       setStatus("");
       state.abortController = new AbortController();
       try {
         await ensureMatchingSession();
         if (!state.sessionId) {
-          throw new Error("Session is not ready yet.");
+          throw new Error("会话尚未就绪。");
         }
 
         const userMessage = createMessage("user", message);
         chatLog.appendChild(userMessage);
         chatLog.scrollTop = chatLog.scrollHeight;
         promptInput.value = "";
+        autosizePrompt();
 
         let liveAssistant = null;
         let liveText = "";
@@ -1753,11 +1870,11 @@ INDEX_HTML = """<!doctype html>
         await refreshSessions();
         const usage = payload.reply.usage || {};
         const tokenBits = [];
-        if (usage.input_tokens) tokenBits.push("input " + usage.input_tokens);
-        if (usage.output_tokens) tokenBits.push("output " + usage.output_tokens);
-        setStatus(tokenBits.length ? "Turn complete: " + tokenBits.join(" / ") : "Turn complete.");
+        if (usage.input_tokens) tokenBits.push("输入 " + usage.input_tokens);
+        if (usage.output_tokens) tokenBits.push("输出 " + usage.output_tokens);
+        setStatus(tokenBits.length ? "本轮完成：" + tokenBits.join(" / ") : "本轮完成。");
       } catch (error) {
-        const messageText = error.name === "AbortError" ? "Request stopped locally. The server may finish the already-started turn in the background." : error.message;
+        const messageText = error.name === "AbortError" ? "已在本地停止请求；服务器可能仍会完成已开始的回合。" : error.message;
         chatLog.appendChild(createMessage("system", messageText));
         chatLog.scrollTop = chatLog.scrollHeight;
         setStatus(messageText, true);
@@ -1770,18 +1887,18 @@ INDEX_HTML = """<!doctype html>
     async function runRagSearch() {
       const query = promptInput.value.trim();
       if (!query) {
-        setStatus("Type a query in the composer before testing retrieval.", true);
+        setStatus("请先在输入框中输入检索问题。", true);
         promptInput.focus();
         return;
       }
-      setBusy(true, "Retrieving...");
+      setBusy(true, "正在检索...");
       setStatus("");
       try {
         if (getRagSettings().use_cache) {
           const status = await refreshRagStatus({ quiet: true });
           if (status && !status.cache_ready) {
             await startRagRebuild({ quiet: true, force: false });
-            setStatus("RAG index is not ready yet. Background rebuild started; retry retrieval when it is ready.", true);
+            setStatus("RAG 索引尚未就绪，已开始后台重建；索引就绪后请重试检索。", true);
             return;
           }
         }
@@ -1794,7 +1911,7 @@ INDEX_HTML = """<!doctype html>
         });
         renderRagResults(payload.rag);
         const hits = Array.isArray(payload.rag?.hits) ? payload.rag.hits.length : 0;
-        setStatus("RAG retrieval complete: " + hits + " hit(s).");
+        setStatus("RAG 检索完成：" + hits + " 条命中。");
         await refreshRagStatus({ quiet: true });
       } catch (error) {
         renderRagResults(null);
@@ -1807,7 +1924,7 @@ INDEX_HTML = """<!doctype html>
     providerSelect.addEventListener("change", () => {
       const provider = providerByName(providerSelect.value);
       if (provider) {
-        modelInput.value = provider.default_model || "";
+        modelInput.value = WEB_MODEL;
       }
       updateModelSuggestions();
       saveLocalState();
@@ -1829,7 +1946,7 @@ INDEX_HTML = """<!doctype html>
     resetSessionBtn.addEventListener("click", resetSession);
     ragSearchBtn.addEventListener("click", runRagSearch);
     ragRebuildBtn.addEventListener("click", async () => {
-      setBusy(true, "Starting index...");
+      setBusy(true, "正在启动索引...");
       try {
         await startRagRebuild({ force: true });
       } finally {
@@ -1839,12 +1956,17 @@ INDEX_HTML = """<!doctype html>
     ragRefreshBtn.addEventListener("click", () => refreshRagStatus());
     stopBtn.addEventListener("click", () => {
       state.abortController?.abort();
-      setStatus("Stopping local request...", true);
+      setStatus("正在停止本地请求...", true);
     });
     clearDraftBtn.addEventListener("click", () => {
       promptInput.value = "";
+      autosizePrompt();
       promptInput.focus();
     });
+    document.querySelectorAll(".prompt-chip").forEach((button) => {
+      button.addEventListener("click", () => setPromptDraft(button.dataset.prompt || button.textContent || ""));
+    });
+    promptInput.addEventListener("input", autosizePrompt);
     promptInput.addEventListener("keydown", (event) => {
       if (event.key === "Enter" && !event.shiftKey) {
         event.preventDefault();
@@ -1854,7 +1976,7 @@ INDEX_HTML = """<!doctype html>
     document.getElementById("composerForm").addEventListener("submit", sendPrompt);
 
     async function init() {
-      setBusy(true, "Loading...");
+      setBusy(true, "正在加载...");
       try {
         state.config = await api("/api/config");
         workspaceRoot.textContent = state.config.workspace_root;
@@ -1867,7 +1989,7 @@ INDEX_HTML = """<!doctype html>
           try {
             await loadSession(local.sessionId);
             await refreshSessions();
-            setStatus("Restored previous session.");
+            setStatus("已恢复上次会话。");
           } catch (_err) {
             await createSession();
           }
@@ -1939,19 +2061,20 @@ class ClawdWebService:
         providers: list[dict[str, Any]] = []
         for name, info in PROVIDER_INFO.items():
             provider_config = configured.get(name, {})
+            default_model = "deepseek-v4-pro" if name == "openai" else provider_config.get("default_model", info["default_model"])
             providers.append(
                 {
                     "name": name,
                     "label": info["label"],
                     "configured": bool(provider_config.get("api_key")),
                     "base_url": provider_config.get("base_url", info["default_base_url"]),
-                    "default_model": provider_config.get("default_model", info["default_model"]),
+                    "default_model": default_model,
                     "available_models": info["available_models"],
                 }
             )
         return {
             "workspace_root": str(self.workspace_root),
-            "default_provider": config.get("default_provider", "anthropic"),
+            "default_provider": "openai" if configured.get("openai", {}).get("api_key") else config.get("default_provider", "anthropic"),
             "providers": providers,
             "skills": self._list_project_skills(),
             "default_auto_skill": self._default_auto_skill(),
@@ -1968,16 +2091,17 @@ class ClawdWebService:
         rag_settings: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Create a new in-memory browser session."""
-        provider_name = provider_name or load_config().get("default_provider", "anthropic")
+        config = load_config()
+        provider_name = provider_name or ("openai" if config.get("providers", {}).get("openai", {}).get("api_key") else config.get("default_provider", "anthropic"))
         self._ensure_known_provider(provider_name)
         provider_config = get_provider_config(provider_name)
         if not provider_config.get("api_key"):
             raise ValueError(
-                f"{provider_name} API key is not configured. Run `clawd login` and set one first."
+                f"{provider_name} API Key 未配置。请先运行 `clawd login` 并完成配置。"
             )
 
         provider_class = get_provider_class(provider_name)
-        resolved_model = (model or "").strip() or provider_config.get("default_model")
+        resolved_model = "deepseek-v4-pro" if provider_name == "openai" else (model or "").strip() or provider_config.get("default_model")
         provider = provider_class(
             api_key=provider_config["api_key"],
             base_url=provider_config.get("base_url"),
@@ -2171,7 +2295,7 @@ class ClawdWebService:
             event = {
                     "kind": "rag_retrieval",
                     "tool_name": state.auto_skill,
-                    "summary": f"RAG retrieval failed: {exc}",
+                    "summary": f"RAG 检索失败：{exc}",
                     "preview": {"query": query, "settings": state.rag_settings.to_dict()},
                     "error": str(exc),
                     "is_error": True,
@@ -2189,7 +2313,7 @@ class ClawdWebService:
         event = {
                 "kind": "rag_retrieval",
                 "tool_name": state.auto_skill,
-                "summary": f"Attached RAG evidence · hits={hit_count}",
+                "summary": f"已附加 RAG 证据 · 命中={hit_count}",
                 "preview": payload,
                 "rag": payload,
                 "error": None,
@@ -2289,7 +2413,7 @@ class ClawdWebService:
         if value is None:
             return WebRagSettings(**settings.to_dict())
         if not isinstance(value, dict):
-            raise ValueError("rag_settings must be an object")
+            raise ValueError("rag_settings 必须是对象")
 
         top_k = self._bounded_int(value.get("top_k", settings.top_k), "rag_settings.top_k", 1, 20)
         max_snippet_chars = self._bounded_int(
@@ -2319,18 +2443,18 @@ class ClawdWebService:
 
     def _bounded_int(self, value: Any, name: str, minimum: int, maximum: int) -> int:
         if isinstance(value, bool):
-            raise ValueError(f"{name} must be an integer")
+            raise ValueError(f"{name} 必须是整数")
         try:
             parsed = int(value)
         except (TypeError, ValueError) as exc:
-            raise ValueError(f"{name} must be an integer") from exc
+            raise ValueError(f"{name} 必须是整数") from exc
         if parsed < minimum or parsed > maximum:
-            raise ValueError(f"{name} must be between {minimum} and {maximum}")
+            raise ValueError(f"{name} 必须在 {minimum} 到 {maximum} 之间")
         return parsed
 
     def _bool_setting(self, value: Any, name: str) -> bool:
         if not isinstance(value, bool):
-            raise ValueError(f"{name} must be a boolean")
+            raise ValueError(f"{name} 必须是布尔值")
         return value
 
     def _rag_bootstrap_payload(self) -> dict[str, Any]:
@@ -2387,7 +2511,7 @@ class ClawdWebService:
             return None
         names = {skill["name"] for skill in self._list_project_skills()}
         if normalized not in names:
-            raise ValueError(f"Unknown skill: {normalized}")
+            raise ValueError(f"未知技能：{normalized}")
         return normalized
 
     def _build_user_message(
@@ -2567,7 +2691,7 @@ class ClawdWebRequestHandler(BaseHTTPRequestHandler):
         if parsed.path.startswith("/api/sessions/"):
             session_id = parsed.path.removeprefix("/api/sessions/")
             if not session_id or "/" in session_id:
-                self._send_error_json(HTTPStatus.NOT_FOUND, "Unknown route")
+                self._send_error_json(HTTPStatus.NOT_FOUND, "未知路由")
                 return
             try:
                 payload = self.server.service.get_session_payload(session_id)
@@ -2576,7 +2700,7 @@ class ClawdWebRequestHandler(BaseHTTPRequestHandler):
                 return
             self._send_json(HTTPStatus.OK, payload)
             return
-        self._send_error_json(HTTPStatus.NOT_FOUND, "Unknown route")
+        self._send_error_json(HTTPStatus.NOT_FOUND, "未知路由")
 
     def do_POST(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
@@ -2605,7 +2729,7 @@ class ClawdWebRequestHandler(BaseHTTPRequestHandler):
             session_id = parsed.path.removeprefix("/api/sessions/").removesuffix("/messages/stream").rstrip("/")
             message = self._optional_string(payload, "message")
             if message is None:
-                self._send_error_json(HTTPStatus.BAD_REQUEST, "message is required")
+                self._send_error_json(HTTPStatus.BAD_REQUEST, "message 为必填项")
                 return
             self._send_sse_headers()
 
@@ -2648,7 +2772,7 @@ class ClawdWebRequestHandler(BaseHTTPRequestHandler):
             session_id = parsed.path.removeprefix("/api/sessions/").removesuffix("/messages").rstrip("/")
             message = self._optional_string(payload, "message")
             if message is None:
-                self._send_error_json(HTTPStatus.BAD_REQUEST, "message is required")
+                self._send_error_json(HTTPStatus.BAD_REQUEST, "message 为必填项")
                 return
             try:
                 result = self.server.service.send_message(
@@ -2673,7 +2797,7 @@ class ClawdWebRequestHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/rag/search":
             query = self._optional_string(payload, "query")
             if query is None:
-                self._send_error_json(HTTPStatus.BAD_REQUEST, "query is required")
+                self._send_error_json(HTTPStatus.BAD_REQUEST, "query 为必填项")
                 return
             try:
                 result = self.server.service.search_rag(
@@ -2698,7 +2822,7 @@ class ClawdWebRequestHandler(BaseHTTPRequestHandler):
             self._send_json(HTTPStatus.ACCEPTED, result)
             return
 
-        self._send_error_json(HTTPStatus.NOT_FOUND, "Unknown route")
+        self._send_error_json(HTTPStatus.NOT_FOUND, "未知路由")
 
     def log_message(self, format: str, *args: Any) -> None:
         """Keep the server quiet unless needed for debugging."""
@@ -2712,9 +2836,9 @@ class ClawdWebRequestHandler(BaseHTTPRequestHandler):
         try:
             data = json.loads(raw.decode("utf-8"))
         except json.JSONDecodeError as exc:
-            raise ValueError(f"Invalid JSON body: {exc.msg}") from exc
+            raise ValueError(f"JSON 请求体无效：{exc.msg}") from exc
         if not isinstance(data, dict):
-            raise ValueError("JSON body must be an object")
+            raise ValueError("JSON 请求体必须是对象")
         return data
 
     def _optional_string(self, payload: dict[str, Any], key: str) -> str | None:
@@ -2722,7 +2846,7 @@ class ClawdWebRequestHandler(BaseHTTPRequestHandler):
         if value is None:
             return None
         if not isinstance(value, str):
-            raise ValueError(f"{key} must be a string")
+            raise ValueError(f"{key} 必须是字符串")
         return value
 
     def _optional_bool(self, payload: dict[str, Any], key: str, default: bool | None) -> bool | None:
@@ -2730,7 +2854,7 @@ class ClawdWebRequestHandler(BaseHTTPRequestHandler):
         if value is None:
             return None
         if not isinstance(value, bool):
-            raise ValueError(f"{key} must be a boolean")
+            raise ValueError(f"{key} 必须是布尔值")
         return value
 
     def _optional_object(self, payload: dict[str, Any], key: str) -> dict[str, Any] | None:
@@ -2738,7 +2862,7 @@ class ClawdWebRequestHandler(BaseHTTPRequestHandler):
         if value is None:
             return None
         if not isinstance(value, dict):
-            raise ValueError(f"{key} must be an object")
+            raise ValueError(f"{key} 必须是对象")
         return value
 
     def _send_json(self, status: HTTPStatus, payload: dict[str, Any]) -> None:
@@ -2776,12 +2900,12 @@ def run_web_server(host: str = "127.0.0.1", port: int = 8080, workspace_root: Pa
     service = ClawdWebService(workspace_root=workspace_root)
     server = _ClawdHTTPServer((host, port), service)
     url = f"http://{host}:{port}"
-    print(f"Clawd Web UI is running at {url}")
-    print(f"Workspace root: {service.workspace_root}")
-    print("Press Ctrl+C to stop the server.")
+    print(f"飞行器设计网页端已启动：{url}")
+    print(f"工作区：{service.workspace_root}")
+    print("按 Ctrl+C 停止服务器。")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        print("\nStopping Clawd Web UI...")
+        print("\n正在停止飞行器设计网页端...")
     finally:
         server.server_close()

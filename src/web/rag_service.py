@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import importlib.util
 import sqlite3
+import sys
 import threading
 import time
 from collections import OrderedDict
@@ -244,9 +245,9 @@ class RagIndexService:
         status = self.status(settings)
         rebuild = status.get("rebuild") or {}
         message = (
-            "RAG index is building in the background; retry after the status changes to ready."
+            "RAG 索引正在后台构建；状态变为就绪后请重试。"
             if rebuild.get("running")
-            else "RAG index is not ready yet; build the index before running retrieval."
+            else "RAG 索引尚未就绪；请先构建索引再运行检索。"
         )
         return {
             "query": query.strip(),
@@ -279,7 +280,12 @@ class RagIndexService:
             if spec is None or spec.loader is None:
                 raise ValueError(f"Unable to load RAG search script: {self.script_path}")
             module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
+            sys.modules[spec.name] = module
+            try:
+                spec.loader.exec_module(module)
+            except Exception:
+                sys.modules.pop(spec.name, None)
+                raise
             self._module = module
             return module
 
