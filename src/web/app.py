@@ -49,24 +49,23 @@ INDEX_HTML = """<!doctype html>
   <title>飞行器设计工作台</title>
   <style>
     :root {
-      --bg: #f4f6f2;
-      --bg-accent: #dce8e0;
-      --panel: rgba(255, 253, 248, 0.94);
-      --panel-strong: #fffefa;
-      --ink: #1d2a24;
-      --muted: #5b6b63;
-      --line: rgba(39, 58, 49, 0.12);
-      --primary: #1f6d55;
-      --primary-strong: #124c3b;
-      --sky: #2f6f8f;
-      --warm: #d9895b;
-      --user: #193b52;
-      --tool-bg: #eef5f1;
+      --bg: #f7f7f4;
+      --panel: #ffffff;
+      --panel-strong: #ffffff;
+      --ink: #202420;
+      --muted: #66706a;
+      --line: #e5e2d9;
+      --primary: #29624f;
+      --primary-strong: #183f34;
+      --sky: #255f78;
+      --warm: #b56f42;
+      --user: #24435a;
+      --tool-bg: #faf9f5;
       --danger: #a53c30;
-      --shadow: 0 18px 44px rgba(32, 47, 40, 0.1);
-      --radius-xl: 18px;
-      --radius-lg: 10px;
-      --radius-md: 8px;
+      --shadow: 0 1px 2px rgba(32, 34, 31, 0.04);
+      --radius-xl: 8px;
+      --radius-lg: 8px;
+      --radius-md: 6px;
     }
 
     * { box-sizing: border-box; }
@@ -75,22 +74,19 @@ INDEX_HTML = """<!doctype html>
       height: 100%;
       margin: 0;
       color: var(--ink);
-      background:
-        radial-gradient(circle at top left, rgba(217, 137, 91, 0.18), transparent 34%),
-        radial-gradient(circle at top right, rgba(31, 109, 85, 0.18), transparent 26%),
-        linear-gradient(180deg, #f6f1e7 0%, var(--bg) 56%, #ecf2ea 100%);
+      background: var(--bg);
       font-family: "IBM Plex Sans", "Avenir Next", "Segoe UI", sans-serif;
     }
 
     body {
-      padding: 16px;
+      padding: 12px;
     }
 
     .shell {
       display: grid;
-      grid-template-columns: 380px minmax(0, 1fr);
-      gap: 14px;
-      height: calc(100vh - 32px);
+      grid-template-columns: 340px minmax(0, 1fr);
+      gap: 12px;
+      height: calc(100vh - 24px);
     }
 
     .panel {
@@ -98,7 +94,6 @@ INDEX_HTML = """<!doctype html>
       border: 1px solid var(--line);
       border-radius: var(--radius-xl);
       box-shadow: var(--shadow);
-      backdrop-filter: blur(12px);
     }
 
     .sidebar {
@@ -112,19 +107,17 @@ INDEX_HTML = """<!doctype html>
     .brand {
       padding: 16px;
       border-radius: var(--radius-lg);
-      background:
-        linear-gradient(145deg, rgba(255,255,255,0.94), rgba(245, 240, 231, 0.96)),
-        linear-gradient(145deg, rgba(31, 109, 85, 0.1), rgba(47, 111, 143, 0.08));
-      border: 1px solid rgba(31, 109, 85, 0.12);
+      background: #fbfaf7;
+      border: 1px solid var(--line);
     }
 
     .eyebrow {
       display: inline-flex;
       align-items: center;
       gap: 8px;
-      padding: 5px 9px;
+      padding: 4px 8px;
       border-radius: 999px;
-      background: rgba(31, 109, 85, 0.1);
+      background: rgba(41, 98, 79, 0.08);
       color: var(--primary-strong);
       font-size: 12px;
       letter-spacing: 0;
@@ -132,9 +125,8 @@ INDEX_HTML = """<!doctype html>
 
     .brand h1 {
       margin: 12px 0 8px;
-      font-family: "Iowan Old Style", "Palatino Linotype", serif;
-      font-size: 29px;
-      line-height: 1.08;
+      font-size: 24px;
+      line-height: 1.12;
       letter-spacing: 0;
     }
 
@@ -147,7 +139,7 @@ INDEX_HTML = """<!doctype html>
     .workspace {
       margin-top: 12px;
       padding: 10px;
-      background: rgba(31, 109, 85, 0.07);
+      background: #f1f4f1;
       border-radius: var(--radius-md);
       font-size: 12px;
       color: var(--primary-strong);
@@ -159,6 +151,7 @@ INDEX_HTML = """<!doctype html>
       border: 1px solid var(--line);
       border-radius: var(--radius-lg);
       background: var(--panel-strong);
+      box-shadow: none;
     }
 
     .card h2 {
@@ -216,9 +209,9 @@ INDEX_HTML = """<!doctype html>
     select,
     textarea {
       width: 100%;
-      border: 1px solid rgba(29, 42, 36, 0.14);
-      border-radius: 10px;
-      background: #fffdf9;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fffefa;
       color: var(--ink);
       font: inherit;
       padding: 12px 14px;
@@ -227,8 +220,8 @@ INDEX_HTML = """<!doctype html>
 
     input[readonly] {
       color: var(--primary-strong);
-      background: rgba(31, 109, 85, 0.06);
-      border-color: rgba(31, 109, 85, 0.18);
+      background: #f4f7f4;
+      border-color: #d7e2dc;
     }
 
     textarea {
@@ -246,8 +239,8 @@ INDEX_HTML = """<!doctype html>
     select:focus,
     textarea:focus {
       outline: none;
-      border-color: rgba(31, 109, 85, 0.55);
-      box-shadow: 0 0 0 4px rgba(31, 109, 85, 0.12);
+      border-color: rgba(41, 98, 79, 0.55);
+      box-shadow: 0 0 0 3px rgba(41, 98, 79, 0.1);
     }
 
     .toggle {
@@ -255,8 +248,8 @@ INDEX_HTML = """<!doctype html>
       align-items: center;
       gap: 12px;
       padding: 11px 12px;
-      border-radius: 10px;
-      background: rgba(31, 109, 85, 0.07);
+      border-radius: 8px;
+      background: #f4f7f4;
       color: var(--primary-strong);
       font-size: 14px;
     }
@@ -268,9 +261,7 @@ INDEX_HTML = """<!doctype html>
     }
 
     .skill-card {
-      background:
-        linear-gradient(145deg, rgba(31, 109, 85, 0.06), rgba(47, 111, 143, 0.06)),
-        var(--panel-strong);
+      background: #fbfaf7;
     }
 
     .skill-status {
@@ -290,7 +281,7 @@ INDEX_HTML = """<!doctype html>
       height: 9px;
       border-radius: 999px;
       background: var(--primary);
-      box-shadow: 0 0 0 4px rgba(31, 109, 85, 0.1);
+      box-shadow: 0 0 0 4px rgba(41, 98, 79, 0.1);
     }
 
     .session-list {
@@ -303,23 +294,23 @@ INDEX_HTML = """<!doctype html>
 
     .session-item {
       width: 100%;
-      border-radius: 10px;
+      border-radius: 8px;
       padding: 10px 12px;
       text-align: left;
-      background: rgba(31, 109, 85, 0.06);
+      background: #fbfaf7;
       color: var(--ink);
-      border: 1px solid rgba(31, 109, 85, 0.1);
+      border: 1px solid var(--line);
       box-shadow: none;
     }
 
     .session-item:hover {
       transform: none;
-      background: rgba(31, 109, 85, 0.1);
+      background: #f2f6f3;
     }
 
     .session-item.active {
-      border-color: rgba(31, 109, 85, 0.35);
-      background: rgba(31, 109, 85, 0.14);
+      border-color: rgba(41, 98, 79, 0.35);
+      background: #edf4ef;
     }
 
     .session-item strong,
@@ -349,7 +340,7 @@ INDEX_HTML = """<!doctype html>
 
     button {
       border: 0;
-      border-radius: 10px;
+      border-radius: 8px;
       padding: 12px 18px;
       font: inherit;
       font-weight: 700;
@@ -368,15 +359,15 @@ INDEX_HTML = """<!doctype html>
     }
 
     .primary {
-      background: linear-gradient(135deg, var(--primary), var(--primary-strong));
+      background: var(--primary-strong);
       color: white;
-      box-shadow: 0 12px 20px rgba(18, 76, 59, 0.16);
+      box-shadow: none;
     }
 
     .secondary {
       background: white;
       color: var(--primary-strong);
-      border: 1px solid rgba(31, 109, 85, 0.16);
+      border: 1px solid var(--line);
     }
 
     .main {
@@ -392,7 +383,7 @@ INDEX_HTML = """<!doctype html>
       gap: 16px;
       padding: 16px 20px;
       border-bottom: 1px solid var(--line);
-      background: rgba(255, 252, 247, 0.92);
+      background: #ffffff;
     }
 
     .topbar h2 {
@@ -417,7 +408,7 @@ INDEX_HTML = """<!doctype html>
       white-space: nowrap;
       padding: 3px 8px;
       border-radius: 999px;
-      background: rgba(31, 109, 85, 0.06);
+      background: #f6f6f2;
     }
 
     .badge {
@@ -426,7 +417,7 @@ INDEX_HTML = """<!doctype html>
       gap: 8px;
       border-radius: 999px;
       padding: 8px 12px;
-      background: rgba(31, 109, 85, 0.08);
+      background: #f0f5f1;
       color: var(--primary-strong);
       font-size: 13px;
       font-weight: 700;
@@ -437,18 +428,21 @@ INDEX_HTML = """<!doctype html>
     }
 
     .chat {
-      padding: 20px;
+      padding: 28px 32px;
       overflow: auto;
       display: flex;
       flex-direction: column;
-      gap: 14px;
+      align-items: center;
+      gap: 18px;
+      background: #ffffff;
     }
 
     .hero {
+      width: min(880px, 100%);
       padding: 18px 20px;
-      border: 1px solid rgba(29, 42, 36, 0.12);
-      border-radius: 10px;
-      background: linear-gradient(145deg, rgba(255,255,255,0.78), rgba(223, 236, 228, 0.78));
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfaf7;
       color: var(--muted);
     }
 
@@ -462,20 +456,22 @@ INDEX_HTML = """<!doctype html>
     .message {
       display: flex;
       flex-direction: column;
-      gap: 10px;
-      max-width: min(920px, 100%);
+      gap: 8px;
+      width: min(880px, 100%);
+      max-width: 100%;
       animation: fadeIn 180ms ease;
     }
 
     .message.user {
-      align-self: flex-end;
+      align-self: center;
+      align-items: flex-end;
     }
 
     .bubble {
-      border-radius: 14px;
-      padding: 16px 18px;
-      box-shadow: 0 10px 22px rgba(22, 34, 28, 0.08);
-      border: 1px solid rgba(20, 40, 32, 0.08);
+      border-radius: 8px;
+      padding: 14px 16px;
+      box-shadow: none;
+      border: 1px solid var(--line);
       line-height: 1.55;
       word-break: break-word;
     }
@@ -505,7 +501,7 @@ INDEX_HTML = """<!doctype html>
       position: relative;
       margin: 12px 0;
       padding: 14px;
-      border-radius: 14px;
+      border-radius: 8px;
       background: #16251e;
       color: #eff8f1;
       overflow: auto;
@@ -515,7 +511,7 @@ INDEX_HTML = """<!doctype html>
     .bubble code {
       border-radius: 8px;
       padding: 2px 6px;
-      background: rgba(31, 109, 85, 0.08);
+      background: rgba(41, 98, 79, 0.08);
       color: var(--primary-strong);
       font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
       font-size: 0.92em;
@@ -630,7 +626,7 @@ INDEX_HTML = """<!doctype html>
       display: flex;
       justify-content: flex-end;
       gap: 8px;
-      margin-top: -4px;
+      margin-top: 0;
     }
 
     .message-tool-button,
@@ -639,8 +635,8 @@ INDEX_HTML = """<!doctype html>
       padding: 6px 10px;
       font-size: 11px;
       color: var(--primary-strong);
-      background: rgba(255, 255, 255, 0.86);
-      border: 1px solid rgba(31, 109, 85, 0.14);
+      background: #ffffff;
+      border: 1px solid var(--line);
       box-shadow: none;
     }
 
@@ -654,24 +650,28 @@ INDEX_HTML = """<!doctype html>
     }
 
     .message.user .bubble {
-      background: linear-gradient(135deg, var(--user), #335f7f);
-      color: white;
-      border-bottom-right-radius: 6px;
+      max-width: min(680px, 88%);
+      background: #eef4f7;
+      color: #182b37;
+      border-color: #d8e4ea;
     }
 
     .message.user .math-inline,
     .message.user .math-display {
-      color: #f6fbff;
+      color: #182b37;
     }
 
     .message.user .math-display {
-      background: rgba(255, 255, 255, 0.12);
-      border-color: rgba(255, 255, 255, 0.18);
+      background: rgba(37, 95, 120, 0.08);
+      border-color: rgba(37, 95, 120, 0.14);
     }
 
     .message.assistant .bubble {
-      background: rgba(255, 253, 249, 0.98);
-      border-bottom-left-radius: 6px;
+      width: 100%;
+      padding: 4px 0 0;
+      background: transparent;
+      border: 0;
+      border-radius: 0;
     }
 
     .message.system .bubble {
@@ -681,54 +681,106 @@ INDEX_HTML = """<!doctype html>
 
     .message-label {
       font-size: 12px;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
+      letter-spacing: 0;
+      text-transform: none;
       color: var(--muted);
       font-weight: 700;
     }
 
-    details.tool-events {
-      border-radius: 10px;
-      background: var(--tool-bg);
-      border: 1px solid rgba(31, 109, 85, 0.1);
-      overflow: hidden;
+    .message.assistant .message-label {
+      display: none;
     }
 
+    details.process-panel,
+    details.tool-events {
+      width: 100%;
+      border-top: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+      color: var(--muted);
+    }
+
+    details.process-panel summary,
     details.tool-events summary {
       cursor: pointer;
       list-style: none;
-      padding: 14px 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 0;
+      min-height: 34px;
       font-weight: 700;
+      color: #4d5852;
+      font-size: 13px;
+    }
+
+    details.process-panel summary::-webkit-details-marker,
+    details.tool-events summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .process-summary {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .process-chevron {
+      margin-left: auto;
+      color: #8a918c;
+      transition: transform 140ms ease;
+    }
+
+    details.process-panel[open] .process-chevron {
+      transform: rotate(90deg);
+    }
+
+    .process-body {
+      padding: 2px 0 12px;
+    }
+
+    .process-empty {
+      padding: 6px 0 2px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    details.process-panel.is-running summary {
       color: var(--primary-strong);
     }
 
-    details.tool-events summary::-webkit-details-marker {
-      display: none;
+    details.process-panel.is-error summary {
+      color: var(--danger);
     }
 
     .event-list {
       display: flex;
       flex-direction: column;
-      gap: 10px;
-      padding: 0 14px 14px;
+      gap: 0;
     }
 
     .event {
-      padding: 12px 14px;
-      border-radius: 10px;
-      background: white;
-      border: 1px solid rgba(29, 42, 36, 0.08);
+      padding: 10px 0 10px 14px;
+      background: transparent;
+      border-left: 2px solid #dedbd2;
     }
 
     .event strong {
       display: block;
-      margin-bottom: 6px;
+      margin-bottom: 4px;
       font-size: 13px;
+      color: var(--ink);
+    }
+
+    .event-body {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
     }
 
     .event code,
     .tips code {
-      background: rgba(31, 109, 85, 0.08);
+      background: rgba(41, 98, 79, 0.08);
       color: var(--primary-strong);
       border-radius: 8px;
       padding: 2px 6px;
@@ -739,16 +791,16 @@ INDEX_HTML = """<!doctype html>
     .event pre {
       margin: 10px 0 0;
       padding: 10px 12px;
-      border-radius: 10px;
-      background: #f7faf8;
+      border-radius: 8px;
+      background: #f7f7f4;
       font-size: 12px;
       overflow: auto;
       white-space: pre-wrap;
     }
 
     .event.is-error {
-      border-color: rgba(165, 60, 48, 0.24);
-      background: rgba(165, 60, 48, 0.06);
+      border-left-color: rgba(165, 60, 48, 0.7);
+      background: rgba(165, 60, 48, 0.04);
     }
 
     .evidence-panel {
@@ -765,9 +817,9 @@ INDEX_HTML = """<!doctype html>
 
     .evidence-card {
       padding: 12px;
-      border-radius: 10px;
-      background: rgba(255, 253, 249, 0.94);
-      border: 1px solid rgba(31, 109, 85, 0.12);
+      border-radius: 8px;
+      background: #fbfaf7;
+      border: 1px solid var(--line);
     }
 
     .evidence-card header {
@@ -793,7 +845,7 @@ INDEX_HTML = """<!doctype html>
     .composer {
       padding: 14px 20px 18px;
       border-top: 1px solid var(--line);
-      background: rgba(255, 252, 247, 0.94);
+      background: #ffffff;
     }
 
     .prompt-strip {
@@ -805,8 +857,8 @@ INDEX_HTML = """<!doctype html>
 
     .prompt-chip {
       padding: 7px 10px;
-      border: 1px solid rgba(47, 111, 143, 0.16);
-      background: rgba(47, 111, 143, 0.07);
+      border: 1px solid #d8e4ea;
+      background: #f5f9fb;
       color: #24546d;
       box-shadow: none;
       font-size: 12px;
@@ -1571,10 +1623,69 @@ INDEX_HTML = """<!doctype html>
       return Math.round(number) + "ms";
     }
 
+    function formatDuration(value) {
+      const number = Number(value);
+      if (!Number.isFinite(number) || number < 0) return "";
+      const totalSeconds = Math.max(1, Math.round(number / 1000));
+      if (totalSeconds < 60) return totalSeconds + "s";
+      const minutes = Math.floor(totalSeconds / 60);
+      const seconds = String(totalSeconds % 60).padStart(2, "0");
+      if (minutes < 60) return minutes + "m " + seconds + "s";
+      const hours = Math.floor(minutes / 60);
+      const remainingMinutes = String(minutes % 60).padStart(2, "0");
+      return hours + "h " + remainingMinutes + "m";
+    }
+
     function formatCount(value) {
       const number = Number(value);
       if (!Number.isFinite(number)) return "--";
       return number.toLocaleString();
+    }
+
+    function cleanUiText(value) {
+      return String(value ?? "")
+        .replaceAll("aircraft-design-rag", "飞行器设计")
+        .replaceAll("aircraft-design", "飞行器设计")
+        .replaceAll("RAG index", "本地资料索引")
+        .replaceAll("RAG", "本地资料");
+    }
+
+    function normalizeMessageOptions(options) {
+      if (Array.isArray(options)) return { events: options };
+      return options || {};
+    }
+
+    function eventTitle(event) {
+      if (event.kind === "rag_retrieval") return "资料检索";
+      const toolName = cleanUiText(event.tool_name || "工具");
+      if (event.kind === "permission") return "权限确认 · " + toolName;
+      if (event.kind === "tool_use") return "调用工具 · " + toolName;
+      if (event.kind === "tool_result") return "工具结果 · " + toolName;
+      return cleanUiText(event.tool_name || "工作项") + " · " + cleanUiText(event.kind || "记录");
+    }
+
+    function eventSummary(event) {
+      return cleanUiText(event.summary || event.message || event.error || "");
+    }
+
+    function latestEventSummary(events) {
+      if (!events.length) return "";
+      const latest = events[events.length - 1];
+      const summary = eventSummary(latest);
+      return summary ? eventTitle(latest) + " · " + summary : eventTitle(latest);
+    }
+
+    function summarizeProcess(events, options = {}) {
+      const elapsed = formatDuration(options.elapsedMs);
+      const parts = [options.isRunning ? "处理中" : "已处理"];
+      if (elapsed) parts.push(elapsed);
+      if (options.isRunning) {
+        const latest = latestEventSummary(events);
+        if (latest) parts.push(latest);
+      } else if (events.length) {
+        parts.push("过程记录 " + events.length);
+      }
+      return parts.join(" · ");
     }
 
     function createEvidencePanel(rag) {
@@ -1600,7 +1711,7 @@ INDEX_HTML = """<!doctype html>
       if (rag?.message) {
         const note = document.createElement("div");
         note.className = "evidence-card";
-        note.textContent = rag.message;
+        note.textContent = cleanUiText(rag.message);
         panel.appendChild(note);
       }
 
@@ -1637,7 +1748,81 @@ INDEX_HTML = """<!doctype html>
       return panel;
     }
 
-    function createMessage(role, text, events = []) {
+    function createEventList(events) {
+      const eventList = document.createElement("div");
+      eventList.className = "event-list";
+
+      for (const event of events) {
+        const item = document.createElement("div");
+        item.className = "event" + (event.is_error ? " is-error" : "");
+        const title = document.createElement("strong");
+        title.textContent = eventTitle(event);
+        item.appendChild(title);
+
+        const body = document.createElement("div");
+        body.className = "event-body";
+        body.textContent = eventSummary(event);
+        item.appendChild(body);
+
+        if (event.rag) {
+          item.appendChild(createEvidencePanel(event.rag));
+        }
+
+        const preview = event.rag ? "" : renderPreview(event.preview);
+        if (preview) {
+          const pre = document.createElement("pre");
+          pre.textContent = preview;
+          item.appendChild(pre);
+        }
+
+        eventList.appendChild(item);
+      }
+
+      return eventList;
+    }
+
+    function updateProcessPanel(wrapper, events = [], options = {}) {
+      let details = wrapper.querySelector(":scope > details.process-panel");
+      const bubble = wrapper.querySelector(":scope > .bubble");
+      if (!details) {
+        details = document.createElement("details");
+        details.className = "process-panel";
+        if (bubble) wrapper.insertBefore(details, bubble);
+        else wrapper.appendChild(details);
+      }
+      details.classList.toggle("is-running", Boolean(options.isRunning));
+      details.classList.toggle("is-error", Boolean(options.isError));
+      if (options.open) details.open = true;
+
+      details.innerHTML = "";
+      const summary = document.createElement("summary");
+      const text = document.createElement("span");
+      text.className = "process-summary";
+      text.textContent = summarizeProcess(events, options);
+      const chevron = document.createElement("span");
+      chevron.className = "process-chevron";
+      chevron.textContent = ">";
+      summary.appendChild(text);
+      summary.appendChild(chevron);
+      details.appendChild(summary);
+
+      const body = document.createElement("div");
+      body.className = "process-body";
+      if (events.length) {
+        body.appendChild(createEventList(events));
+      } else {
+        const empty = document.createElement("div");
+        empty.className = "process-empty";
+        empty.textContent = options.isRunning ? "正在等待模型输出和工具活动。" : "本轮没有调用工具或资料检索。";
+        body.appendChild(empty);
+      }
+      details.appendChild(body);
+      return details;
+    }
+
+    function createMessage(role, text, options = {}) {
+      const normalized = normalizeMessageOptions(options);
+      const events = normalized.events || [];
       const wrapper = document.createElement("article");
       wrapper.className = "message " + role;
 
@@ -1648,58 +1833,24 @@ INDEX_HTML = """<!doctype html>
 
       const bubble = document.createElement("div");
       bubble.className = "bubble";
-      renderMarkdownInto(bubble, text || (role === "assistant" ? "[没有文本响应]" : ""));
+      const fallbackText = role === "assistant" && !normalized.isRunning ? "[没有文本响应]" : "";
+      renderMarkdownInto(bubble, text || fallbackText);
       wrapper.appendChild(bubble);
+
+      if (role === "assistant") {
+        updateProcessPanel(wrapper, events, {
+          elapsedMs: normalized.elapsedMs,
+          isRunning: Boolean(normalized.isRunning),
+          isError: Boolean(normalized.isError),
+          open: Boolean(normalized.openProcess && events.length),
+        });
+      }
 
       if (text) {
         const tools = document.createElement("div");
         tools.className = "message-tools";
         addCopyButton(tools, text);
         wrapper.appendChild(tools);
-      }
-
-      if (events.length) {
-        const details = document.createElement("details");
-        details.className = "tool-events";
-
-        const summary = document.createElement("summary");
-        summary.textContent = "工具活动（" + events.length + "）";
-        details.appendChild(summary);
-
-        const eventList = document.createElement("div");
-        eventList.className = "event-list";
-
-        for (const event of events) {
-          const item = document.createElement("div");
-          item.className = "event" + (event.is_error ? " is-error" : "");
-          const title = document.createElement("strong");
-          title.textContent = event.kind === "rag_retrieval"
-            ? "资料检索"
-            : event.kind === "permission"
-            ? "权限 · " + event.tool_name
-            : event.tool_name + " · " + event.kind;
-          item.appendChild(title);
-
-          const body = document.createElement("div");
-          body.textContent = event.summary || event.message || event.error || "";
-          item.appendChild(body);
-
-          if (event.rag) {
-            item.appendChild(createEvidencePanel(event.rag));
-          }
-
-          const preview = event.rag ? "" : renderPreview(event.preview);
-          if (preview) {
-            const pre = document.createElement("pre");
-            pre.textContent = preview;
-            item.appendChild(pre);
-          }
-
-          eventList.appendChild(item);
-        }
-
-        details.appendChild(eventList);
-        wrapper.appendChild(details);
       }
 
       return wrapper;
@@ -1736,8 +1887,12 @@ INDEX_HTML = """<!doctype html>
       chatLog.scrollTop = chatLog.scrollHeight;
     }
 
-    function appendAssistantReply(reply) {
-      chatLog.appendChild(createMessage("assistant", reply.text, reply.events || []));
+    function appendAssistantReply(reply, options = {}) {
+      chatLog.appendChild(createMessage("assistant", reply.text, {
+        events: reply.events || [],
+        elapsedMs: options.elapsedMs,
+        openProcess: Boolean(options.openProcess),
+      }));
       chatLog.scrollTop = chatLog.scrollHeight;
     }
 
@@ -1912,6 +2067,29 @@ INDEX_HTML = """<!doctype html>
       setBusy(true, "正在思考...");
       setStatus("");
       state.abortController = new AbortController();
+      const turnStartedAt = performance.now();
+      let liveAssistant = null;
+      let liveText = "";
+      const liveEvents = [];
+      const ensureLiveAssistant = () => {
+        if (!liveAssistant) {
+          liveAssistant = createMessage("assistant", "", {
+            events: liveEvents,
+            elapsedMs: performance.now() - turnStartedAt,
+            isRunning: true,
+          });
+          chatLog.appendChild(liveAssistant);
+        }
+        return liveAssistant;
+      };
+      const refreshLiveProcess = (openProcess = false) => {
+        const assistant = ensureLiveAssistant();
+        updateProcessPanel(assistant, liveEvents, {
+          elapsedMs: performance.now() - turnStartedAt,
+          isRunning: true,
+          open: openProcess,
+        });
+      };
       try {
         await ensureMatchingSession();
         if (!state.sessionId) {
@@ -1924,8 +2102,6 @@ INDEX_HTML = """<!doctype html>
         promptInput.value = "";
         autosizePrompt();
 
-        let liveAssistant = null;
-        let liveText = "";
         const payload = await streamApi(
           "/api/sessions/" + encodeURIComponent(state.sessionId) + "/messages/stream",
           {
@@ -1936,15 +2112,19 @@ INDEX_HTML = """<!doctype html>
           {
             onChunk: (chunk) => {
               liveText += chunk;
-              if (!liveAssistant) {
-                liveAssistant = createMessage("assistant", "");
-                chatLog.appendChild(liveAssistant);
-              }
-              const bubble = liveAssistant.querySelector(".bubble");
+              const assistant = ensureLiveAssistant();
+              const bubble = assistant.querySelector(".bubble");
               if (bubble) renderMarkdownInto(bubble, liveText);
+              updateProcessPanel(assistant, liveEvents, {
+                elapsedMs: performance.now() - turnStartedAt,
+                isRunning: true,
+              });
               chatLog.scrollTop = chatLog.scrollHeight;
             },
             onTool: (toolEvent) => {
+              liveEvents.push(toolEvent);
+              refreshLiveProcess(true);
+              chatLog.scrollTop = chatLog.scrollHeight;
               if (toolEvent.summary) setStatus(toolEvent.summary);
             },
           },
@@ -1952,7 +2132,7 @@ INDEX_HTML = """<!doctype html>
         if (liveAssistant) liveAssistant.remove();
 
         updateMeta(payload.session);
-        appendAssistantReply(payload.reply);
+        appendAssistantReply(payload.reply, { elapsedMs: performance.now() - turnStartedAt });
         await refreshSessions();
         const usage = payload.reply.usage || {};
         const tokenBits = [];
@@ -1961,6 +2141,20 @@ INDEX_HTML = """<!doctype html>
         setStatus(tokenBits.length ? "本轮完成：" + tokenBits.join(" / ") : "本轮完成。");
       } catch (error) {
         const messageText = error.name === "AbortError" ? "已在本地停止请求；服务器可能仍会完成已开始的回合。" : error.message;
+        if (liveAssistant) {
+          liveEvents.push({
+            kind: "request",
+            tool_name: "网页请求",
+            summary: messageText,
+            error: messageText,
+            is_error: true,
+          });
+          updateProcessPanel(liveAssistant, liveEvents, {
+            elapsedMs: performance.now() - turnStartedAt,
+            isError: true,
+            open: true,
+          });
+        }
         chatLog.appendChild(createMessage("system", messageText));
         chatLog.scrollTop = chatLog.scrollHeight;
         setStatus(messageText, true);
