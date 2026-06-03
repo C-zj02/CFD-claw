@@ -1,0 +1,8 @@
+{
+  "reasoning": "Choose θ=10° to satisfy horizontal distance and time constraints. Select m=300 kg, V=0.3 m³ ensuring density <1025 kg/m³ and mass≥200 kg. Energy computed as ~714 kJ (198 Wh) ≤200 Wh battery limit.",
+  "config": {
+    "angle": 10.0,
+    "volume": 0.3,
+    "mass": 300.0
+  }
+}

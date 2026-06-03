@@ -1,0 +1,6 @@
+{
+  "reasoning": "Peak heat flux constraint gives R >= 0.037 m; peak deceleration gives R <= 0.907 m. Approximating total heat load using peak flux and pulse duration yields R >= 0.065 m. Choosing R = 0.2 m satisfies all constraints with margin.",
+  "config": {
+    "r": 0.2
+  }
+}

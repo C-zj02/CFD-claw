@@ -1,0 +1,23 @@
+We are asked to design a heat shield for a small spacecraft. We need to determine the heat shield radius "r" (in meters) that satisfies constraints: peak heat flux <= 1000 W/cm^2, total heat load <= 100 MJ/m^2, peak deceleration <= 30g. Spacecraft is spherical, mass 250 kg, drag coefficient 0.47. Ballistic reentry. Initial velocity 7.8 km/s at entry altitude 400 km, flight path angle -6 deg. Additional info: "by experience it reaches highest heat at 40km above sea level" and "at 40km the speed is about 5500m/s and lose about half the heat". So we might use these to approximate peak heating conditions.
+
+We need to compute radius such that constraints are met. We'll use basic ballistic reentry equations.
+
+Given:
+- Mass m = 250 kg
+- Drag coefficient Cd = 0.47 (for sphere)
+- Heat shield radius r (unknown). For a sphere, cross-sectional area A = π r^2.
+- Ballistic coefficient: β = m / (Cd A) = m / (0.47 π r^2).
+- Reentry: initial velocity v0 = 7.8 km/s, flight path angle γ = -6 deg. Entry altitude 400 km, but we care about the trajectory down to 40 km where peak heating occurs.
+
+We need to estimate peak heat flux, total heat load, and peak deceleration.
+
+Standard ballistic reentry analysis (from atmospheric entry physics, e.g., Chapman's theory or simplified).
+
+Given atmosphere model: exponential density ρ = ρ0 exp(-h/H) where H is scale height (typically around 7-8 km for Earth). At 40 km altitude, density low? Actually, Earth atmosphere: at 40 km, density ~ 4e-3 kg/m^3? Let's check: Sea level density 1.225 kg/m^3. Scale height about 8.5 km (0-100 km). At 40 km, density ~ 1.225 * exp(-40/8.5) ≈ 1.225 * exp(-4.706) ≈ 1.225 * 0.009 = 0.011 kg/m^3. Wait, more accurate: standard atmosphere: at 40 km, density is about 4.0e-3 kg/m^3? Actually, let's recall: at 40 km, pressure ~ 300 Pa, temperature ~ 250 K, density ~ 0.004 kg/m^3. Maybe 0.004. We can use typical values. But the prompt says "at 40km the speed is about 5500m/s and lose about half the heat". That suggests that by 40 km, the vehicle has slowed to 5500 m/s, and the total heat load accumulates half by that point? Possibly.
+
+But we need a model to relate radius to peak heat flux, total heat load, deceleration. For a ballistic entry, we can use the solution for velocity as function of altitude or density. For small flight path angle γ (shallow), the deceleration is primarily drag. The equations: 
+dv/dt = - (1/2m) ρ v^2 Cd A 
+dh/dt = v sin γ (negative for entry)
+ds/dt = v cos γ (horizontal)
+For ballistic, γ is nearly constant initially? Actually, for small negative γ, the trajectory is a straight line initially? But for steep reentry, it's more complex. But we can use the approximate solution where velocity as function of altitude is given by: v = v0 exp( - (ρ H) / (2 β sin γ) )? Actually, the exponential atmosphere solution: For a steep entry, the velocity-altitude relation: 
+v = v0 exp

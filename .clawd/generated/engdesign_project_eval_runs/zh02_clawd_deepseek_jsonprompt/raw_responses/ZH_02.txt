@@ -1,0 +1,25 @@
+We are given a task to design a heat shield radius for a small spacecraft re-entering. We have constraints: peak heat flux ≤ 1000 W/cm², total heat load ≤ 100 MJ/m², peak deceleration ≤ 30g. We need to output "r" (float). We must reason.
+
+First, need to compute heat flux, heat load, deceleration based on radius. The problem gives some values: highest heat at 40 km, speed at 40 km is 5500 m/s, and "lose about half the heat" so peak heat flux might be halved? We need to interpret.
+
+We have mass 250 kg, drag coefficient 0.47, ballistic trajectory. Reentry physics: peak heat flux often scales with something. Need to derive relationships.
+
+We know peak heat flux (convective) often given by something like q = k * (density)^0.5 * velocity^3, with a constant. But here we have simplified: given that at peak heating altitude (40 km) the speed is 5500 m/s, and they mention "lose about half the heat", maybe that means total heat load or something. Alternatively, typical peak heat flux scaling with entry conditions and radius.
+
+Total heat load: Q = (1/2) * m * (v_entry^2 - v_final^2) / (area) but for a sphere? Actually total heat load on the shield is a fraction of kinetic energy converted to heat. For ballistic entry, heat load Q = (1/2)*m*(v^2)/(C_D * A) times some factor? Usually heat load per area: ∫ q dt. Peak deceleration: a_max = (C_D * A * dynamic pressure) / (m) maybe.
+
+But we need radius r. Area A = π r^2? For a spherical heat shield, the cross-sectional area is π r^2. But heat shield radius might be the radius of the sphere. Usually heat shield is the forward-facing surface, area = π r^2. The spacecraft is spherical, so radius r.
+
+Given specific numbers: initial velocity 7.8 km/s, at 40 km it's 5500 m/s. 40 km altitude is where peak heating occurs. At that altitude, the density might be given, but not given. In standard engineering, for reentry, peak heating often occurs around 50-60 km, but here they say 40 km. The "lose about half the heat" phrase: maybe it means half of the total heat load is at 40 km? Or peak heat flux occurs there and total heat load is something.
+
+Possibly this is a simplified problem where we use empirical relationships for ballistic reentry. Maybe we can use known formulas for stagnation point heat flux (Sutton-Graves correlation) or something. But no gas properties given. So need to derive from given numbers.
+
+Alternatively, the design radius directly affects the three constraints. We can assume that these constraints give bounds on r. We can compute bounds: peak deceleration limit gives minimum radius? Actually, larger radius gives larger area, reducing heat flux and heat load per area, but increases deceleration? Wait, deceleration = drag force / mass. Drag force = 0.5 * density * v^2 * C_D * A. So for fixed v and density, larger A gives larger deceleration. So peak deceleration limit sets an upper bound on radius? Actually, if we want deceleration less than 30g, we need A small enough. But heat flux and heat load decrease with larger radius (since they are per area, but total heat is distributed). So radius must be large enough to reduce heat, but small enough to not exceed deceleration. So there is a sweet spot.
+
+But the problem just says "determine an appropriate heat shield radius that satisfies all three constraints", so we need to find a radius that works, possibly a range, and pick one. We can output any radius that meets constraints.
+
+Given "at 40km the speed is about 5500m/s and lose about half the heat", that might hint to total heat load. Heat load per area Q = (1/2) * m * (v_entry^2 - v_final^2) / (A) * fraction absorbed? But total kinetic energy lost: E = 0.5*250*(7800^2 - v_final^2). They say at 40 km lose about half the heat, so maybe total heat load on shield is half the kinetic energy lost. Or maybe it's that peak heat flux is half of something. "lose about half the heat" could mean half of the total heat has been absorbed by that point.
+
+Let's define constraints quantitatively.
+
+1) Peak heat flux: q_peak ≤ 100

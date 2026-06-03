@@ -1,0 +1,16 @@
+{
+  "engdesign_root": "/Users/zejianchen/Desktop/claude_agent/EngDesign",
+  "task_dir": "/Users/zejianchen/Desktop/claude_agent/EngDesign/EngDesign-Open",
+  "task_list": [
+    "ZH_02"
+  ],
+  "provider": "openai",
+  "model": null,
+  "model_label": null,
+  "output_dir": ".clawd/generated/engdesign_project_eval_runs/dry_run_zh02_single",
+  "dry_run": true,
+  "temperature": 0.0,
+  "request_timeout": 60.0,
+  "rename_existing_logs": false,
+  "fail_below": null
+}

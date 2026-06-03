@@ -1,0 +1,9 @@
+{
+  "task_id": "AD_10",
+  "expected_terms": ["用户输入", "工程假设", "计算结果", "风险", "下一步", "验证"],
+  "required_dimensions": ["需求解析", "总体参数", "校核结果", "风险验证", "依据追溯"],
+  "artifact_expected": false,
+  "concise_expected": false,
+  "min_numbers": 5,
+  "pass_score": 70
+}

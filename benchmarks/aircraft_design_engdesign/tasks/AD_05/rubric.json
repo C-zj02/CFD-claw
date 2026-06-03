@@ -1,0 +1,9 @@
+{
+  "task_id": "AD_05",
+  "expected_terms": ["活塞", "涡桨", "混合电", "比较", "推荐", "理由"],
+  "required_dimensions": ["布局方案", "需求解析", "总体参数", "风险验证"],
+  "artifact_expected": false,
+  "concise_expected": false,
+  "min_numbers": 1,
+  "pass_score": 70
+}

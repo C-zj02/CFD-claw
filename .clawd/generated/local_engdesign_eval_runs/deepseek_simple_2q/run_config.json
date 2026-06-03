@@ -1,0 +1,10 @@
+{
+  "source": "/Users/zejianchen/Desktop/claude_agent/Clawd-Code/.clawd/generated/deepseek_aircraft_conceptual_design_10q_simple.json",
+  "task_dir": "/Users/zejianchen/Desktop/claude_agent/Clawd-Code/benchmarks/aircraft_design_engdesign/tasks",
+  "task_list": [
+    "AD_01",
+    "AD_02"
+  ],
+  "model_label": "deepseek_simple",
+  "rename_existing_logs": false
+}

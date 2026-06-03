@@ -1,0 +1,9 @@
+{
+  "task_id": "AD_07",
+  "expected_terms": ["800", "起飞重量", "短距起降", "翼面积", "推重比", "重心", "迭代"],
+  "required_dimensions": ["需求解析", "总体参数", "约束分析", "迭代闭合", "风险验证"],
+  "artifact_expected": false,
+  "concise_expected": false,
+  "min_numbers": 4,
+  "pass_score": 70
+}

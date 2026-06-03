@@ -1,0 +1,165 @@
+{
+  "created_at": "2026-05-31T16:59:13",
+  "source": "/Users/zejianchen/Desktop/claude_agent/Clawd-Code/.clawd/generated/deepseek_aircraft_conceptual_design_10q_simple.json",
+  "task_dir": "/Users/zejianchen/Desktop/claude_agent/Clawd-Code/benchmarks/aircraft_design_engdesign/tasks",
+  "model_label": "deepseek_simple",
+  "task_count": 2,
+  "passed_count": 2,
+  "failed_count": 0,
+  "average_score": 95.66,
+  "min_score": 94.05,
+  "max_score": 97.28,
+  "renamed_logs": [],
+  "tasks": [
+    {
+      "task_id": "AD_01",
+      "question": "设计一架航程1200km、载荷500kg的固定翼无人机，输出需求解析、任务剖面、总体参数、约束分析、布局方案和风险。",
+      "status": "ok",
+      "passed": true,
+      "score": 97.28,
+      "log_file": "/Users/zejianchen/Desktop/claude_agent/Clawd-Code/benchmarks/aircraft_design_engdesign/tasks/AD_01/logs/AD_01_log_deepseek_simple_0.jsonl",
+      "evaluation_result": {
+        "task_id": "AD_01",
+        "score": 97.28,
+        "pass_score": 70.0,
+        "answer_chars": 5939,
+        "process_chars": 9967,
+        "checks": [
+          {
+            "name": "基础可读性",
+            "score": 10.0,
+            "max_score": 10,
+            "passed": true,
+            "detail": "answer_chars=5939"
+          },
+          {
+            "name": "题目要点覆盖",
+            "score": 17.14,
+            "max_score": 20,
+            "passed": true,
+            "detail": "hits=6/7"
+          },
+          {
+            "name": "工程维度覆盖",
+            "score": 25.0,
+            "max_score": 25,
+            "passed": true,
+            "detail": "covered=需求解析、任务剖面、总体参数、约束分析、布局方案、风险验证"
+          },
+          {
+            "name": "数值单位与公式",
+            "score": 15,
+            "max_score": 15,
+            "passed": true,
+            "detail": "numbers=235, unit_hits=10, formula_hits=6"
+          },
+          {
+            "name": "工程可追溯性",
+            "score": 15.0,
+            "max_score": 15,
+            "passed": true,
+            "detail": "covered=依据、假设、校核、风险"
+          },
+          {
+            "name": "图表文件",
+            "score": 10,
+            "max_score": 10,
+            "passed": true,
+            "detail": "paths=2, existing=2"
+          },
+          {
+            "name": "输出约束",
+            "score": 5,
+            "max_score": 5,
+            "passed": true,
+            "detail": "无特殊长度约束"
+          },
+          {
+            "name": "过程可见性",
+            "score": 5,
+            "max_score": 5,
+            "passed": true,
+            "detail": "process_chars=9967"
+          }
+        ],
+        "missing_expected_terms": [
+          "任务剖面"
+        ]
+      }
+    },
+    {
+      "task_id": "AD_02",
+      "question": "在只给出航程1200km和载荷500kg的情况下，如何估算起飞重量、空机重量、燃油重量、翼面积和推重比？请给出V0到V2的闭合过程。",
+      "status": "ok",
+      "passed": true,
+      "score": 94.05,
+      "log_file": "/Users/zejianchen/Desktop/claude_agent/Clawd-Code/benchmarks/aircraft_design_engdesign/tasks/AD_02/logs/AD_02_log_deepseek_simple_1.jsonl",
+      "evaluation_result": {
+        "task_id": "AD_02",
+        "score": 94.05,
+        "pass_score": 70.0,
+        "answer_chars": 4870,
+        "process_chars": 10824,
+        "checks": [
+          {
+            "name": "基础可读性",
+            "score": 10.0,
+            "max_score": 10,
+            "passed": true,
+            "detail": "answer_chars=4870"
+          },
+          {
+            "name": "题目要点覆盖",
+            "score": 20.0,
+            "max_score": 20,
+            "passed": true,
+            "detail": "hits=8/8"
+          },
+          {
+            "name": "工程维度覆盖",
+            "score": 18.75,
+            "max_score": 25,
+            "passed": true,
+            "detail": "covered=总体参数、迭代闭合、校核结果"
+          },
+          {
+            "name": "数值单位与公式",
+            "score": 15,
+            "max_score": 15,
+            "passed": true,
+            "detail": "numbers=206, unit_hits=9, formula_hits=6"
+          },
+          {
+            "name": "工程可追溯性",
+            "score": 15.0,
+            "max_score": 15,
+            "passed": true,
+            "detail": "covered=依据、假设、校核、风险"
+          },
+          {
+            "name": "图表文件",
+            "score": 10,
+            "max_score": 10,
+            "passed": true,
+            "detail": "paths=2, existing=2"
+          },
+          {
+            "name": "输出约束",
+            "score": 5,
+            "max_score": 5,
+            "passed": true,
+            "detail": "无特殊长度约束"
+          },
+          {
+            "name": "过程可见性",
+            "score": 5,
+            "max_score": 5,
+            "passed": true,
+            "detail": "process_chars=10824"
+          }
+        ],
+        "missing_expected_terms": []
+      }
+    }
+  ]
+}

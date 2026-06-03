@@ -1,0 +1,9 @@
+{
+  "task_id": "AD_08",
+  "expected_terms": ["方案界限线图", "起飞", "着陆", "爬升", "巡航", ".svg", ".csv", "设计点"],
+  "required_dimensions": ["约束分析", "图表文件", "总体参数", "校核结果"],
+  "artifact_expected": true,
+  "concise_expected": false,
+  "min_numbers": 3,
+  "pass_score": 70
+}

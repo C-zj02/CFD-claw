@@ -1,0 +1,6 @@
+{
+  "reasoning": "To satisfy horizontal distance ≥4000 m and time ≤7200 s with depth 400 m, glide angle θ must be between 6.38° and 11.31°. Choose θ=9°, volume V=0.2 m³ (minimum to meet density constraint with vehicle mass 200 kg), and ballast mass m_b=10 kg to ensure negative buoyancy. Energy consumption E=(112000+40*m_b)/sinθ ≈718 kJ < 720 kJ (200 Wh). All constraints met.",
+  "angle": 9.0,
+  "volume": 0.2,
+  "mass": 10.0
+}

@@ -1,0 +1,35 @@
+{
+  "created_at": "2026-05-31T17:11:12",
+  "engdesign_root": "/Users/zejianchen/Desktop/claude_agent/EngDesign",
+  "task_dir": "/Users/zejianchen/Desktop/claude_agent/EngDesign/EngDesign-Open",
+  "task_list": [
+    "ZH_02",
+    "ZH_04"
+  ],
+  "provider": "openai",
+  "base_url": "https://api.zhizengzeng.com/v1",
+  "model": "deepseek-v4-pro",
+  "model_label": "deepseek-v4-pro",
+  "dry_run": true,
+  "renamed_logs": [],
+  "task_count": 2,
+  "scored_task_count": 0,
+  "passed_count": 0,
+  "average_score": null,
+  "tasks": [
+    {
+      "task_id": "ZH_02",
+      "status": "dry_run",
+      "score": null,
+      "passed": false,
+      "prompt_file": "/Users/zejianchen/Desktop/claude_agent/Clawd-Code/.clawd/generated/engdesign_project_eval_runs/dry_run_zh02_zh04/prompts/ZH_02.txt"
+    },
+    {
+      "task_id": "ZH_04",
+      "status": "dry_run",
+      "score": null,
+      "passed": false,
+      "prompt_file": "/Users/zejianchen/Desktop/claude_agent/Clawd-Code/.clawd/generated/engdesign_project_eval_runs/dry_run_zh02_zh04/prompts/ZH_04.txt"
+    }
+  ]
+}

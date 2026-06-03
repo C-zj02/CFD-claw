@@ -1,0 +1,9 @@
+{
+  "task_id": "AD_03",
+  "expected_terms": ["600", "翼载荷", "推重比", "CLmax", "起飞距离", "着陆距离", "高升力"],
+  "required_dimensions": ["约束分析", "总体参数", "校核结果", "风险验证"],
+  "artifact_expected": false,
+  "concise_expected": false,
+  "min_numbers": 5,
+  "pass_score": 70
+}

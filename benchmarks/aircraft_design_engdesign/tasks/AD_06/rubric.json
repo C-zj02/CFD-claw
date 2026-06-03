@@ -1,0 +1,9 @@
+{
+  "task_id": "AD_06",
+  "expected_terms": ["8000", "空气密度", "爬升", "巡航", "动力", "燃油", "翼载荷"],
+  "required_dimensions": ["任务剖面", "校核结果", "总体参数", "风险验证"],
+  "artifact_expected": false,
+  "concise_expected": false,
+  "min_numbers": 4,
+  "pass_score": 70
+}

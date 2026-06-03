@@ -1,0 +1,9 @@
+{
+  "task_id": "AD_02",
+  "expected_terms": ["V0", "V1", "V2", "闭合", "起飞重量", "空机", "燃油", "推重比"],
+  "required_dimensions": ["总体参数", "迭代闭合", "校核结果", "工程可追溯性"],
+  "artifact_expected": false,
+  "concise_expected": false,
+  "min_numbers": 6,
+  "pass_score": 70
+}

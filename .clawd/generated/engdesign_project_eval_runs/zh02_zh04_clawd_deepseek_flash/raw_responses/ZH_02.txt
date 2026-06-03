@@ -1,0 +1,6 @@
+{
+  "reasoning": "Peak heat flux at 40km: q = 1.83e-4 sqrt(rho/R) V^3. With rho=0.004 kg/m^3, V=5500 m/s, q<=1000 W/cm² => R>=0.037m. Deceleration: a = 0.5 rho V^2 C_d pi R^2 / m. At same altitude, a<=30g => R<=0.908m. Total heat load for R=0.5m <100 MJ/m² plausibly. Choose R=0.5m well within both bounds.",
+  "config": {
+    "r": 0.5
+  }
+}

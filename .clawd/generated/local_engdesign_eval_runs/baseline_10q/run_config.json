@@ -1,0 +1,7 @@
+{
+  "source": "/Users/zejianchen/Desktop/claude_agent/Clawd-Code/.clawd/generated/aircraft_conceptual_design_10q_answers.json",
+  "task_dir": "/Users/zejianchen/Desktop/claude_agent/Clawd-Code/benchmarks/aircraft_design_engdesign/tasks",
+  "task_list": [],
+  "model_label": "baseline_10q",
+  "rename_existing_logs": true
+}

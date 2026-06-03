@@ -1,0 +1,9 @@
+{
+  "task_id": "AD_09",
+  "expected_terms": ["设计推理记录", "依据", "总体参数", "校核", "简洁"],
+  "required_dimensions": ["依据追溯", "总体参数", "校核结果"],
+  "artifact_expected": false,
+  "concise_expected": true,
+  "min_numbers": 4,
+  "pass_score": 70
+}

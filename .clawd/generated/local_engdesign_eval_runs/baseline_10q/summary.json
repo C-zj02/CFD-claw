@@ -1,0 +1,763 @@
+{
+  "created_at": "2026-05-31T16:58:52",
+  "source": "/Users/zejianchen/Desktop/claude_agent/Clawd-Code/.clawd/generated/aircraft_conceptual_design_10q_answers.json",
+  "task_dir": "/Users/zejianchen/Desktop/claude_agent/Clawd-Code/benchmarks/aircraft_design_engdesign/tasks",
+  "model_label": "baseline_10q",
+  "task_count": 10,
+  "passed_count": 8,
+  "failed_count": 2,
+  "average_score": 74.4,
+  "min_score": 65.16,
+  "max_score": 82.38,
+  "renamed_logs": [],
+  "tasks": [
+    {
+      "task_id": "AD_01",
+      "question": "设计一架航程1200km、载荷500kg的固定翼无人机，输出需求解析、任务剖面、总体参数、约束分析、布局方案和风险。",
+      "status": "ok",
+      "passed": true,
+      "score": 80.61,
+      "log_file": "/Users/zejianchen/Desktop/claude_agent/Clawd-Code/benchmarks/aircraft_design_engdesign/tasks/AD_01/logs/AD_01_log_baseline_10q_0.jsonl",
+      "evaluation_result": {
+        "task_id": "AD_01",
+        "score": 80.61,
+        "pass_score": 70.0,
+        "answer_chars": 278,
+        "process_chars": 0,
+        "checks": [
+          {
+            "name": "基础可读性",
+            "score": 10.0,
+            "max_score": 10,
+            "passed": true,
+            "detail": "answer_chars=278"
+          },
+          {
+            "name": "题目要点覆盖",
+            "score": 17.14,
+            "max_score": 20,
+            "passed": true,
+            "detail": "hits=6/7"
+          },
+          {
+            "name": "工程维度覆盖",
+            "score": 25.0,
+            "max_score": 25,
+            "passed": true,
+            "detail": "covered=需求解析、任务剖面、总体参数、约束分析、布局方案、风险验证"
+          },
+          {
+            "name": "数值单位与公式",
+            "score": 10,
+            "max_score": 15,
+            "passed": true,
+            "detail": "numbers=13, unit_hits=4, formula_hits=0"
+          },
+          {
+            "name": "工程可追溯性",
+            "score": 7.5,
+            "max_score": 15,
+            "passed": false,
+            "detail": "covered=校核、风险"
+          },
+          {
+            "name": "图表文件",
+            "score": 10,
+            "max_score": 10,
+            "passed": true,
+            "detail": "paths=0, existing=0"
+          },
+          {
+            "name": "输出约束",
+            "score": 5,
+            "max_score": 5,
+            "passed": true,
+            "detail": "无特殊长度约束"
+          },
+          {
+            "name": "过程可见性",
+            "score": 0,
+            "max_score": 5,
+            "passed": false,
+            "detail": "process_chars=0"
+          }
+        ],
+        "missing_expected_terms": [
+          "需求"
+        ]
+      }
+    },
+    {
+      "task_id": "AD_02",
+      "question": "在只给出航程1200km和载荷500kg的情况下，如何估算起飞重量、空机重量、燃油重量、翼面积和推重比？请给出V0到V2的闭合过程。",
+      "status": "ok",
+      "passed": true,
+      "score": 76.67,
+      "log_file": "/Users/zejianchen/Desktop/claude_agent/Clawd-Code/benchmarks/aircraft_design_engdesign/tasks/AD_02/logs/AD_02_log_baseline_10q_1.jsonl",
+      "evaluation_result": {
+        "task_id": "AD_02",
+        "score": 76.67,
+        "pass_score": 70.0,
+        "answer_chars": 277,
+        "process_chars": 0,
+        "checks": [
+          {
+            "name": "基础可读性",
+            "score": 10.0,
+            "max_score": 10,
+            "passed": true,
+            "detail": "answer_chars=277"
+          },
+          {
+            "name": "题目要点覆盖",
+            "score": 20.0,
+            "max_score": 20,
+            "passed": true,
+            "detail": "hits=8/8"
+          },
+          {
+            "name": "工程维度覆盖",
+            "score": 18.75,
+            "max_score": 25,
+            "passed": true,
+            "detail": "covered=总体参数、迭代闭合、校核结果"
+          },
+          {
+            "name": "数值单位与公式",
+            "score": 13,
+            "max_score": 15,
+            "passed": true,
+            "detail": "numbers=16, unit_hits=4, formula_hits=3"
+          },
+          {
+            "name": "工程可追溯性",
+            "score": 3.75,
+            "max_score": 15,
+            "passed": false,
+            "detail": "covered=校核"
+          },
+          {
+            "name": "图表文件",
+            "score": 10,
+            "max_score": 10,
+            "passed": true,
+            "detail": "paths=0, existing=0"
+          },
+          {
+            "name": "输出约束",
+            "score": 5,
+            "max_score": 5,
+            "passed": true,
+            "detail": "无特殊长度约束"
+          },
+          {
+            "name": "过程可见性",
+            "score": 0,
+            "max_score": 5,
+            "passed": false,
+            "detail": "process_chars=0"
+          }
+        ],
+        "missing_expected_terms": []
+      }
+    },
+    {
+      "task_id": "AD_03",
+      "question": "如果这架无人机要求600m跑道起降，请重新做约束分析，并说明翼载荷、推重比、CLmax、起飞距离和着陆距离该如何调整。",
+      "status": "ok",
+      "passed": true,
+      "score": 73.81,
+      "log_file": "/Users/zejianchen/Desktop/claude_agent/Clawd-Code/benchmarks/aircraft_design_engdesign/tasks/AD_03/logs/AD_03_log_baseline_10q_2.jsonl",
+      "evaluation_result": {
+        "task_id": "AD_03",
+        "score": 73.81,
+        "pass_score": 70.0,
+        "answer_chars": 243,
+        "process_chars": 0,
+        "checks": [
+          {
+            "name": "基础可读性",
+            "score": 10.0,
+            "max_score": 10,
+            "passed": true,
+            "detail": "answer_chars=243"
+          },
+          {
+            "name": "题目要点覆盖",
+            "score": 20.0,
+            "max_score": 20,
+            "passed": true,
+            "detail": "hits=7/7"
+          },
+          {
+            "name": "工程维度覆盖",
+            "score": 18.75,
+            "max_score": 25,
+            "passed": true,
+            "detail": "covered=约束分析、总体参数、校核结果"
+          },
+          {
+            "name": "数值单位与公式",
+            "score": 10,
+            "max_score": 15,
+            "passed": true,
+            "detail": "numbers=8, unit_hits=3, formula_hits=1"
+          },
+          {
+            "name": "工程可追溯性",
+            "score": 3.75,
+            "max_score": 15,
+            "passed": false,
+            "detail": "covered=校核"
+          },
+          {
+            "name": "图表文件",
+            "score": 10,
+            "max_score": 10,
+            "passed": true,
+            "detail": "paths=0, existing=0"
+          },
+          {
+            "name": "输出约束",
+            "score": 5,
+            "max_score": 5,
+            "passed": true,
+            "detail": "无特殊长度约束"
+          },
+          {
+            "name": "过程可见性",
+            "score": 0,
+            "max_score": 5,
+            "passed": false,
+            "detail": "process_chars=0"
+          }
+        ],
+        "missing_expected_terms": []
+      }
+    },
+    {
+      "task_id": "AD_04",
+      "question": "请设计一种适合长航程货运任务的无人机总体布局，并给出机翼、机身、尾翼、起落架、动力布置和三视图参数。",
+      "status": "ok",
+      "passed": false,
+      "score": 66.35,
+      "log_file": "/Users/zejianchen/Desktop/claude_agent/Clawd-Code/benchmarks/aircraft_design_engdesign/tasks/AD_04/logs/AD_04_log_baseline_10q_3.jsonl",
+      "evaluation_result": {
+        "task_id": "AD_04",
+        "score": 66.35,
+        "pass_score": 70.0,
+        "answer_chars": 264,
+        "process_chars": 0,
+        "checks": [
+          {
+            "name": "基础可读性",
+            "score": 10.0,
+            "max_score": 10,
+            "passed": true,
+            "detail": "answer_chars=264"
+          },
+          {
+            "name": "题目要点覆盖",
+            "score": 20.0,
+            "max_score": 20,
+            "passed": true,
+            "detail": "hits=7/7"
+          },
+          {
+            "name": "工程维度覆盖",
+            "score": 16.67,
+            "max_score": 25,
+            "passed": false,
+            "detail": "covered=布局方案、总体参数"
+          },
+          {
+            "name": "数值单位与公式",
+            "score": 8,
+            "max_score": 15,
+            "passed": false,
+            "detail": "numbers=23, unit_hits=2, formula_hits=0"
+          },
+          {
+            "name": "工程可追溯性",
+            "score": 0.0,
+            "max_score": 15,
+            "passed": false,
+            "detail": "covered="
+          },
+          {
+            "name": "图表文件",
+            "score": 10,
+            "max_score": 10,
+            "passed": true,
+            "detail": "paths=0, existing=0"
+          },
+          {
+            "name": "输出约束",
+            "score": 5,
+            "max_score": 5,
+            "passed": true,
+            "detail": "无特殊长度约束"
+          },
+          {
+            "name": "过程可见性",
+            "score": 0,
+            "max_score": 5,
+            "passed": false,
+            "detail": "process_chars=0"
+          }
+        ],
+        "missing_expected_terms": []
+      }
+    },
+    {
+      "task_id": "AD_05",
+      "question": "请比较活塞、涡桨和混合电推进三种方案，选出最适合航程1200km、载荷500kg的无人机方案，并说明理由。",
+      "status": "ok",
+      "passed": false,
+      "score": 65.16,
+      "log_file": "/Users/zejianchen/Desktop/claude_agent/Clawd-Code/benchmarks/aircraft_design_engdesign/tasks/AD_05/logs/AD_05_log_baseline_10q_4.jsonl",
+      "evaluation_result": {
+        "task_id": "AD_05",
+        "score": 65.16,
+        "pass_score": 70.0,
+        "answer_chars": 234,
+        "process_chars": 0,
+        "checks": [
+          {
+            "name": "基础可读性",
+            "score": 10.0,
+            "max_score": 10,
+            "passed": true,
+            "detail": "answer_chars=234"
+          },
+          {
+            "name": "题目要点覆盖",
+            "score": 16.67,
+            "max_score": 20,
+            "passed": true,
+            "detail": "hits=5/6"
+          },
+          {
+            "name": "工程维度覆盖",
+            "score": 18.75,
+            "max_score": 25,
+            "passed": true,
+            "detail": "covered=布局方案、需求解析、总体参数"
+          },
+          {
+            "name": "数值单位与公式",
+            "score": 8,
+            "max_score": 15,
+            "passed": false,
+            "detail": "numbers=3, unit_hits=2, formula_hits=0"
+          },
+          {
+            "name": "工程可追溯性",
+            "score": 0.0,
+            "max_score": 15,
+            "passed": false,
+            "detail": "covered="
+          },
+          {
+            "name": "图表文件",
+            "score": 10,
+            "max_score": 10,
+            "passed": true,
+            "detail": "paths=0, existing=0"
+          },
+          {
+            "name": "输出约束",
+            "score": 5,
+            "max_score": 5,
+            "passed": true,
+            "detail": "无特殊长度约束"
+          },
+          {
+            "name": "过程可见性",
+            "score": 0,
+            "max_score": 5,
+            "passed": false,
+            "detail": "process_chars=0"
+          }
+        ],
+        "missing_expected_terms": [
+          "理由"
+        ]
+      }
+    },
+    {
+      "task_id": "AD_06",
+      "question": "如果巡航高度从5000m提高到8000m，请重新做任务剖面和主要性能校核，并说明关键参数会发生什么变化。",
+      "status": "ok",
+      "passed": true,
+      "score": 72.86,
+      "log_file": "/Users/zejianchen/Desktop/claude_agent/Clawd-Code/benchmarks/aircraft_design_engdesign/tasks/AD_06/logs/AD_06_log_baseline_10q_5.jsonl",
+      "evaluation_result": {
+        "task_id": "AD_06",
+        "score": 72.86,
+        "pass_score": 70.0,
+        "answer_chars": 271,
+        "process_chars": 0,
+        "checks": [
+          {
+            "name": "基础可读性",
+            "score": 10.0,
+            "max_score": 10,
+            "passed": true,
+            "detail": "answer_chars=271"
+          },
+          {
+            "name": "题目要点覆盖",
+            "score": 20.0,
+            "max_score": 20,
+            "passed": true,
+            "detail": "hits=7/7"
+          },
+          {
+            "name": "工程维度覆盖",
+            "score": 18.75,
+            "max_score": 25,
+            "passed": true,
+            "detail": "covered=任务剖面、校核结果、总体参数"
+          },
+          {
+            "name": "数值单位与公式",
+            "score": 9,
+            "max_score": 15,
+            "passed": true,
+            "detail": "numbers=9, unit_hits=3, formula_hits=0"
+          },
+          {
+            "name": "工程可追溯性",
+            "score": 3.75,
+            "max_score": 15,
+            "passed": false,
+            "detail": "covered=校核"
+          },
+          {
+            "name": "图表文件",
+            "score": 10,
+            "max_score": 10,
+            "passed": true,
+            "detail": "paths=0, existing=0"
+          },
+          {
+            "name": "输出约束",
+            "score": 5,
+            "max_score": 5,
+            "passed": true,
+            "detail": "无特殊长度约束"
+          },
+          {
+            "name": "过程可见性",
+            "score": 0,
+            "max_score": 5,
+            "passed": false,
+            "detail": "process_chars=0"
+          }
+        ],
+        "missing_expected_terms": []
+      }
+    },
+    {
+      "task_id": "AD_07",
+      "question": "如果载荷从500kg增加到800kg而航程不变，方案中最先受影响的约束是什么？请给出需要重新迭代的参数。",
+      "status": "ok",
+      "passed": true,
+      "score": 74.05,
+      "log_file": "/Users/zejianchen/Desktop/claude_agent/Clawd-Code/benchmarks/aircraft_design_engdesign/tasks/AD_07/logs/AD_07_log_baseline_10q_6.jsonl",
+      "evaluation_result": {
+        "task_id": "AD_07",
+        "score": 74.05,
+        "pass_score": 70.0,
+        "answer_chars": 266,
+        "process_chars": 0,
+        "checks": [
+          {
+            "name": "基础可读性",
+            "score": 10.0,
+            "max_score": 10,
+            "passed": true,
+            "detail": "answer_chars=266"
+          },
+          {
+            "name": "题目要点覆盖",
+            "score": 20.0,
+            "max_score": 20,
+            "passed": true,
+            "detail": "hits=7/7"
+          },
+          {
+            "name": "工程维度覆盖",
+            "score": 20.0,
+            "max_score": 25,
+            "passed": true,
+            "detail": "covered=需求解析、总体参数、约束分析、迭代闭合"
+          },
+          {
+            "name": "数值单位与公式",
+            "score": 9,
+            "max_score": 15,
+            "passed": true,
+            "detail": "numbers=10, unit_hits=3, formula_hits=0"
+          },
+          {
+            "name": "工程可追溯性",
+            "score": 3.75,
+            "max_score": 15,
+            "passed": false,
+            "detail": "covered=校核"
+          },
+          {
+            "name": "图表文件",
+            "score": 10,
+            "max_score": 10,
+            "passed": true,
+            "detail": "paths=0, existing=0"
+          },
+          {
+            "name": "输出约束",
+            "score": 5,
+            "max_score": 5,
+            "passed": true,
+            "detail": "无特殊长度约束"
+          },
+          {
+            "name": "过程可见性",
+            "score": 0,
+            "max_score": 5,
+            "passed": false,
+            "detail": "process_chars=0"
+          }
+        ],
+        "missing_expected_terms": []
+      }
+    },
+    {
+      "task_id": "AD_08",
+      "question": "请输出完整的方案界限线图，包含起飞、着陆、爬升和巡航约束，并给出推荐设计点、SVG路径和CSV路径。",
+      "status": "ok",
+      "passed": true,
+      "score": 72.14,
+      "log_file": "/Users/zejianchen/Desktop/claude_agent/Clawd-Code/benchmarks/aircraft_design_engdesign/tasks/AD_08/logs/AD_08_log_baseline_10q_7.jsonl",
+      "evaluation_result": {
+        "task_id": "AD_08",
+        "score": 72.14,
+        "pass_score": 70.0,
+        "answer_chars": 359,
+        "process_chars": 0,
+        "checks": [
+          {
+            "name": "基础可读性",
+            "score": 10.0,
+            "max_score": 10,
+            "passed": true,
+            "detail": "answer_chars=359"
+          },
+          {
+            "name": "题目要点覆盖",
+            "score": 20.0,
+            "max_score": 20,
+            "passed": true,
+            "detail": "hits=8/8"
+          },
+          {
+            "name": "工程维度覆盖",
+            "score": 18.75,
+            "max_score": 25,
+            "passed": true,
+            "detail": "covered=约束分析、图表文件、总体参数"
+          },
+          {
+            "name": "数值单位与公式",
+            "score": 14,
+            "max_score": 15,
+            "passed": true,
+            "detail": "numbers=6, unit_hits=5, formula_hits=3"
+          },
+          {
+            "name": "工程可追溯性",
+            "score": 0.0,
+            "max_score": 15,
+            "passed": false,
+            "detail": "covered="
+          },
+          {
+            "name": "图表文件",
+            "score": 8.0,
+            "max_score": 10,
+            "passed": true,
+            "detail": "has_svg=True, has_csv=True, paths=3, existing=0"
+          },
+          {
+            "name": "输出约束",
+            "score": 5,
+            "max_score": 5,
+            "passed": true,
+            "detail": "无特殊长度约束"
+          },
+          {
+            "name": "过程可见性",
+            "score": 0,
+            "max_score": 5,
+            "passed": false,
+            "detail": "process_chars=0"
+          }
+        ],
+        "missing_expected_terms": []
+      }
+    },
+    {
+      "task_id": "AD_09",
+      "question": "请只输出设计推理记录、依据检索、总体参数和校核结果，不要展开长篇解释。",
+      "status": "ok",
+      "passed": true,
+      "score": 82.38,
+      "log_file": "/Users/zejianchen/Desktop/claude_agent/Clawd-Code/benchmarks/aircraft_design_engdesign/tasks/AD_09/logs/AD_09_log_baseline_10q_8.jsonl",
+      "evaluation_result": {
+        "task_id": "AD_09",
+        "score": 82.38,
+        "pass_score": 70.0,
+        "answer_chars": 294,
+        "process_chars": 0,
+        "checks": [
+          {
+            "name": "基础可读性",
+            "score": 10.0,
+            "max_score": 10,
+            "passed": true,
+            "detail": "answer_chars=294"
+          },
+          {
+            "name": "题目要点覆盖",
+            "score": 16.0,
+            "max_score": 20,
+            "passed": true,
+            "detail": "hits=4/5"
+          },
+          {
+            "name": "工程维度覆盖",
+            "score": 25.0,
+            "max_score": 25,
+            "passed": true,
+            "detail": "covered=依据追溯、总体参数、校核结果"
+          },
+          {
+            "name": "数值单位与公式",
+            "score": 10,
+            "max_score": 15,
+            "passed": true,
+            "detail": "numbers=15, unit_hits=4, formula_hits=0"
+          },
+          {
+            "name": "工程可追溯性",
+            "score": 7.5,
+            "max_score": 15,
+            "passed": false,
+            "detail": "covered=依据、校核"
+          },
+          {
+            "name": "图表文件",
+            "score": 10,
+            "max_score": 10,
+            "passed": true,
+            "detail": "paths=0, existing=0"
+          },
+          {
+            "name": "输出约束",
+            "score": 5,
+            "max_score": 5,
+            "passed": true,
+            "detail": "要求简洁，answer_chars=294"
+          },
+          {
+            "name": "过程可见性",
+            "score": 3,
+            "max_score": 5,
+            "passed": true,
+            "detail": "process_chars=0"
+          }
+        ],
+        "missing_expected_terms": [
+          "简洁"
+        ]
+      }
+    },
+    {
+      "task_id": "AD_10",
+      "question": "请把这架无人机设计成可工程落地的版本，明确哪些参数是用户输入、哪些是工程假设、哪些是计算结果，并说明主要风险与下一步验证。",
+      "status": "ok",
+      "passed": true,
+      "score": 79.92,
+      "log_file": "/Users/zejianchen/Desktop/claude_agent/Clawd-Code/benchmarks/aircraft_design_engdesign/tasks/AD_10/logs/AD_10_log_baseline_10q_9.jsonl",
+      "evaluation_result": {
+        "task_id": "AD_10",
+        "score": 79.92,
+        "pass_score": 70.0,
+        "answer_chars": 332,
+        "process_chars": 0,
+        "checks": [
+          {
+            "name": "基础可读性",
+            "score": 10.0,
+            "max_score": 10,
+            "passed": true,
+            "detail": "answer_chars=332"
+          },
+          {
+            "name": "题目要点覆盖",
+            "score": 16.67,
+            "max_score": 20,
+            "passed": true,
+            "detail": "hits=5/6"
+          },
+          {
+            "name": "工程维度覆盖",
+            "score": 20.0,
+            "max_score": 25,
+            "passed": true,
+            "detail": "covered=需求解析、总体参数、校核结果、风险验证"
+          },
+          {
+            "name": "数值单位与公式",
+            "score": 11,
+            "max_score": 15,
+            "passed": true,
+            "detail": "numbers=14, unit_hits=5, formula_hits=0"
+          },
+          {
+            "name": "工程可追溯性",
+            "score": 11.25,
+            "max_score": 15,
+            "passed": true,
+            "detail": "covered=假设、校核、风险"
+          },
+          {
+            "name": "图表文件",
+            "score": 10,
+            "max_score": 10,
+            "passed": true,
+            "detail": "paths=0, existing=0"
+          },
+          {
+            "name": "输出约束",
+            "score": 5,
+            "max_score": 5,
+            "passed": true,
+            "detail": "无特殊长度约束"
+          },
+          {
+            "name": "过程可见性",
+            "score": 0,
+            "max_score": 5,
+            "passed": false,
+            "detail": "process_chars=0"
+          }
+        ],
+        "missing_expected_terms": [
+          "计算结果"
+        ]
+      }
+    }
+  ]
+}

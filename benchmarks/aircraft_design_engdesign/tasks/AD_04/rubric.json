@@ -1,0 +1,9 @@
+{
+  "task_id": "AD_04",
+  "expected_terms": ["机翼", "机身", "尾翼", "起落架", "动力", "翼展", "机身长度"],
+  "required_dimensions": ["布局方案", "总体参数", "校核结果"],
+  "artifact_expected": false,
+  "concise_expected": false,
+  "min_numbers": 5,
+  "pass_score": 70
+}

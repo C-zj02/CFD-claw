@@ -1,0 +1,17 @@
+{
+  "engdesign_root": "/Users/zejianchen/Desktop/claude_agent/EngDesign",
+  "task_dir": "/Users/zejianchen/Desktop/claude_agent/EngDesign/EngDesign-Open",
+  "task_list": [
+    "ZH_02"
+  ],
+  "provider": "openai",
+  "model": null,
+  "model_label": "clawd_deepseek_v4_pro",
+  "output_dir": ".clawd/generated/engdesign_project_eval_runs/zh02_clawd_deepseek_debug",
+  "dry_run": false,
+  "temperature": 0.0,
+  "max_tokens": 500,
+  "request_timeout": 60.0,
+  "rename_existing_logs": false,
+  "fail_below": null
+}
