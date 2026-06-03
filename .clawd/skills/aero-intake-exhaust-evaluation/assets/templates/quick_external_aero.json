@@ -1,0 +1,28 @@
+{
+  "case_id": "quick-external-aero",
+  "run_mode": "dry_run",
+  "analysis_type": "external_aero",
+  "fidelity": "quick",
+  "toolchain": {
+    "preferred_tool": "all",
+    "candidate_tools": ["starccm", "openfoam", "matlab"],
+    "execute_command": null
+  },
+  "geometry": {
+    "files": [],
+    "unit": null,
+    "coordinate_system": {"x_axis": "downstream", "y_axis": "right", "z_axis": "up"},
+    "reference_values": {"area_ref_m2": null, "length_ref_m": null, "moment_center_m": [0, 0, 0]},
+    "boundary_names": {"farfield": [], "walls": [], "inlets": [], "outlets": [], "symmetry": [], "aip": [], "nozzle_inlet": [], "nozzle_throat": [], "nozzle_exit": []}
+  },
+  "flow_conditions": {"mach": null, "altitude_m": null, "alpha_deg": 0, "beta_deg": 0, "temperature_k": null, "pressure_pa": null, "reynolds_number": null, "gas_model": "ideal_air"},
+  "boundary_conditions": {"farfield": {"type": "pressure_farfield"}, "walls": {"type": "no_slip_adiabatic"}},
+  "mesh": {"target_cell_count": 1000000, "mesh_level": "coarse", "boundary_layer": {"enabled": true, "layers": 8, "growth_rate": 1.25, "target_y_plus": 30}, "refinement_regions": [{"name": "leading_edges", "type": "surface", "target_size_m": null, "reason": "external aero pressure gradients"}]},
+  "solver": {"steady": true, "compressible": true, "turbulence_model": "SST k-omega", "iterations": 1000, "cfl": 5, "convergence_criteria": {"residual_target": 0.0001, "monitor_stability_window": 100}, "numerics": {"initial_order": "first", "final_order": "second"}},
+  "monitoring": {"residuals": ["continuity", "x_momentum", "y_momentum", "z_momentum", "energy"], "integrals": ["force", "moment"], "custom_monitors": []},
+  "postprocessing": {"metrics": ["CL", "CD", "Cm"], "contours": ["mach", "static_pressure", "pressure_coefficient", "wall_y_plus"], "slices": []},
+  "custom_variables": [],
+  "outputs": {"format": ["json", "csv", "markdown"], "directory": null},
+  "confirmation_log": [],
+  "assumptions": [{"field": "solver.turbulence_model", "value": "SST k-omega", "source": "default_template", "reason": "robust quick RANS default"}]
+}

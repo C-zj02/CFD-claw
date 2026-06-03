@@ -1,0 +1,28 @@
+{
+  "case_id": "nozzle-exhaust",
+  "run_mode": "dry_run",
+  "analysis_type": "nozzle_exhaust",
+  "fidelity": "quick",
+  "toolchain": {
+    "preferred_tool": "all",
+    "candidate_tools": ["starccm", "openfoam", "matlab"],
+    "execute_command": null
+  },
+  "geometry": {
+    "files": [],
+    "unit": null,
+    "coordinate_system": {"x_axis": "downstream", "y_axis": "right", "z_axis": "up"},
+    "reference_values": {"area_ref_m2": null, "length_ref_m": null, "moment_center_m": [0, 0, 0]},
+    "boundary_names": {"farfield": [], "walls": [], "inlets": [], "outlets": [], "symmetry": [], "aip": [], "nozzle_inlet": [], "nozzle_throat": [], "nozzle_exit": []}
+  },
+  "flow_conditions": {"mach": null, "altitude_m": null, "alpha_deg": 0, "beta_deg": 0, "temperature_k": null, "pressure_pa": null, "reynolds_number": null, "gas_model": "ideal_air"},
+  "boundary_conditions": {"nozzle_inlet": {"type": "total_pressure_total_temperature", "total_pressure_pa": null, "total_temperature_k": null}, "nozzle_exit": {"type": "pressure_outlet_or_supersonic_outlet"}, "walls": {"type": "no_slip_adiabatic"}},
+  "mesh": {"target_cell_count": 2000000, "mesh_level": "medium", "boundary_layer": {"enabled": true, "layers": 12, "growth_rate": 1.2, "target_y_plus": 30}, "refinement_regions": [{"name": "throat", "type": "surface", "target_size_m": null, "reason": "choking and acceleration"}, {"name": "exit_shear_layer", "type": "volume", "target_size_m": null, "reason": "plume shear layer"}, {"name": "shock_region", "type": "volume", "target_size_m": null, "reason": "possible shock cells"}]},
+  "solver": {"steady": true, "compressible": true, "turbulence_model": "SST k-omega", "iterations": 1500, "cfl": 3, "convergence_criteria": {"residual_target": 0.0001, "monitor_stability_window": 150}, "numerics": {"initial_order": "first", "final_order": "second"}},
+  "monitoring": {"residuals": ["continuity", "x_momentum", "y_momentum", "z_momentum", "energy"], "integrals": ["mass_flow", "force"], "custom_monitors": ["gross_thrust", "thrust_coefficient", "exit_pressure_ratio"]},
+  "postprocessing": {"metrics": ["mass_flow", "gross_thrust", "thrust_coefficient", "exit_pressure_ratio", "exit_mach_uniformity"], "contours": ["mach", "static_pressure", "total_pressure", "temperature", "wall_y_plus"], "slices": [{"name": "nozzle_exit", "boundary": "nozzle_exit"}]},
+  "custom_variables": [],
+  "outputs": {"format": ["json", "csv", "markdown"], "directory": null},
+  "confirmation_log": [],
+  "assumptions": [{"field": "solver.compressible", "value": true, "source": "default_template", "reason": "nozzle exhaust usually requires compressible flow"}]
+}

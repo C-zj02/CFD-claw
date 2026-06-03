@@ -1,0 +1,4 @@
+﻿interface:
+  display_name: "飞行性能分析"
+  short_description: "识别意图、编排流程、确认输入并生成性能图表。"
+  default_prompt: "Use $flight-performance-analysis to identify my flight-performance analysis goal, confirm key inputs, orchestrate calculations, and save results with visualizations."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "气动/推进特性分析"
+  short_description: "面向气动推进特性检索运算和方案推荐的工程分析智能体"
+  default_prompt: "使用 $aero-propulsion-analysis 分析我的气动/推进数据，并输出中文分析路线、来源和结论。"

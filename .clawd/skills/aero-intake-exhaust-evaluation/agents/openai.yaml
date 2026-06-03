@@ -1,0 +1,4 @@
+interface:
+  display_name: "气动进排气评估"
+  short_description: "解析气动/进排气CFD评估需求，生成工具配置并支持dry-run/mock流程"
+  default_prompt: "帮我建立一个气动/进排气特性评估任务，先用dry-run生成配置和检查报告。"
