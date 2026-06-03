@@ -292,6 +292,13 @@ INDEX_HTML = """<!doctype html>
       overflow: auto;
     }
 
+    .session-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 38px;
+      gap: 8px;
+      align-items: stretch;
+    }
+
     .session-item {
       width: 100%;
       border-radius: 8px;
@@ -311,6 +318,26 @@ INDEX_HTML = """<!doctype html>
     .session-item.active {
       border-color: rgba(41, 98, 79, 0.35);
       background: #edf4ef;
+    }
+
+    .session-delete {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 44px;
+      padding: 0;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fffefa;
+      color: var(--danger);
+      box-shadow: none;
+      font-size: 18px;
+      line-height: 1;
+    }
+
+    .session-delete:hover {
+      background: rgba(165, 60, 48, 0.07);
+      transform: none;
     }
 
     .session-item strong,
@@ -695,8 +722,8 @@ INDEX_HTML = """<!doctype html>
     details.tool-events {
       width: 100%;
       border-top: 1px solid var(--line);
-      border-bottom: 1px solid var(--line);
       color: var(--muted);
+      padding-top: 10px;
     }
 
     details.process-panel summary,
@@ -706,7 +733,7 @@ INDEX_HTML = """<!doctype html>
       display: flex;
       align-items: center;
       gap: 8px;
-      padding: 9px 0;
+      padding: 6px 0 10px;
       min-height: 34px;
       font-weight: 700;
       color: #4d5852;
@@ -736,7 +763,7 @@ INDEX_HTML = """<!doctype html>
     }
 
     .process-body {
-      padding: 2px 0 12px;
+      padding: 0 0 12px;
     }
 
     .process-empty {
@@ -756,26 +783,70 @@ INDEX_HTML = """<!doctype html>
     .event-list {
       display: flex;
       flex-direction: column;
-      gap: 0;
+      gap: 22px;
     }
 
     .event {
-      padding: 10px 0 10px 14px;
+      padding: 0;
       background: transparent;
-      border-left: 2px solid #dedbd2;
+      border: 0;
     }
 
-    .event strong {
-      display: block;
-      margin-bottom: 4px;
-      font-size: 13px;
-      color: var(--ink);
+    .event-meta {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+      color: #9a9b99;
+      font-size: 16px;
+      font-weight: 600;
+      line-height: 1.3;
+    }
+
+    .event-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 20px;
+      color: #9a9b99;
+      font-size: 18px;
+      flex: 0 0 auto;
+    }
+
+    .event-label {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     .event-body {
+      display: block;
+      margin: 0;
+      color: var(--ink);
+      font-size: 18px;
+      line-height: 1.55;
+      font-weight: 700;
+    }
+
+    .event-subtext {
+      margin-top: 8px;
       color: var(--muted);
       font-size: 13px;
       line-height: 1.45;
+    }
+
+    .event-preview {
+      margin-top: 10px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: #f7f7f4;
+      color: #49514b;
+      font-size: 12px;
+      line-height: 1.45;
+      white-space: pre-wrap;
+      word-break: break-word;
+      border: 1px solid var(--line);
     }
 
     .event code,
@@ -799,8 +870,7 @@ INDEX_HTML = """<!doctype html>
     }
 
     .event.is-error {
-      border-left-color: rgba(165, 60, 48, 0.7);
-      background: rgba(165, 60, 48, 0.04);
+      color: var(--danger);
     }
 
     .evidence-panel {
@@ -808,6 +878,55 @@ INDEX_HTML = """<!doctype html>
       flex-direction: column;
       gap: 10px;
       margin-top: 10px;
+    }
+
+    .answer-evidence {
+      margin-top: 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fffefa;
+      overflow: hidden;
+    }
+
+    .answer-evidence > summary {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 14px;
+      cursor: pointer;
+      color: var(--primary-strong);
+      font-weight: 800;
+      list-style: none;
+    }
+
+    .answer-evidence > summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .answer-evidence-title {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      min-width: 0;
+    }
+
+    .answer-evidence-title small {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 600;
+      line-height: 1.4;
+    }
+
+    .answer-evidence-count {
+      flex: 0 0 auto;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .answer-evidence-body {
+      padding: 0 14px 14px;
     }
 
     .evidence-summary {
@@ -840,6 +959,16 @@ INDEX_HTML = """<!doctype html>
 
     .evidence-path {
       word-break: break-word;
+    }
+
+    .evidence-more {
+      align-self: flex-start;
+      padding: 7px 10px;
+      border: 1px solid var(--line);
+      background: #f7f7f4;
+      color: var(--primary-strong);
+      box-shadow: none;
+      font-size: 12px;
     }
 
     .composer {
@@ -1656,6 +1785,8 @@ INDEX_HTML = """<!doctype html>
     }
 
     function eventTitle(event) {
+      if (event.kind === "planning") return "开始分析";
+      if (event.kind === "drafting") return "组织回答";
       if (event.kind === "rag_retrieval") return "资料检索";
       const toolName = cleanUiText(event.tool_name || "工具");
       if (event.kind === "permission") return "权限确认 · " + toolName;
@@ -1666,6 +1797,128 @@ INDEX_HTML = """<!doctype html>
 
     function eventSummary(event) {
       return cleanUiText(event.summary || event.message || event.error || "");
+    }
+
+    function compactEventSummary(text, limit = 220) {
+      const cleaned = cleanUiText(text).replace(/\\s+/g, " ").trim();
+      if (!cleaned) return "";
+      return cleaned.length <= limit ? cleaned : cleaned.slice(0, limit - 1) + "…";
+    }
+
+    function toolDisplayName(event) {
+      return cleanUiText(event.tool_name || event.tool || "工具");
+    }
+
+    function extractPreviewText(event) {
+      if (event.rag) return "";
+      const preview = renderPreview(event.preview);
+      return compactEventSummary(preview, 360);
+    }
+
+    function eventStatsAt(events, index) {
+      const stats = {
+        searches: 0,
+        fileLists: 0,
+        fileReads: 0,
+        commands: 0,
+        previews: 0,
+      };
+      for (const event of events.slice(0, index + 1)) {
+        const toolName = toolDisplayName(event).toLowerCase();
+        const isDone = event.kind !== "tool_use";
+        if (!isDone) continue;
+        if (event.kind === "rag_retrieval" || toolName.includes("grep") || toolName.includes("search")) stats.searches += 1;
+        else if (toolName.includes("glob")) stats.fileLists += 1;
+        else if (toolName.includes("read")) stats.fileReads += 1;
+        else if (toolName.includes("bash")) stats.commands += 1;
+        else if (toolName.includes("preview")) stats.previews += 1;
+      }
+      return stats;
+    }
+
+    function eventStatusLabel(event, index = 0, events = []) {
+      const toolName = toolDisplayName(event);
+      const stats = eventStatsAt(events, index);
+      if (event.kind === "rag_retrieval") {
+        const hits = Array.isArray(event.rag?.hits) ? event.rag.hits.length : null;
+        if (hits != null) return "已探索 " + hits + " 条资料";
+        return "已完成资料检索";
+      }
+      if (event.kind === "planning") return "已开始分析";
+      if (event.kind === "permission") return "已确认权限";
+      if (event.kind === "tool_use") {
+        const lower = toolName.toLowerCase();
+        if (lower.includes("grep") || lower.includes("search")) return "正在搜索";
+        if (lower.includes("glob")) return "正在列出文件";
+        if (lower.includes("read")) return "正在查看文件";
+        if (lower.includes("bash")) return "正在执行命令";
+        return "正在调用 " + toolName;
+      }
+      if (event.kind === "tool_result") {
+        const lower = toolName.toLowerCase();
+        if (lower.includes("grep") || lower.includes("search")) return "已探索 " + stats.searches + " 次搜索";
+        if (lower.includes("glob")) return "已列出文件";
+        if (lower.includes("read")) return "已探索 " + stats.fileReads + " 个文件";
+        if (lower.includes("bash")) return "已执行 " + stats.commands + " 次命令";
+        if (toolName.toLowerCase().includes("preview")) return "已查看 Preview";
+        return "已完成 " + toolName;
+      }
+      if (event.kind === "request") return event.is_error ? "请求已中断" : "请求状态";
+      if (event.kind === "drafting") return "已开始组织回答";
+      return eventTitle(event);
+    }
+
+    function eventNarrative(event, index, events) {
+      const summary = eventSummary(event);
+      if (event.is_error) return compactEventSummary(summary || "这一步遇到错误，已记录下来供排查。");
+      if (event.kind === "planning") {
+        return compactEventSummary(summary || "我先拆解本轮飞行器设计需求，判断是否需要检索资料、查看文件或进行计算。");
+      }
+      if (event.kind === "drafting") {
+        return compactEventSummary(summary || "我已经开始把可用依据、计算关系和设计结论组织成回答。");
+      }
+      if (event.kind === "rag_retrieval") {
+        const hits = Array.isArray(event.rag?.hits) ? event.rag.hits.length : 0;
+        if (hits > 0) return "我已经从本地飞行器设计资料里找到 " + hits + " 条相关证据，先把可用依据带入本轮设计判断。";
+        return "我检查了本地飞行器设计资料，但这一轮没有找到直接匹配的证据，会基于已知条件和明确假设继续。";
+      }
+      if (event.kind === "permission") {
+        return compactEventSummary(summary || "我确认了这一步所需的本地工具权限，然后继续执行。");
+      }
+      if (event.kind === "tool_use") {
+        const toolName = toolDisplayName(event);
+        const lower = toolName.toLowerCase();
+        if (lower.includes("grep") || lower.includes("search")) return "我在相关资料和项目文件中继续搜索，想把关键参数或依据来源找得更准一些。";
+        if (lower.includes("glob")) return "我先把候选文件列出来，缩小后续查看和引用的范围。";
+        if (lower.includes("read")) return "我打开候选文件查看关键片段，避免只凭文件名或模糊印象判断。";
+        if (lower.includes("bash")) return "我运行本地命令获取可验证输出，再把结果纳入回答。";
+        return "我调用 " + toolName + " 来推进这一轮任务，并记录工具输入用于复查。";
+      }
+      if (event.kind === "tool_result") {
+        const toolName = toolDisplayName(event);
+        const lower = toolName.toLowerCase();
+        if (lower.includes("grep") || lower.includes("search")) return "这次搜索已经返回结果，我会从里面挑出和当前设计问题最相关的依据。";
+        if (lower.includes("glob")) return "候选文件列表已经出来了，下一步可以集中查看最可能有用的资料。";
+        if (lower.includes("read")) return "我已经查看了文件内容，接下来把其中能支撑设计判断的部分整理进回答。";
+        if (lower.includes("bash")) return "命令已经执行完，我会根据输出继续校核或汇总。";
+        return compactEventSummary(summary || "这一步工具已经返回结果，我会把可用信息合并到最终回答里。");
+      }
+      return compactEventSummary(summary || "这一步执行完成，已记录到过程里。");
+    }
+
+    function eventIcon(event) {
+      const toolName = toolDisplayName(event).toLowerCase();
+      if (event.is_error) return "!";
+      if (event.kind === "planning") return "›";
+      if (event.kind === "drafting") return "✎";
+      if (event.kind === "rag_retrieval") return "⌕";
+      if (event.kind === "permission") return "✓";
+      if (toolName.includes("grep") || toolName.includes("search")) return "⌕";
+      if (toolName.includes("glob")) return "▣";
+      if (toolName.includes("read")) return "□";
+      if (toolName.includes("bash")) return "›";
+      if (toolName.includes("preview")) return "⌘";
+      return "·";
     }
 
     function latestEventSummary(events) {
@@ -1723,7 +1976,37 @@ INDEX_HTML = """<!doctype html>
         return panel;
       }
 
-      for (const hit of hits.slice(0, 6)) {
+      const initialLimit = 3;
+      let visibleLimit = Math.min(initialLimit, hits.length);
+      const cards = document.createElement("div");
+      cards.className = "evidence-panel";
+      panel.appendChild(cards);
+
+      const renderHits = () => {
+        cards.innerHTML = "";
+        for (const hit of hits.slice(0, visibleLimit)) {
+          cards.appendChild(createEvidenceCard(hit));
+        }
+      };
+
+      renderHits();
+
+      if (hits.length > visibleLimit) {
+        const more = document.createElement("button");
+        more.type = "button";
+        more.className = "evidence-more";
+        more.textContent = "查看更多资料";
+        more.addEventListener("click", () => {
+          visibleLimit = Math.min(10, hits.length);
+          renderHits();
+          more.remove();
+        });
+        panel.appendChild(more);
+      }
+      return panel;
+    }
+
+    function createEvidenceCard(hit) {
         const card = document.createElement("div");
         card.className = "evidence-card";
         const header = document.createElement("header");
@@ -1743,34 +2026,97 @@ INDEX_HTML = """<!doctype html>
         const snippet = document.createElement("p");
         snippet.textContent = hit.snippet || "";
         card.appendChild(snippet);
-        panel.appendChild(card);
-      }
-      return panel;
+        return card;
+    }
+
+    function collectEvidenceFromEvents(events = []) {
+      return events
+        .filter((event) => event && event.kind === "rag_retrieval" && event.rag)
+        .map((event) => event.rag);
+    }
+
+    function createAnswerEvidence(events = []) {
+      const evidences = collectEvidenceFromEvents(events);
+      if (!evidences.length) return null;
+      const latest = evidences[evidences.length - 1];
+      const hits = Array.isArray(latest?.hits) ? latest.hits : [];
+
+      const details = document.createElement("details");
+      details.className = "answer-evidence";
+      details.open = hits.length > 0;
+
+      const summary = document.createElement("summary");
+      const title = document.createElement("span");
+      title.className = "answer-evidence-title";
+      const strong = document.createElement("span");
+      strong.textContent = "本轮参考资料";
+      const small = document.createElement("small");
+      const cache = latest?.cache?.enabled
+        ? (latest.cache.ready === false ? "资料索引预热中" : (latest.cache.hit ? "缓存命中" : "完成本地检索"))
+        : "本地资料检索";
+      small.textContent = [
+        cache,
+        "用时 " + formatMs(latest?.timings?.total_ms),
+        "候选 " + (latest?.candidate_chunks ?? "--"),
+      ].join(" · ");
+      title.appendChild(strong);
+      title.appendChild(small);
+      const count = document.createElement("span");
+      count.className = "answer-evidence-count";
+      count.textContent = "命中 " + hits.length + " 条";
+      summary.appendChild(title);
+      summary.appendChild(count);
+      details.appendChild(summary);
+
+      const body = document.createElement("div");
+      body.className = "answer-evidence-body";
+      body.appendChild(createEvidencePanel(latest));
+      details.appendChild(body);
+      return details;
     }
 
     function createEventList(events) {
       const eventList = document.createElement("div");
       eventList.className = "event-list";
 
-      for (const event of events) {
+      for (let index = 0; index < events.length; index += 1) {
+        const event = events[index];
         const item = document.createElement("div");
         item.className = "event" + (event.is_error ? " is-error" : "");
-        const title = document.createElement("strong");
-        title.textContent = eventTitle(event);
-        item.appendChild(title);
+
+        const meta = document.createElement("div");
+        meta.className = "event-meta";
+        const icon = document.createElement("span");
+        icon.className = "event-icon";
+        icon.textContent = eventIcon(event);
+        const label = document.createElement("span");
+        label.className = "event-label";
+        label.textContent = eventStatusLabel(event, index, events);
+        meta.appendChild(icon);
+        meta.appendChild(label);
+        item.appendChild(meta);
 
         const body = document.createElement("div");
         body.className = "event-body";
-        body.textContent = eventSummary(event);
+        body.textContent = eventNarrative(event, index, events);
         item.appendChild(body);
+
+        const summary = eventSummary(event);
+        if (summary && summary !== body.textContent) {
+          const subtext = document.createElement("div");
+          subtext.className = "event-subtext";
+          subtext.textContent = summary;
+          item.appendChild(subtext);
+        }
 
         if (event.rag) {
           item.appendChild(createEvidencePanel(event.rag));
         }
 
-        const preview = event.rag ? "" : renderPreview(event.preview);
+        const preview = extractPreviewText(event);
         if (preview) {
-          const pre = document.createElement("pre");
+          const pre = document.createElement("div");
+          pre.className = "event-preview";
           pre.textContent = preview;
           item.appendChild(pre);
         }
@@ -1792,7 +2138,7 @@ INDEX_HTML = """<!doctype html>
       }
       details.classList.toggle("is-running", Boolean(options.isRunning));
       details.classList.toggle("is-error", Boolean(options.isError));
-      if (options.open) details.open = true;
+      details.open = true;
 
       details.innerHTML = "";
       const summary = document.createElement("summary");
@@ -1844,6 +2190,8 @@ INDEX_HTML = """<!doctype html>
           isError: Boolean(normalized.isError),
           open: Boolean(normalized.openProcess && events.length),
         });
+        const answerEvidence = createAnswerEvidence(events);
+        if (answerEvidence) wrapper.appendChild(answerEvidence);
       }
 
       if (text) {
@@ -1882,14 +2230,15 @@ INDEX_HTML = """<!doctype html>
         if (!text && message.blocks?.length) {
           text = message.blocks.map((block) => block.label).join("\\n");
         }
-        chatLog.appendChild(createMessage(message.role, text));
+        chatLog.appendChild(createMessage(message.role, text, { events: message.events || [] }));
       }
       chatLog.scrollTop = chatLog.scrollHeight;
     }
 
     function appendAssistantReply(reply, options = {}) {
+      const events = options.events || reply.events || [];
       chatLog.appendChild(createMessage("assistant", reply.text, {
-        events: reply.events || [],
+        events,
         elapsedMs: options.elapsedMs,
         openProcess: Boolean(options.openProcess),
       }));
@@ -1906,6 +2255,8 @@ INDEX_HTML = """<!doctype html>
         return;
       }
       for (const session of state.sessions) {
+        const row = document.createElement("div");
+        row.className = "session-row";
         const button = document.createElement("button");
         button.type = "button";
         button.className = "session-item" + (session.session_id === state.sessionId ? " active" : "");
@@ -1916,7 +2267,21 @@ INDEX_HTML = """<!doctype html>
         button.appendChild(title);
         button.appendChild(subtitle);
         button.addEventListener("click", () => loadSession(session.session_id));
-        sessionList.appendChild(button);
+
+        const deleteButton = document.createElement("button");
+        deleteButton.type = "button";
+        deleteButton.className = "session-delete";
+        deleteButton.textContent = "×";
+        deleteButton.title = "删除会话记录";
+        deleteButton.setAttribute("aria-label", "删除会话记录 " + session.session_id);
+        deleteButton.addEventListener("click", (event) => {
+          event.stopPropagation();
+          deleteSession(session.session_id);
+        });
+
+        row.appendChild(button);
+        row.appendChild(deleteButton);
+        sessionList.appendChild(row);
       }
     }
 
@@ -1959,6 +2324,29 @@ INDEX_HTML = """<!doctype html>
       updateMeta(payload.session);
       renderMessages(payload.session.messages);
       renderSessionList();
+    }
+
+    async function deleteSession(sessionId) {
+      if (state.busy) return;
+      const isCurrent = sessionId === state.sessionId;
+      if (!window.confirm("删除这条会话记录？此操作会移除服务器上的历史文件。")) return;
+      setBusy(true, "正在删除...");
+      try {
+        await api("/api/sessions/" + encodeURIComponent(sessionId), { method: "DELETE" });
+        state.sessions = state.sessions.filter((session) => session.session_id !== sessionId);
+        if (isCurrent) {
+          state.sessionId = null;
+          saveLocalState();
+          await createSession({ keepBusy: true });
+        } else {
+          await refreshSessions();
+        }
+        setStatus("会话记录已删除。");
+      } catch (error) {
+        setStatus(error.message, true);
+      } finally {
+        setBusy(false);
+      }
     }
 
     async function resetSession() {
@@ -2070,7 +2458,13 @@ INDEX_HTML = """<!doctype html>
       const turnStartedAt = performance.now();
       let liveAssistant = null;
       let liveText = "";
-      const liveEvents = [];
+      let hasDraftEvent = false;
+      const liveEvents = [{
+        kind: "planning",
+        tool_name: "飞行器设计",
+        summary: "我先拆解任务目标、约束条件和可能需要补充的资料，再开始组织回答。",
+        is_error: false,
+      }];
       const ensureLiveAssistant = () => {
         if (!liveAssistant) {
           liveAssistant = createMessage("assistant", "", {
@@ -2087,7 +2481,7 @@ INDEX_HTML = """<!doctype html>
         updateProcessPanel(assistant, liveEvents, {
           elapsedMs: performance.now() - turnStartedAt,
           isRunning: true,
-          open: openProcess,
+          open: true,
         });
       };
       try {
@@ -2101,6 +2495,8 @@ INDEX_HTML = """<!doctype html>
         chatLog.scrollTop = chatLog.scrollHeight;
         promptInput.value = "";
         autosizePrompt();
+        refreshLiveProcess(true);
+        chatLog.scrollTop = chatLog.scrollHeight;
 
         const payload = await streamApi(
           "/api/sessions/" + encodeURIComponent(state.sessionId) + "/messages/stream",
@@ -2112,6 +2508,15 @@ INDEX_HTML = """<!doctype html>
           {
             onChunk: (chunk) => {
               liveText += chunk;
+              if (!hasDraftEvent) {
+                liveEvents.push({
+                  kind: "drafting",
+                  tool_name: "飞行器设计",
+                  summary: "我已经开始把当前可用信息整理成正式回答。",
+                  is_error: false,
+                });
+                hasDraftEvent = true;
+              }
               const assistant = ensureLiveAssistant();
               const bubble = assistant.querySelector(".bubble");
               if (bubble) renderMarkdownInto(bubble, liveText);
@@ -2132,7 +2537,10 @@ INDEX_HTML = """<!doctype html>
         if (liveAssistant) liveAssistant.remove();
 
         updateMeta(payload.session);
-        appendAssistantReply(payload.reply, { elapsedMs: performance.now() - turnStartedAt });
+        appendAssistantReply(payload.reply, {
+          elapsedMs: performance.now() - turnStartedAt,
+          events: liveEvents.length ? liveEvents : payload.reply.events,
+        });
         await refreshSessions();
         const usage = payload.reply.usage || {};
         const tokenBits = [];
@@ -2280,6 +2688,7 @@ class ClawdWebService:
         self._sessions: dict[str, WebSessionState] = {}
         self._rag_services: dict[str, RagIndexService] = {}
         self._lock = threading.RLock()
+        self._restore_persisted_sessions()
 
     def get_bootstrap_payload(self) -> dict[str, Any]:
         """Return config data needed by the browser shell."""
@@ -2319,34 +2728,17 @@ class ClawdWebService:
         """Create a new in-memory browser session."""
         config = load_config()
         provider_name = provider_name or ("openai" if config.get("providers", {}).get("openai", {}).get("api_key") else config.get("default_provider", "anthropic"))
-        self._ensure_known_provider(provider_name)
-        provider_config = get_provider_config(provider_name)
-        if not provider_config.get("api_key"):
-            raise ValueError(
-                f"{provider_name} API Key 未配置。请先运行 `clawd login` 并完成配置。"
-            )
-
-        provider_class = get_provider_class(provider_name)
-        resolved_model = "deepseek-v4-pro" if provider_name == "openai" else (model or "").strip() or provider_config.get("default_model")
-        provider = provider_class(
-            api_key=provider_config["api_key"],
-            base_url=provider_config.get("base_url"),
-            model=resolved_model,
-        )
-
+        provider, resolved_model = self._build_provider(provider_name, model)
         resolved_skill = self._normalize_browser_skill_name(auto_skill)
         resolved_rag_settings = self._normalize_rag_settings(rag_settings)
 
-        tool_context = ToolContext(workspace_root=self.workspace_root, cwd=self.workspace_root)
         session = Session.create(provider_name, provider.model or resolved_model or "")
         session.session_id = f"{session.session_id}_{uuid4().hex[:6]}"
         session.model = provider.model or resolved_model or session.model
-        state = WebSessionState(
+        state = self._build_session_state(
             session=session,
             provider_name=provider_name,
             provider=provider,
-            tool_registry=build_default_registry(enable_ask_user_question=False),
-            tool_context=tool_context,
             auto_approve=auto_approve,
             auto_skill=resolved_skill,
             rag_settings=resolved_rag_settings,
@@ -2354,6 +2746,7 @@ class ClawdWebService:
 
         with self._lock:
             self._sessions[session.session_id] = state
+        session.save()
         return {"session": self._serialize_session(state)}
 
     def get_session_payload(self, session_id: str) -> dict[str, Any]:
@@ -2364,14 +2757,44 @@ class ClawdWebService:
 
     def list_sessions_payload(self) -> dict[str, Any]:
         """Return active in-memory browser sessions for the sidebar."""
+        self._restore_persisted_sessions()
         with self._lock:
             states = list(self._sessions.values())
         sessions = []
         for state in states:
-            with state.lock:
+            locked = state.lock.acquire(blocking=False)
+            try:
                 sessions.append(self._serialize_session_summary(state))
+            finally:
+                if locked:
+                    state.lock.release()
         sessions.sort(key=lambda item: item.get("updated_at") or "", reverse=True)
         return {"sessions": sessions}
+
+    def delete_session(self, session_id: str) -> dict[str, Any]:
+        """Remove a browser session from memory and disk."""
+        session_file = Path.home() / ".clawd" / "sessions" / f"{session_id}.json"
+        with self._lock:
+            state = self._sessions.get(session_id)
+        if state is None and not session_file.exists():
+            raise KeyError(f"Unknown session: {session_id}")
+
+        if state is not None:
+            locked = state.lock.acquire(blocking=False)
+            if not locked:
+                raise ValueError("会话正在运行，请先停止后再删除。")
+            try:
+                with self._lock:
+                    self._sessions.pop(session_id, None)
+            finally:
+                state.lock.release()
+
+        try:
+            session_file.unlink()
+        except FileNotFoundError:
+            pass
+
+        return {"deleted": True, "session_id": session_id}
 
     def reset_session(
         self,
@@ -2458,6 +2881,7 @@ class ClawdWebService:
                 on_text_chunk=on_text_chunk,
             )
             state.session.model = state.provider.model or state.session.model
+            self._attach_events_to_latest_assistant_message(state.session, events)
             state.session.save()
 
             return {
@@ -2789,6 +3213,14 @@ class ClawdWebService:
         parts.append(f"User request:\n{message}")
         return "\n\n".join(parts)
 
+    def _attach_events_to_latest_assistant_message(self, session: Session, events: list[dict[str, Any]]) -> None:
+        if not events:
+            return
+        for message in reversed(session.conversation.messages):
+            if message.role == "assistant":
+                message.events = list(events)
+                return
+
     def _serialize_messages(self, session: Session) -> list[dict[str, Any]]:
         serialized: list[dict[str, Any]] = []
         for message in session.conversation.messages:
@@ -2824,6 +3256,7 @@ class ClawdWebService:
                     "role": message.role,
                     "text": text,
                     "blocks": blocks,
+                    "events": list(getattr(message, "events", []) or []),
                     "timestamp": message.timestamp,
                 }
             )
@@ -2902,9 +3335,87 @@ class ClawdWebService:
         if provider_name not in PROVIDER_INFO:
             raise ValueError(f"Unknown provider: {provider_name}")
 
+    def _build_provider(self, provider_name: str, model: str | None = None) -> tuple[Any, str]:
+        self._ensure_known_provider(provider_name)
+        provider_config = get_provider_config(provider_name)
+        if not provider_config.get("api_key"):
+            raise ValueError(
+                f"{provider_name} API Key 未配置。请先运行 `clawd login` 并完成配置。"
+            )
+
+        provider_class = get_provider_class(provider_name)
+        resolved_model = "deepseek-v4-pro" if provider_name == "openai" else (model or "").strip() or provider_config.get("default_model")
+        provider = provider_class(
+            api_key=provider_config["api_key"],
+            base_url=provider_config.get("base_url"),
+            model=resolved_model,
+        )
+        return provider, resolved_model or ""
+
+    def _build_session_state(
+        self,
+        *,
+        session: Session,
+        provider_name: str,
+        provider: Any,
+        auto_approve: bool = True,
+        auto_skill: str | None = None,
+        rag_settings: WebRagSettings | None = None,
+    ) -> WebSessionState:
+        tool_context = ToolContext(workspace_root=self.workspace_root, cwd=self.workspace_root)
+        return WebSessionState(
+            session=session,
+            provider_name=provider_name,
+            provider=provider,
+            tool_registry=build_default_registry(enable_ask_user_question=False),
+            tool_context=tool_context,
+            auto_approve=auto_approve,
+            auto_skill=auto_skill,
+            rag_settings=rag_settings or WebRagSettings(),
+        )
+
+    def _restore_persisted_sessions(self) -> None:
+        session_dir = Path.home() / ".clawd" / "sessions"
+        if not session_dir.exists():
+            return
+
+        for session_file in sorted(session_dir.glob("*.json")):
+            session_id = session_file.stem
+            with self._lock:
+                if session_id in self._sessions:
+                    continue
+            state = self._load_persisted_session(session_id)
+            if state is None:
+                continue
+            with self._lock:
+                self._sessions.setdefault(session_id, state)
+
+    def _load_persisted_session(self, session_id: str) -> WebSessionState | None:
+        try:
+            session = Session.load(session_id)
+        except Exception:
+            return None
+        if session is None:
+            return None
+        try:
+            provider, resolved_model = self._build_provider(session.provider, session.model)
+        except Exception:
+            return None
+        session.model = provider.model or resolved_model or session.model
+        return self._build_session_state(
+            session=session,
+            provider_name=session.provider,
+            provider=provider,
+        )
+
     def _require_session(self, session_id: str) -> WebSessionState:
         with self._lock:
             state = self._sessions.get(session_id)
+        if state is None:
+            state = self._load_persisted_session(session_id)
+            if state is not None:
+                with self._lock:
+                    state = self._sessions.setdefault(session_id, state)
         if state is None:
             raise KeyError(f"Unknown session: {session_id}")
         return state
@@ -2953,6 +3464,25 @@ class ClawdWebRequestHandler(BaseHTTPRequestHandler):
                 payload = self.server.service.get_session_payload(session_id)
             except KeyError as exc:
                 self._send_error_json(HTTPStatus.NOT_FOUND, str(exc))
+                return
+            self._send_json(HTTPStatus.OK, payload)
+            return
+        self._send_error_json(HTTPStatus.NOT_FOUND, "未知路由")
+
+    def do_DELETE(self) -> None:  # noqa: N802
+        parsed = urlparse(self.path)
+        if parsed.path.startswith("/api/sessions/"):
+            session_id = parsed.path.removeprefix("/api/sessions/")
+            if not session_id or "/" in session_id:
+                self._send_error_json(HTTPStatus.NOT_FOUND, "未知路由")
+                return
+            try:
+                payload = self.server.service.delete_session(session_id)
+            except KeyError as exc:
+                self._send_error_json(HTTPStatus.NOT_FOUND, str(exc))
+                return
+            except ValueError as exc:
+                self._send_error_json(HTTPStatus.CONFLICT, str(exc))
                 return
             self._send_json(HTTPStatus.OK, payload)
             return

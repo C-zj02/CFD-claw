@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -85,8 +86,11 @@ class TestClawdWebService(unittest.TestCase):
             "session": {"auto_save": True, "max_history": 100},
         }
         (config_dir / "config.json").write_text(json.dumps(config), encoding="utf-8")
+        self.home_patcher = patch("pathlib.Path.home", return_value=self.home)
+        self.home_patcher.start()
 
     def tearDown(self) -> None:
+        self.home_patcher.stop()
         self.temp_dir.cleanup()
 
     @patch("src.agent.session.Path.home")
@@ -191,6 +195,113 @@ class TestClawdWebService(unittest.TestCase):
         self.assertNotIn("rag_settings", created["session"])
         self.assertEqual(len(listed["sessions"]), 1)
         self.assertEqual(listed["sessions"][0]["session_id"], created["session"]["session_id"])
+
+    @patch("src.web.app.build_default_registry", side_effect=lambda **_kwargs: ToolRegistry())
+    @patch("src.web.app.get_provider_class", return_value=FakeProvider)
+    def test_persisted_sessions_are_loaded_after_service_restart(
+        self,
+        _mock_provider_class,
+        _mock_build_registry,
+    ) -> None:
+        workspace = self.home / "workspace"
+        service = ClawdWebService(workspace_root=workspace)
+        created = service.create_session(provider_name="openai", model="qwen3-4b")
+        session_id = created["session"]["session_id"]
+
+        service.send_message(session_id, "Keep this after restart")
+
+        session_file = self.home / ".clawd" / "sessions" / f"{session_id}.json"
+        self.assertTrue(session_file.exists())
+
+        restarted = ClawdWebService(workspace_root=workspace)
+        listed = restarted.list_sessions_payload()
+        loaded = restarted.get_session_payload(session_id)
+
+        self.assertEqual([item["session_id"] for item in listed["sessions"]], [session_id])
+        self.assertEqual(loaded["session"]["messages"][0]["text"], "Keep this after restart")
+        self.assertEqual(loaded["session"]["messages"][1]["text"], "Echo: Keep this after restart")
+
+    @patch("src.web.app.build_default_registry", side_effect=lambda **_kwargs: ToolRegistry())
+    @patch("src.web.app.get_provider_class", return_value=FakeProvider)
+    def test_listing_sessions_does_not_wait_for_busy_session_lock(
+        self,
+        _mock_provider_class,
+        _mock_build_registry,
+    ) -> None:
+        service = ClawdWebService(workspace_root=self.home / "workspace")
+        created = service.create_session(provider_name="openai", model="qwen3-4b")
+        session_id = created["session"]["session_id"]
+        state = service._require_session(session_id)
+        locked = threading.Event()
+        release = threading.Event()
+
+        def hold_lock() -> None:
+            with state.lock:
+                locked.set()
+                release.wait(timeout=5)
+
+        worker = threading.Thread(target=hold_lock)
+        worker.start()
+        self.assertTrue(locked.wait(timeout=1))
+        try:
+            listed = service.list_sessions_payload()
+        finally:
+            release.set()
+            worker.join(timeout=1)
+
+        self.assertEqual(len(listed["sessions"]), 1)
+        self.assertEqual(listed["sessions"][0]["session_id"], session_id)
+
+    @patch("src.web.app.build_default_registry", side_effect=lambda **_kwargs: ToolRegistry())
+    @patch("src.web.app.get_provider_class", return_value=FakeProvider)
+    def test_delete_session_removes_memory_and_disk_records(
+        self,
+        _mock_provider_class,
+        _mock_build_registry,
+    ) -> None:
+        service = ClawdWebService(workspace_root=self.home / "workspace")
+        created = service.create_session(provider_name="openai", model="qwen3-4b")
+        session_id = created["session"]["session_id"]
+        session_file = self.home / ".clawd" / "sessions" / f"{session_id}.json"
+
+        self.assertTrue(session_file.exists())
+
+        deleted = service.delete_session(session_id)
+
+        self.assertEqual(deleted, {"deleted": True, "session_id": session_id})
+        self.assertFalse(session_file.exists())
+        self.assertEqual(service.list_sessions_payload()["sessions"], [])
+        with self.assertRaises(KeyError):
+            service.get_session_payload(session_id)
+
+    @patch("src.web.app.build_default_registry", side_effect=lambda **_kwargs: ToolRegistry())
+    @patch("src.web.app.get_provider_class", return_value=FakeProvider)
+    def test_delete_session_rejects_busy_session(
+        self,
+        _mock_provider_class,
+        _mock_build_registry,
+    ) -> None:
+        service = ClawdWebService(workspace_root=self.home / "workspace")
+        created = service.create_session(provider_name="openai", model="qwen3-4b")
+        session_id = created["session"]["session_id"]
+        state = service._require_session(session_id)
+        locked = threading.Event()
+        release = threading.Event()
+
+        def hold_lock() -> None:
+            with state.lock:
+                locked.set()
+                release.wait(timeout=5)
+
+        worker = threading.Thread(target=hold_lock)
+        worker.start()
+        self.assertTrue(locked.wait(timeout=1))
+        try:
+            with self.assertRaises(ValueError):
+                service.delete_session(session_id)
+        finally:
+            release.set()
+            worker.join(timeout=1)
 
     def test_rag_settings_validation_rejects_out_of_range_values(self) -> None:
         service = ClawdWebService(workspace_root=self.home / "workspace")
@@ -355,6 +466,12 @@ class TestClawdWebService(unittest.TestCase):
         self.assertEqual(events[0]["rag"]["hits"][0]["file"], "RAG-data/engine.md")
         self.assertIn("Browser-attached local aircraft-design evidence", reply["reply"]["text"])
         self.assertEqual(reply["session"]["auto_skill"], "aircraft-design")
+        self.assertEqual(reply["session"]["messages"][1]["events"][0]["kind"], "rag_retrieval")
+        self.assertEqual(reply["session"]["messages"][1]["events"][0]["rag"]["hits"][0]["file"], "RAG-data/engine.md")
+
+        restarted = ClawdWebService(workspace_root=workspace)
+        restored = restarted.get_session_payload(created["session"]["session_id"])
+        self.assertEqual(restored["session"]["messages"][1]["events"][0]["rag"]["hits"][0]["file"], "RAG-data/engine.md")
 
     @patch("src.agent.session.Path.home")
     @patch("src.web.app.RagIndexService.search")
