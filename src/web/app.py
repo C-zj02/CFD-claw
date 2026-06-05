@@ -30,15 +30,72 @@ from src.web.rag_service import RagIndexService
 WEB_AIRCRAFT_SKILL_NAME = "aircraft-design"
 INTERNAL_AIRCRAFT_RAG_SKILL_NAME = "aircraft-design-rag"
 LEGACY_AIRCRAFT_DESIGN_SKILL_NAME = "aircraft-conceptual-design"
-AIRCRAFT_SKILL_DISPLAY_NAME = "飞行器设计"
+AERO_INTAKE_EXHAUST_SKILL_NAME = "aero-intake-exhaust-evaluation"
+AERO_PROPULSION_SKILL_NAME = "aero-propulsion-analysis"
+FLIGHT_PERFORMANCE_SKILL_NAME = "flight-performance-analysis"
+AIRCRAFT_SKILL_DISPLAY_NAME = "飞行器总体设计"
 
 
-AUTO_CAPABILITY_SYSTEM_TEMPLATE = """Web session capability policy:
-- The user selected the “飞行器设计” capability for this browser session.
+BROWSER_CAPABILITY_PROFILES: dict[str, dict[str, str]] = {
+    WEB_AIRCRAFT_SKILL_NAME: {
+        "internal_name": INTERNAL_AIRCRAFT_RAG_SKILL_NAME,
+        "display_name": AIRCRAFT_SKILL_DISPLAY_NAME,
+        "short_label": "总体",
+        "description": "结合本地飞行器设计资料，辅助总体方案、约束分析、布局取舍和初步参数判断。",
+        "when_to_use": "当问题涉及飞行器总体设计、概念方案、约束边界、动力或布局初步评估时使用。",
+        "status_note": "本地资料可用",
+        "policy": """Web session capability policy:
+- The user selected the “飞行器总体设计” capability for this browser session.
 - Use the browser-attached local aircraft-design evidence when it is present, and treat it as grounding material rather than as the user's own words.
 - If the attached local evidence says the local index is building or not ready, tell the user retrieval is warming up and answer only from clearly available context.
 - Keep the answer focused on aircraft-design reasoning, assumptions, constraints, and next-step calculations.
-- Do not mention internal retrieval implementation names unless the user explicitly asks about system internals."""
+- Do not mention internal retrieval implementation names unless the user explicitly asks about system internals.""",
+    },
+    AERO_INTAKE_EXHAUST_SKILL_NAME: {
+        "internal_name": AERO_INTAKE_EXHAUST_SKILL_NAME,
+        "display_name": "气动/进排气评估",
+        "short_label": "气动",
+        "description": "面向外流气动、进气道、喷管、网格边界、求解设置和 CFD 评估流程的工程编排。",
+        "when_to_use": "当问题涉及外流气动、进气道/喷管、边界命名、网格、求解器配置、dry-run/mock/execute 流程时使用。",
+        "status_note": "流程编排模式",
+        "policy": """Web session capability policy:
+- The user selected the “气动/进排气评估” capability for this browser session.
+- Treat the response as an engineering workflow: identify geometry, conditions, boundaries, mesh strategy, solver settings, validation gates, and output artifacts.
+- Do not present LLM output as CFD truth; label dry-run/mock data clearly and reserve physical conclusions for external solver results or user-provided data.
+- Ask for confirmation before moving from dry-run/mock planning into real execution or file-overwrite actions.
+- Keep outputs in Chinese and use auditable assumptions, units, and risk notes.""",
+    },
+    AERO_PROPULSION_SKILL_NAME: {
+        "internal_name": AERO_PROPULSION_SKILL_NAME,
+        "display_name": "气动/推进特性分析",
+        "short_label": "推进",
+        "description": "用于推阻特性、发动机推力、耗油率、进气道恢复、喷管系数和安装推力分析。",
+        "when_to_use": "当问题涉及气动数据、推进系统、发动机/喷管性能、安装推力、方案参数推荐或本地资料依据时使用。",
+        "status_note": "公式与数据模式",
+        "policy": """Web session capability policy:
+- The user selected the “气动/推进特性分析” capability for this browser session.
+- Start with a short analysis route covering task type, known inputs, missing inputs, data source, formula path, and confirmation points.
+- Distinguish user-provided values, uploaded-file calculations, local evidence, and engineering assumptions.
+- Show formulas, variables, units, fitting ranges, and confidence for key numerical claims.
+- Keep the answer focused on propulsion/aerodynamic characteristics and avoid unsupported model-memory claims.""",
+    },
+    FLIGHT_PERFORMANCE_SKILL_NAME: {
+        "internal_name": FLIGHT_PERFORMANCE_SKILL_NAME,
+        "display_name": "飞行性能分析",
+        "short_label": "性能",
+        "description": "面向航程、航时、爬升、升限、起降、盘旋、飞行包线和任务剖面的性能分析。",
+        "when_to_use": "当问题涉及飞行性能计算、任务剖面、重量状态、飞行包线、剖面优化或结果归档时使用。",
+        "status_note": "任务剖面模式",
+        "policy": """Web session capability policy:
+- The user selected the “飞行性能分析” capability for this browser session.
+- Organize the response around target metric, aircraft state, aerodynamic/propulsion data, weight state, atmosphere, profile segment, and constraints.
+- Give an auditable analysis summary rather than hidden chain-of-thought; include assumptions, equations, units, and applicability ranges.
+- When data are missing, provide a minimum runnable input ledger and ask for confirmation before using assumptions that change fidelity.
+- Keep outputs in Chinese and emphasize performance margins, uncertainty, and next verification steps.""",
+    },
+}
+
+DEFAULT_BROWSER_CAPABILITY_POLICY = BROWSER_CAPABILITY_PROFILES[WEB_AIRCRAFT_SKILL_NAME]["policy"]
 
 
 INDEX_HTML = """<!doctype html>
@@ -49,20 +106,21 @@ INDEX_HTML = """<!doctype html>
   <title>飞行器设计工作台</title>
   <style>
     :root {
-      --bg: #f7f7f4;
+      --bg: #f3f6f8;
       --panel: #ffffff;
       --panel-strong: #ffffff;
-      --ink: #202420;
-      --muted: #66706a;
-      --line: #e5e2d9;
-      --primary: #29624f;
-      --primary-strong: #183f34;
-      --sky: #255f78;
-      --warm: #b56f42;
-      --user: #24435a;
-      --tool-bg: #faf9f5;
+      --ink: #1e2528;
+      --muted: #657178;
+      --line: #dce4e8;
+      --primary: #1f6d55;
+      --primary-strong: #174838;
+      --sky: #315f95;
+      --warm: #b45d34;
+      --user: #284c63;
+      --tool-bg: #f6f8f9;
       --danger: #a53c30;
-      --shadow: 0 1px 2px rgba(32, 34, 31, 0.04);
+      --shadow: 0 12px 30px rgba(28, 45, 55, 0.07);
+      --soft-shadow: 0 1px 2px rgba(28, 45, 55, 0.06);
       --radius-xl: 8px;
       --radius-lg: 8px;
       --radius-md: 6px;
@@ -79,14 +137,15 @@ INDEX_HTML = """<!doctype html>
     }
 
     body {
-      padding: 12px;
+      padding: 10px;
+      background: linear-gradient(180deg, #f5f7f8 0%, #edf2f4 100%);
     }
 
     .shell {
       display: grid;
-      grid-template-columns: 340px minmax(0, 1fr);
-      gap: 12px;
-      height: calc(100vh - 24px);
+      grid-template-columns: 326px minmax(0, 1fr);
+      gap: 10px;
+      height: calc(100vh - 20px);
     }
 
     .panel {
@@ -97,17 +156,17 @@ INDEX_HTML = """<!doctype html>
     }
 
     .sidebar {
-      padding: 18px;
+      padding: 14px;
       display: flex;
       flex-direction: column;
-      gap: 14px;
+      gap: 12px;
       overflow: auto;
     }
 
     .brand {
-      padding: 16px;
+      padding: 14px;
       border-radius: var(--radius-lg);
-      background: #fbfaf7;
+      background: linear-gradient(180deg, #ffffff 0%, #f5f9fb 100%);
       border: 1px solid var(--line);
     }
 
@@ -124,8 +183,8 @@ INDEX_HTML = """<!doctype html>
     }
 
     .brand h1 {
-      margin: 12px 0 8px;
-      font-size: 24px;
+      margin: 10px 0 6px;
+      font-size: 22px;
       line-height: 1.12;
       letter-spacing: 0;
     }
@@ -134,12 +193,13 @@ INDEX_HTML = """<!doctype html>
       margin: 0;
       color: var(--muted);
       line-height: 1.5;
+      font-size: 13px;
     }
 
     .workspace {
-      margin-top: 12px;
-      padding: 10px;
-      background: #f1f4f1;
+      margin-top: 10px;
+      padding: 9px 10px;
+      background: #eef5f2;
       border-radius: var(--radius-md);
       font-size: 12px;
       color: var(--primary-strong);
@@ -147,24 +207,24 @@ INDEX_HTML = """<!doctype html>
     }
 
     .card {
-      padding: 14px;
+      padding: 12px;
       border: 1px solid var(--line);
       border-radius: var(--radius-lg);
       background: var(--panel-strong);
-      box-shadow: none;
+      box-shadow: var(--soft-shadow);
     }
 
     .card h2 {
-      margin: 0 0 12px;
-      font-size: 15px;
+      margin: 0 0 10px;
+      font-size: 14px;
       letter-spacing: 0.01em;
     }
 
     .field {
       display: flex;
       flex-direction: column;
-      gap: 8px;
-      margin-bottom: 14px;
+      gap: 6px;
+      margin-bottom: 12px;
     }
 
     .field:last-child {
@@ -210,11 +270,11 @@ INDEX_HTML = """<!doctype html>
     textarea {
       width: 100%;
       border: 1px solid var(--line);
-      border-radius: 8px;
-      background: #fffefa;
+      border-radius: 7px;
+      background: #fbfdfe;
       color: var(--ink);
       font: inherit;
-      padding: 12px 14px;
+      padding: 11px 12px;
       transition: border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
     }
 
@@ -225,7 +285,7 @@ INDEX_HTML = """<!doctype html>
     }
 
     textarea {
-      min-height: 76px;
+      min-height: 68px;
       max-height: 220px;
       resize: vertical;
       line-height: 1.45;
@@ -247,9 +307,9 @@ INDEX_HTML = """<!doctype html>
       display: flex;
       align-items: center;
       gap: 12px;
-      padding: 11px 12px;
-      border-radius: 8px;
-      background: #f4f7f4;
+      padding: 10px 11px;
+      border-radius: 7px;
+      background: #eef5f2;
       color: var(--primary-strong);
       font-size: 14px;
     }
@@ -261,7 +321,38 @@ INDEX_HTML = """<!doctype html>
     }
 
     .skill-card {
-      background: #fbfaf7;
+      background: #ffffff;
+    }
+
+    .capability-strip {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .capability-button {
+      min-height: 44px;
+      padding: 9px 10px;
+      border-radius: 7px;
+      border: 1px solid var(--line);
+      background: #f8fbfc;
+      color: #314046;
+      box-shadow: none;
+      text-align: left;
+      font-size: 12px;
+      line-height: 1.2;
+    }
+
+    .capability-button:hover {
+      transform: none;
+      background: #edf5f7;
+    }
+
+    .capability-button.active {
+      border-color: rgba(31, 109, 85, 0.42);
+      background: #eaf5ef;
+      color: var(--primary-strong);
     }
 
     .skill-status {
@@ -288,7 +379,7 @@ INDEX_HTML = """<!doctype html>
       display: flex;
       flex-direction: column;
       gap: 8px;
-      max-height: 220px;
+      max-height: 190px;
       overflow: auto;
     }
 
@@ -301,10 +392,10 @@ INDEX_HTML = """<!doctype html>
 
     .session-item {
       width: 100%;
-      border-radius: 8px;
-      padding: 10px 12px;
+      border-radius: 7px;
+      padding: 9px 11px;
       text-align: left;
-      background: #fbfaf7;
+      background: #f8fbfc;
       color: var(--ink);
       border: 1px solid var(--line);
       box-shadow: none;
@@ -324,11 +415,11 @@ INDEX_HTML = """<!doctype html>
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      min-height: 44px;
+      min-height: 40px;
       padding: 0;
       border: 1px solid var(--line);
-      border-radius: 8px;
-      background: #fffefa;
+      border-radius: 7px;
+      background: #fbfdfe;
       color: var(--danger);
       box-shadow: none;
       font-size: 18px;
@@ -367,8 +458,8 @@ INDEX_HTML = """<!doctype html>
 
     button {
       border: 0;
-      border-radius: 8px;
-      padding: 12px 18px;
+      border-radius: 7px;
+      padding: 11px 16px;
       font: inherit;
       font-weight: 700;
       cursor: pointer;
@@ -401,6 +492,7 @@ INDEX_HTML = """<!doctype html>
       display: grid;
       grid-template-rows: auto minmax(0, 1fr) auto;
       overflow: hidden;
+      background: linear-gradient(180deg, #fdfefe 0%, #f7f9fa 100%);
     }
 
     .topbar {
@@ -408,22 +500,22 @@ INDEX_HTML = """<!doctype html>
       align-items: center;
       justify-content: space-between;
       gap: 16px;
-      padding: 16px 20px;
+      padding: 12px 16px;
       border-bottom: 1px solid var(--line);
-      background: #ffffff;
+      background: linear-gradient(180deg, #ffffff 0%, #f8fbfc 100%);
     }
 
     .topbar h2 {
       margin: 0;
-      font-size: 18px;
+      font-size: 17px;
       letter-spacing: -0.02em;
     }
 
     .meta {
       display: flex;
       flex-wrap: wrap;
-      gap: 8px;
-      margin-top: 8px;
+      gap: 6px;
+      margin-top: 6px;
       color: var(--muted);
       font-size: 13px;
     }
@@ -433,7 +525,7 @@ INDEX_HTML = """<!doctype html>
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
-      padding: 3px 8px;
+      padding: 3px 7px;
       border-radius: 999px;
       background: #f6f6f2;
     }
@@ -443,7 +535,7 @@ INDEX_HTML = """<!doctype html>
       align-items: center;
       gap: 8px;
       border-radius: 999px;
-      padding: 8px 12px;
+      padding: 7px 11px;
       background: #f0f5f1;
       color: var(--primary-strong);
       font-size: 13px;
@@ -455,36 +547,79 @@ INDEX_HTML = """<!doctype html>
     }
 
     .chat {
-      padding: 28px 32px;
+      padding: 18px 18px 16px;
       overflow: auto;
       display: flex;
       flex-direction: column;
-      align-items: center;
-      gap: 18px;
+      align-items: stretch;
+      gap: 14px;
       background: #ffffff;
     }
 
     .hero {
-      width: min(880px, 100%);
-      padding: 18px 20px;
+      width: min(100%, 980px);
+      display: grid;
+      grid-template-columns: minmax(0, 1.4fr) minmax(240px, 0.9fr);
+      gap: 14px;
+      align-items: start;
+      padding: 16px 18px;
       border: 1px solid var(--line);
       border-radius: 8px;
-      background: #fbfaf7;
+      background: linear-gradient(135deg, #f6fafb 0%, #eef6f2 100%);
       color: var(--muted);
+    }
+
+    .hero-copy {
+      min-width: 0;
     }
 
     .hero strong {
       display: block;
-      margin-bottom: 8px;
+      margin-bottom: 6px;
       color: var(--ink);
-      font-size: 18px;
+      font-size: 16px;
+    }
+
+    .hero span {
+      display: block;
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .hero-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .hero-stat {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: 1px solid rgba(36, 76, 63, 0.12);
+      background: rgba(255, 255, 255, 0.72);
+    }
+
+    .hero-stat span {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .hero-stat strong {
+      margin: 0;
+      font-size: 13px;
+      color: var(--primary-strong);
     }
 
     .message {
       display: flex;
       flex-direction: column;
       gap: 8px;
-      width: min(880px, 100%);
+      width: min(920px, 100%);
       max-width: 100%;
       animation: fadeIn 180ms ease;
     }
@@ -783,22 +918,38 @@ INDEX_HTML = """<!doctype html>
     .event-list {
       display: flex;
       flex-direction: column;
-      gap: 22px;
+      gap: 16px;
+      position: relative;
     }
 
     .event {
-      padding: 0;
+      position: relative;
+      padding: 0 0 0 18px;
       background: transparent;
       border: 0;
+    }
+
+    .event::before {
+      content: "";
+      position: absolute;
+      left: 5px;
+      top: 8px;
+      bottom: -14px;
+      width: 1px;
+      background: #dbe4e7;
+    }
+
+    .event:last-child::before {
+      display: none;
     }
 
     .event-meta {
       display: flex;
       align-items: center;
-      gap: 10px;
-      margin-bottom: 10px;
-      color: #9a9b99;
-      font-size: 16px;
+      gap: 8px;
+      margin-bottom: 6px;
+      color: #758088;
+      font-size: 13px;
       font-weight: 600;
       line-height: 1.3;
     }
@@ -807,10 +958,16 @@ INDEX_HTML = """<!doctype html>
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      width: 20px;
-      color: #9a9b99;
-      font-size: 18px;
+      width: 16px;
+      height: 16px;
+      margin-left: -18px;
+      border-radius: 999px;
+      background: #ffffff;
+      border: 1px solid #cbd8dd;
+      color: var(--primary-strong);
+      font-size: 11px;
       flex: 0 0 auto;
+      z-index: 1;
     }
 
     .event-label {
@@ -824,9 +981,9 @@ INDEX_HTML = """<!doctype html>
       display: block;
       margin: 0;
       color: var(--ink);
-      font-size: 18px;
+      font-size: 14px;
       line-height: 1.55;
-      font-weight: 700;
+      font-weight: 650;
     }
 
     .event-subtext {
@@ -840,7 +997,7 @@ INDEX_HTML = """<!doctype html>
       margin-top: 10px;
       padding: 10px 12px;
       border-radius: 8px;
-      background: #f7f7f4;
+      background: #f7fafb;
       color: #49514b;
       font-size: 12px;
       line-height: 1.45;
@@ -884,7 +1041,7 @@ INDEX_HTML = """<!doctype html>
       margin-top: 12px;
       border: 1px solid var(--line);
       border-radius: 8px;
-      background: #fffefa;
+      background: #fbfdfe;
       overflow: hidden;
     }
 
@@ -937,7 +1094,7 @@ INDEX_HTML = """<!doctype html>
     .evidence-card {
       padding: 12px;
       border-radius: 8px;
-      background: #fbfaf7;
+      background: #f8fbfc;
       border: 1px solid var(--line);
     }
 
@@ -965,23 +1122,50 @@ INDEX_HTML = """<!doctype html>
       align-self: flex-start;
       padding: 7px 10px;
       border: 1px solid var(--line);
-      background: #f7f7f4;
+      background: #f8fbfc;
       color: var(--primary-strong);
       box-shadow: none;
       font-size: 12px;
     }
 
     .composer {
-      padding: 14px 20px 18px;
+      padding: 12px 16px 14px;
       border-top: 1px solid var(--line);
       background: #ffffff;
+    }
+
+    .ops-grid {
+      display: grid;
+      gap: 8px;
+    }
+
+    .ops-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 9px 0;
+      border-bottom: 1px solid var(--line);
+      font-size: 12px;
+    }
+
+    .ops-row:last-child {
+      border-bottom: 0;
+    }
+
+    .ops-row span {
+      color: var(--muted);
+    }
+
+    .ops-row strong {
+      color: var(--primary-strong);
+      text-align: right;
     }
 
     .prompt-strip {
       display: flex;
       flex-wrap: wrap;
-      gap: 8px;
-      margin-bottom: 10px;
+      gap: 6px;
+      margin-bottom: 8px;
     }
 
     .prompt-chip {
@@ -990,15 +1174,15 @@ INDEX_HTML = """<!doctype html>
       background: #f5f9fb;
       color: #24546d;
       box-shadow: none;
-      font-size: 12px;
+      font-size: 11px;
       font-weight: 700;
       white-space: nowrap;
     }
 
     .composer-row {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) 92px;
-      gap: 12px;
+      grid-template-columns: minmax(0, 1fr) 104px;
+      gap: 10px;
       align-items: stretch;
     }
 
@@ -1068,6 +1252,10 @@ INDEX_HTML = """<!doctype html>
         flex-direction: column;
       }
 
+      .hero {
+        grid-template-columns: 1fr;
+      }
+
       .badge {
         align-self: flex-start;
       }
@@ -1082,9 +1270,9 @@ INDEX_HTML = """<!doctype html>
   <div class="shell">
     <aside class="panel sidebar">
       <section class="brand">
-        <div class="eyebrow">飞行器设计智能体</div>
+        <div class="eyebrow">飞行器工程智能体</div>
         <h1>飞行器设计工作台</h1>
-        <p>面向总体方案、约束分析、本地资料辅助和方案界限线图的设计界面。</p>
+        <p>面向总体方案、气动/推进、飞行性能和本地资料证据的工程设计界面。</p>
         <div class="workspace" id="workspaceRoot">正在加载工作区...</div>
       </section>
 
@@ -1122,18 +1310,22 @@ INDEX_HTML = """<!doctype html>
       <section class="card skill-card">
         <h2>设计能力</h2>
         <div class="field">
-          <label for="skillSelect">自动使用能力</label>
+          <label for="skillSelect">工程模式</label>
           <select id="skillSelect"></select>
-          <p class="field-help">选择“飞行器设计”后，回答会结合本地飞行器设计资料；默认不自动使用。</p>
+          <p class="field-help">默认不自动启用；需要专项能力时再选择对应工程模式。</p>
+          <div class="capability-strip" id="capabilityStrip" aria-label="工程模式快捷选择"></div>
         </div>
-        <div class="skill-status" id="skillStatus">未启用设计能力</div>
+        <div class="skill-status" id="skillStatus">未启用工程模式</div>
       </section>
 
       <section class="card tips">
-        <h2>说明</h2>
-        <p class="hint">网页端使用与命令行相同的模型服务配置；如未配置 API Key，请先运行 <code>clawd login</code>。</p>
-        <p class="hint">需要结合本地资料时，在“设计能力”中选择“飞行器设计”。</p>
-        <p class="hint">网页端会隐藏问卷式工具提示，保证会话响应更稳定。</p>
+        <h2>运行状态</h2>
+        <div class="ops-grid">
+          <div class="ops-row"><span>默认模型</span><strong>deepseek-v4-pro</strong></div>
+          <div class="ops-row"><span>资料证据</span><strong id="evidenceMode">按模式启用</strong></div>
+          <div class="ops-row"><span>工具确认</span><strong id="toolMode">自动批准</strong></div>
+          <div class="ops-row"><span>历史记录</span><strong>本地保存</strong></div>
+        </div>
       </section>
     </aside>
 
@@ -1144,7 +1336,7 @@ INDEX_HTML = """<!doctype html>
           <div class="meta">
             <span id="providerMeta">模型服务：--</span>
             <span id="modelMeta">模型：--</span>
-            <span id="skillMeta">技能：无</span>
+            <span id="skillMeta">工程模式：无</span>
             <span id="sessionMeta">会话：--</span>
           </div>
         </div>
@@ -1154,7 +1346,7 @@ INDEX_HTML = """<!doctype html>
       <section id="chatLog" class="chat">
         <div class="hero">
           <strong>飞行器设计流程</strong>
-          围绕任务需求、总体参数、约束边界、动力与布局方案开展对话；每轮回答下方可展开查看资料证据和工具活动。
+          先描述任务、约束和已有数据；需要专项能力时选择左侧工程模式。每轮回答会保留可展开的过程记录、资料证据和工具活动。
         </div>
       </section>
 
@@ -1163,10 +1355,11 @@ INDEX_HTML = """<!doctype html>
         <div class="prompt-strip" aria-label="常用飞行器设计任务">
           <button class="prompt-chip" type="button" data-prompt="设计一架航程 1200 km、载荷 500 kg 的固定翼无人机，给出总体参数、翼载、推重比和约束分析思路。">固定翼无人机总体方案</button>
           <button class="prompt-chip" type="button" data-prompt="基于本地资料，比较电推进、涡桨和活塞动力在中小型无人机方案中的适用边界。">动力方案对比</button>
-          <button class="prompt-chip" type="button" data-prompt="为一架低速长航时飞行器梳理约束边界：失速、爬升、巡航、起飞距离和续航。">约束边界梳理</button>
+          <button class="prompt-chip" type="button" data-prompt="为一架低速长航时飞行器梳理约束边界：失速、爬升、巡航、起飞距离和续航。">性能约束梳理</button>
+          <button class="prompt-chip" type="button" data-prompt="规划一个进气道/喷管 CFD dry-run：说明边界命名、网格策略、求解设置、监测量和结果包。">CFD 流程规划</button>
         </div>
         <form id="composerForm" class="composer-row">
-          <textarea id="promptInput" placeholder="输入飞行器设计需求，例如：设计一架航程 1200 km、载荷 500 kg 的固定翼无人机..."></textarea>
+          <textarea id="promptInput" placeholder="输入工程设计需求，例如：设计一架航程 1200 km、载荷 500 kg 的固定翼无人机..."></textarea>
           <div class="composer-actions">
             <button id="sendBtn" class="primary" type="submit">发送</button>
             <button id="stopBtn" class="secondary" type="button" disabled>停止</button>
@@ -1214,6 +1407,9 @@ INDEX_HTML = """<!doctype html>
     const sessionMeta = document.getElementById("sessionMeta");
     const workspaceRoot = document.getElementById("workspaceRoot");
     const skillStatus = document.getElementById("skillStatus");
+    const capabilityStrip = document.getElementById("capabilityStrip");
+    const evidenceMode = document.getElementById("evidenceMode");
+    const toolMode = document.getElementById("toolMode");
 
     function setBusy(isBusy, label = "处理中...") {
       state.busy = isBusy;
@@ -1226,7 +1422,7 @@ INDEX_HTML = """<!doctype html>
       autoApproveToggle.disabled = isBusy;
       stopBtn.disabled = !isBusy;
       statusBadge.textContent = isBusy ? label : "空闲";
-      statusLine.textContent = isBusy ? "正在运行设计智能体..." : "";
+      statusLine.textContent = isBusy ? "正在运行工程智能体..." : "";
       if (state.config) updateSkillStatus();
     }
 
@@ -1273,7 +1469,6 @@ INDEX_HTML = """<!doctype html>
     }
 
     function toInternalSkillName(name) {
-      if (name === WEB_AIRCRAFT_SKILL) return WEB_AIRCRAFT_SKILL;
       return name || null;
     }
 
@@ -1335,24 +1530,43 @@ INDEX_HTML = """<!doctype html>
 
     function populateSkills() {
       skillSelect.innerHTML = "";
+      capabilityStrip.innerHTML = "";
       const noneOption = document.createElement("option");
       noneOption.value = "";
       noneOption.textContent = "不自动使用";
       skillSelect.appendChild(noneOption);
 
       for (const skill of state.config.skills || []) {
-        if (skill.name !== WEB_AIRCRAFT_SKILL) continue;
         const option = document.createElement("option");
-        option.value = WEB_AIRCRAFT_SKILL;
-        option.textContent = skillDisplayName(WEB_AIRCRAFT_SKILL);
+        option.value = skill.name;
+        option.textContent = skillDisplayName(skill.name);
         if (skill.description) option.title = skill.description;
         skillSelect.appendChild(option);
+
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "capability-button";
+        button.dataset.skill = skill.name;
+        button.textContent = skill.short_label || skillDisplayName(skill.name);
+        button.title = skill.description || skill.when_to_use || skillDisplayName(skill.name);
+        button.addEventListener("click", () => {
+          skillSelect.value = skill.name;
+          updateSkillStatus();
+          saveLocalState();
+        });
+        capabilityStrip.appendChild(button);
       }
+    }
+
+    function skillByName(name) {
+      return (state.config?.skills || []).find((item) => item.name === name) || null;
     }
 
     function skillDisplayName(name) {
       if (!name) return "无";
-      if (name === WEB_AIRCRAFT_SKILL) return "飞行器设计";
+      const skill = skillByName(name);
+      if (skill?.display_name) return skill.display_name;
+      if (name === WEB_AIRCRAFT_SKILL) return "飞行器总体设计";
       return "/" + name;
     }
 
@@ -1360,14 +1574,27 @@ INDEX_HTML = """<!doctype html>
       const selected = skillSelect.value;
       const ragSelected = selected === WEB_AIRCRAFT_SKILL;
       if (!selected) {
-        skillStatus.textContent = "未启用设计能力";
+        skillStatus.textContent = "未启用工程模式";
         skillStatus.title = "";
+        evidenceMode.textContent = "未启用";
+        updateCapabilityButtons();
         return;
       }
-      const skill = (state.config?.skills || []).find((item) => item.name === selected);
-      const ragNote = ragSelected ? " · 本地资料可用" : "";
-      skillStatus.textContent = "已启用：" + skillDisplayName(selected) + ragNote;
-      if (skill?.description) skillStatus.title = skill.description;
+      const skill = skillByName(selected);
+      const modeNote = skill?.status_note ? " · " + skill.status_note : "";
+      skillStatus.textContent = "已启用：" + skillDisplayName(selected) + modeNote;
+      skillStatus.title = skill?.description || "";
+      evidenceMode.textContent = ragSelected ? "自动检索" : "按需检索";
+      updateCapabilityButtons();
+    }
+
+    function updateCapabilityButtons() {
+      const selected = skillSelect.value || "";
+      for (const button of capabilityStrip.querySelectorAll(".capability-button")) {
+        button.classList.toggle("active", button.dataset.skill === selected);
+      }
+      if (toolMode) toolMode.textContent = autoApproveToggle.checked ? "自动批准" : "手动确认";
+      refreshHeroIfEmpty();
     }
 
     function applyConfigDefaults(preferred) {
@@ -1380,13 +1607,14 @@ INDEX_HTML = """<!doctype html>
       skillSelect.value = skillExists ? preferredSkill : "";
       updateSkillStatus();
       autoApproveToggle.checked = preferred?.autoApprove ?? true;
+      updateCapabilityButtons();
     }
 
     function updateMeta(session) {
-      sessionTitle.textContent = session.messages.length ? "飞行器设计会话" : "新的设计会话";
+      sessionTitle.textContent = session.messages.length ? "工程设计会话" : "新的设计会话";
       providerMeta.textContent = "模型服务：" + session.provider;
       modelMeta.textContent = "模型：" + WEB_MODEL;
-      skillMeta.textContent = "技能：" + skillDisplayName(toUiSkillName(session.auto_skill));
+      skillMeta.textContent = "工程模式：" + skillDisplayName(toUiSkillName(session.auto_skill));
       sessionMeta.textContent = "会话：" + session.session_id;
       state.sessionId = session.session_id;
       state.provider = session.provider;
@@ -1773,8 +2001,11 @@ INDEX_HTML = """<!doctype html>
 
     function cleanUiText(value) {
       return String(value ?? "")
-        .replaceAll("aircraft-design-rag", "飞行器设计")
-        .replaceAll("aircraft-design", "飞行器设计")
+        .replaceAll("aero-intake-exhaust-evaluation", "气动/进排气评估")
+        .replaceAll("aero-propulsion-analysis", "气动/推进特性分析")
+        .replaceAll("flight-performance-analysis", "飞行性能分析")
+        .replaceAll("aircraft-design-rag", "飞行器总体设计")
+        .replaceAll("aircraft-design", "飞行器总体设计")
         .replaceAll("RAG index", "本地资料索引")
         .replaceAll("RAG", "本地资料");
     }
@@ -1872,15 +2103,15 @@ INDEX_HTML = """<!doctype html>
       const summary = eventSummary(event);
       if (event.is_error) return compactEventSummary(summary || "这一步遇到错误，已记录下来供排查。");
       if (event.kind === "planning") {
-        return compactEventSummary(summary || "我先拆解本轮飞行器设计需求，判断是否需要检索资料、查看文件或进行计算。");
+        return compactEventSummary(summary || "我先拆解本轮工程设计需求，判断是否需要检索资料、查看文件或进行计算。");
       }
       if (event.kind === "drafting") {
         return compactEventSummary(summary || "我已经开始把可用依据、计算关系和设计结论组织成回答。");
       }
       if (event.kind === "rag_retrieval") {
         const hits = Array.isArray(event.rag?.hits) ? event.rag.hits.length : 0;
-        if (hits > 0) return "我已经从本地飞行器设计资料里找到 " + hits + " 条相关证据，先把可用依据带入本轮设计判断。";
-        return "我检查了本地飞行器设计资料，但这一轮没有找到直接匹配的证据，会基于已知条件和明确假设继续。";
+        if (hits > 0) return "我已经从本地资料里找到 " + hits + " 条相关证据，先把可用依据带入本轮设计判断。";
+        return "我检查了本地资料，但这一轮没有找到直接匹配的证据，会基于已知条件和明确假设继续。";
       }
       if (event.kind === "permission") {
         return compactEventSummary(summary || "我确认了这一步所需的本地工具权限，然后继续执行。");
@@ -2174,7 +2405,7 @@ INDEX_HTML = """<!doctype html>
 
       const label = document.createElement("div");
       label.className = "message-label";
-      label.textContent = role === "user" ? "你" : role === "assistant" ? "设计助手" : "系统";
+      label.textContent = role === "user" ? "你" : role === "assistant" ? "工程助手" : "系统";
       wrapper.appendChild(label);
 
       const bubble = document.createElement("div");
@@ -2211,7 +2442,22 @@ INDEX_HTML = """<!doctype html>
     function renderHero() {
       const hero = document.createElement("div");
       hero.className = "hero";
-      hero.innerHTML = "<strong>飞行器设计流程</strong><span>围绕任务需求、总体参数、约束边界、动力与布局方案开展对话；每轮回答下方可展开查看资料证据和工具活动。</span>";
+      const selectedSkill = skillSelect.value ? skillDisplayName(skillSelect.value) : "未启用工程模式";
+      const evidenceLabel = skillSelect.value
+        ? (skillSelect.value === WEB_AIRCRAFT_SKILL ? "自动检索" : "按需检索")
+        : "未启用";
+      const toolLabel = autoApproveToggle.checked ? "自动批准" : "手动确认";
+      hero.innerHTML =
+        '<div class="hero-copy">' +
+          "<strong>工程设计流程</strong>" +
+          "<span>围绕任务需求、总体参数、约束边界、动力、气动和飞行性能开展对话；每轮回答下方可展开查看资料证据和工具活动。</span>" +
+        "</div>" +
+        '<div class="hero-stack" aria-label="当前工作台状态">' +
+          '<div class="hero-stat"><span>默认模型</span><strong>' + WEB_MODEL + "</strong></div>" +
+          '<div class="hero-stat"><span>工程模式</span><strong>' + escapeHtml(selectedSkill) + "</strong></div>" +
+          '<div class="hero-stat"><span>资料证据</span><strong>' + escapeHtml(evidenceLabel) + "</strong></div>" +
+          '<div class="hero-stat"><span>工具确认</span><strong>' + escapeHtml(toolLabel) + "</strong></div>" +
+        "</div>";
       chatLog.appendChild(hero);
     }
 
@@ -2233,6 +2479,11 @@ INDEX_HTML = """<!doctype html>
         chatLog.appendChild(createMessage(message.role, text, { events: message.events || [] }));
       }
       chatLog.scrollTop = chatLog.scrollHeight;
+    }
+
+    function refreshHeroIfEmpty() {
+      if (chatLog.querySelector(".message")) return;
+      renderMessages([]);
     }
 
     function appendAssistantReply(reply, options = {}) {
@@ -2461,7 +2712,7 @@ INDEX_HTML = """<!doctype html>
       let hasDraftEvent = false;
       const liveEvents = [{
         kind: "planning",
-        tool_name: "飞行器设计",
+        tool_name: skillDisplayName(skillSelect.value) || "工程设计",
         summary: "我先拆解任务目标、约束条件和可能需要补充的资料，再开始组织回答。",
         is_error: false,
       }];
@@ -2509,12 +2760,12 @@ INDEX_HTML = """<!doctype html>
             onChunk: (chunk) => {
               liveText += chunk;
               if (!hasDraftEvent) {
-                liveEvents.push({
-                  kind: "drafting",
-                  tool_name: "飞行器设计",
+              liveEvents.push({
+                kind: "drafting",
+                  tool_name: skillDisplayName(skillSelect.value) || "工程设计",
                   summary: "我已经开始把当前可用信息整理成正式回答。",
                   is_error: false,
-                });
+              });
                 hasDraftEvent = true;
               }
               const assistant = ensureLiveAssistant();
@@ -2586,7 +2837,10 @@ INDEX_HTML = """<!doctype html>
       saveLocalState();
     });
     modelInput.addEventListener("change", saveLocalState);
-    autoApproveToggle.addEventListener("change", saveLocalState);
+    autoApproveToggle.addEventListener("change", () => {
+      updateCapabilityButtons();
+      saveLocalState();
+    });
 
     newSessionBtn.addEventListener("click", createSession);
     resetSessionBtn.addEventListener("click", resetSession);
@@ -3117,19 +3371,25 @@ class ClawdWebService:
         }
 
     def _list_browser_skills(self) -> list[dict[str, Any]]:
-        skill = self._get_project_skill(INTERNAL_AIRCRAFT_RAG_SKILL_NAME)
-        if skill is None:
-            return []
-        return [
-            {
-                "name": WEB_AIRCRAFT_SKILL_NAME,
-                "display_name": AIRCRAFT_SKILL_DISPLAY_NAME,
-                "description": "结合本地飞行器设计资料辅助回答总体方案、约束分析和动力布局问题。",
-                "when_to_use": "当问题涉及飞行器总体设计、概念方案、约束分析、动力或布局评估时使用。",
-                "allowed_tools": [],
-                "loaded_from": skill.loaded_from,
-            }
-        ]
+        listed: list[dict[str, Any]] = []
+        for browser_name, profile in BROWSER_CAPABILITY_PROFILES.items():
+            internal_name = profile["internal_name"]
+            skill = self._get_project_skill(internal_name)
+            if skill is None:
+                continue
+            listed.append(
+                {
+                    "name": browser_name,
+                    "display_name": profile["display_name"],
+                    "short_label": profile["short_label"],
+                    "description": profile["description"],
+                    "when_to_use": profile["when_to_use"],
+                    "allowed_tools": [],
+                    "loaded_from": skill.loaded_from,
+                    "status_note": profile["status_note"],
+                }
+            )
+        return listed
 
     def _list_project_skills(self) -> list[dict[str, Any]]:
         try:
@@ -3170,13 +3430,19 @@ class ClawdWebService:
         normalized = skill_name.strip().removeprefix("/")
         if not normalized:
             return None
-        if normalized in {WEB_AIRCRAFT_SKILL_NAME, INTERNAL_AIRCRAFT_RAG_SKILL_NAME, LEGACY_AIRCRAFT_DESIGN_SKILL_NAME}:
+        if normalized in {WEB_AIRCRAFT_SKILL_NAME, LEGACY_AIRCRAFT_DESIGN_SKILL_NAME}:
             return INTERNAL_AIRCRAFT_RAG_SKILL_NAME
+        profile = BROWSER_CAPABILITY_PROFILES.get(normalized)
+        if profile is not None:
+            return profile["internal_name"]
         return normalized
 
     def _to_browser_skill_name(self, skill_name: str | None) -> str | None:
         if skill_name in {INTERNAL_AIRCRAFT_RAG_SKILL_NAME, LEGACY_AIRCRAFT_DESIGN_SKILL_NAME, WEB_AIRCRAFT_SKILL_NAME}:
             return WEB_AIRCRAFT_SKILL_NAME
+        for browser_name, profile in BROWSER_CAPABILITY_PROFILES.items():
+            if skill_name == profile["internal_name"]:
+                return browser_name
         return skill_name
 
     def _normalize_browser_skill_name(self, skill_name: str | None) -> str | None:
@@ -3202,7 +3468,10 @@ class ClawdWebService:
     ) -> str:
         if not auto_skill:
             return message
-        parts = [AUTO_CAPABILITY_SYSTEM_TEMPLATE]
+        browser_skill_name = self._to_browser_skill_name(auto_skill)
+        profile = BROWSER_CAPABILITY_PROFILES.get(browser_skill_name or "")
+        policy = profile["policy"] if profile is not None else DEFAULT_BROWSER_CAPABILITY_POLICY
+        parts = [policy]
         if attached_rag is not None:
             parts.append(
                 "Browser-attached local aircraft-design evidence for this turn:\n"
@@ -3686,12 +3955,12 @@ def run_web_server(host: str = "127.0.0.1", port: int = 8080, workspace_root: Pa
     service = ClawdWebService(workspace_root=workspace_root)
     server = _ClawdHTTPServer((host, port), service)
     url = f"http://{host}:{port}"
-    print(f"飞行器设计网页端已启动：{url}")
+    print(f"飞行器工程网页端已启动：{url}")
     print(f"工作区：{service.workspace_root}")
     print("按 Ctrl+C 停止服务器。")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        print("\n正在停止飞行器设计网页端...")
+        print("\n正在停止飞行器工程网页端...")
     finally:
         server.server_close()

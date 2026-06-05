@@ -150,10 +150,54 @@ class TestClawdWebService(unittest.TestCase):
 
         self.assertEqual(payload["default_auto_skill"], None)
         self.assertEqual(payload["skills"][0]["name"], "aircraft-design")
-        self.assertEqual(payload["skills"][0]["display_name"], "飞行器设计")
+        self.assertEqual(payload["skills"][0]["display_name"], "飞行器总体设计")
         self.assertEqual(created["session"]["auto_skill"], "aircraft-design")
-        self.assertIn("飞行器设计", reply["reply"]["text"])
+        self.assertIn("飞行器总体设计", reply["reply"]["text"])
         self.assertNotIn("aircraft-design-rag", reply["reply"]["text"])
+
+    @patch("src.agent.session.Path.home")
+    @patch("src.web.app.build_default_registry", side_effect=lambda **_kwargs: ToolRegistry())
+    @patch("src.web.app.get_provider_class", return_value=FakeProvider)
+    def test_bootstrap_payload_exposes_engineering_modes(
+        self,
+        _mock_provider_class,
+        _mock_build_registry,
+        mock_session_home,
+    ) -> None:
+        mock_session_home.return_value = self.home
+        workspace = self.home / "workspace"
+        for skill_name in (
+            "aircraft-design-rag",
+            "aero-intake-exhaust-evaluation",
+            "aero-propulsion-analysis",
+            "flight-performance-analysis",
+        ):
+            skill_dir = workspace / ".clawd" / "skills" / skill_name
+            skill_dir.mkdir(parents=True, exist_ok=True)
+            (skill_dir / "SKILL.md").write_text(
+                f"---\nname: {skill_name}\ndescription: demo\n---\nDemo skill.",
+                encoding="utf-8",
+            )
+
+        with patch("src.config.Path.home", return_value=self.home):
+            service = ClawdWebService(workspace_root=workspace)
+            payload = service.get_bootstrap_payload()
+
+        names = [skill["name"] for skill in payload["skills"]]
+        self.assertEqual(
+            names,
+            [
+                "aircraft-design",
+                "aero-intake-exhaust-evaluation",
+                "aero-propulsion-analysis",
+                "flight-performance-analysis",
+            ],
+        )
+        self.assertEqual(
+            [skill["display_name"] for skill in payload["skills"]],
+            ["飞行器总体设计", "气动/进排气评估", "气动/推进特性分析", "飞行性能分析"],
+        )
+        self.assertTrue(all(skill["short_label"] for skill in payload["skills"]))
 
     def test_bootstrap_payload_marks_configured_providers(self) -> None:
         with patch("src.config.Path.home", return_value=self.home):
