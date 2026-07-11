@@ -1,0 +1,3662 @@
+    const LOCAL_STATE_KEY = "clawd-web-console";
+    const WEB_MODEL = "deepseek-v4-pro";
+    const WEB_AIRCRAFT_SKILL = "aircraft-design-skill";
+    const DESIGN_ENERGY_CONFIG = Object.freeze({
+      prop: Object.freeze({
+        field: "prop_bsfc_kg_per_j",
+        label: "螺旋桨 BSFC（kg/J）",
+        inputLabel: "螺旋桨 BSFC",
+        defaultValue: 8.45e-8,
+        min: 1e-10,
+        max: 1e-5,
+      }),
+      jet: Object.freeze({
+        field: "jet_tsfc_kg_per_n_s",
+        label: "喷气 TSFC（kg/(N·s)）",
+        inputLabel: "喷气 TSFC",
+        defaultValue: 2.3e-5,
+        min: 1e-9,
+        max: 1e-3,
+      }),
+    });
+    const state = {
+      config: null,
+      sessionId: null,
+      provider: null,
+      model: null,
+      autoSkill: null,
+      sessions: [],
+      busy: false,
+      abortController: null,
+      view: "chat",
+      designJobId: null,
+      designJobRunning: false,
+      designJobEvents: [],
+      designJobMessage: null,
+      designJobSequence: 0,
+      designJobs: [],
+      renderedDesignJobId: null,
+      designStreamController: null,
+      designTab: "requirements",
+      activeDesignJob: null,
+      designJobDetails: {},
+      compareJobIds: [],
+      selectedResultFile: null,
+      preflightRequestFingerprint: null,
+      preflightFingerprint: null,
+      confirmedPreflightFingerprint: null,
+      designFieldSources: {},
+      designEnergyValues: {
+        prop: DESIGN_ENERGY_CONFIG.prop.defaultValue,
+        jet: DESIGN_ENERGY_CONFIG.jet.defaultValue,
+      },
+      designLegacyEnergy: { prop: null, jet: null },
+    };
+
+    const providerSelect = document.getElementById("providerSelect");
+    const modelInput = document.getElementById("modelInput");
+    const modelDatalist = document.getElementById("modelDatalist");
+    const skillSelect = document.getElementById("skillSelect");
+    const autoApproveToggle = document.getElementById("autoApproveToggle");
+    const newSessionBtn = document.getElementById("newSessionBtn");
+    const resetSessionBtn = document.getElementById("resetSessionBtn");
+    const sessionList = document.getElementById("sessionList");
+    const chatLog = document.getElementById("chatLog");
+    const mainPanel = document.querySelector(".main");
+    const promptInput = document.getElementById("promptInput");
+    const sendBtn = document.getElementById("sendBtn");
+    const stopBtn = document.getElementById("stopBtn");
+    const clearDraftBtn = document.getElementById("clearDraftBtn");
+    const statusLine = document.getElementById("statusLine");
+    const statusBadge = document.getElementById("statusBadge");
+    const sessionTitle = document.getElementById("sessionTitle");
+    const providerMeta = document.getElementById("providerMeta");
+    const modelMeta = document.getElementById("modelMeta");
+    const skillMeta = document.getElementById("skillMeta");
+    const sessionMeta = document.getElementById("sessionMeta");
+    const workspaceRoot = document.getElementById("workspaceRoot");
+    const skillStatus = document.getElementById("skillStatus");
+    const capabilityStrip = document.getElementById("capabilityStrip");
+    const evidenceMode = document.getElementById("evidenceMode");
+    const toolMode = document.getElementById("toolMode");
+    const skillsPageBtn = document.getElementById("skillsPageBtn");
+    const designWorkspaceBtn = document.getElementById("designWorkspaceBtn");
+    const designBackChatBtn = document.getElementById("designBackChatBtn");
+    const designWorkspace = document.getElementById("designWorkspace");
+    const designActiveJobLabel = document.getElementById("designActiveJobLabel");
+    const skillsBackBtn = document.getElementById("skillsBackBtn");
+    const skillDisableBtn = document.getElementById("skillDisableBtn");
+    const skillsView = document.getElementById("skillsView");
+    const skillsShowcase = document.getElementById("skillsShowcase");
+    const settingsOverlay = document.getElementById("settingsOverlay");
+    const settingsToggleBtn = document.getElementById("settingsToggleBtn");
+    const settingsTopBtn = document.getElementById("settingsTopBtn");
+    const settingsCloseBtn = document.getElementById("settingsCloseBtn");
+    const settingsOpenDesignBtn = document.getElementById("settingsOpenDesignBtn");
+    const composer = document.querySelector(".composer");
+    const designRunForm = document.getElementById("designRunForm");
+    const designProjectName = document.getElementById("designProjectName");
+    const designRangeKm = document.getElementById("designRangeKm");
+    const designPayloadKg = document.getElementById("designPayloadKg");
+    const designCruiseMach = document.getElementById("designCruiseMach");
+    const designCruiseAltitude = document.getElementById("designCruiseAltitude");
+    const designTakeoffDistance = document.getElementById("designTakeoffDistance");
+    const designLandingDistance = document.getElementById("designLandingDistance");
+    const designServiceCeiling = document.getElementById("designServiceCeiling");
+    const designMaxLoadFactor = document.getElementById("designMaxLoadFactor");
+    const designSustainedTurnG = document.getElementById("designSustainedTurnG");
+    const designAircraftRole = document.getElementById("designAircraftRole");
+    const designPropulsionType = document.getElementById("designPropulsionType");
+    const designReserveFraction = document.getElementById("designReserveFraction");
+    const designTailLayout = document.getElementById("designTailLayout");
+    const designClmaxTakeoff = document.getElementById("designClmaxTakeoff");
+    const designClmaxLanding = document.getElementById("designClmaxLanding");
+    const designAssumedClimbRate = document.getElementById("designAssumedClimbRate");
+    const designUncertaintyEnabled = document.getElementById("designUncertaintyEnabled");
+    const designUseAdvanced = document.getElementById("designUseAdvanced");
+    const designAdvancedPanel = document.getElementById("designAdvancedPanel");
+    const designMtowGuess = document.getElementById("designMtowGuess");
+    const designWingLoading = document.getElementById("designWingLoading");
+    const designThrustWeight = document.getElementById("designThrustWeight");
+    const designAspectRatio = document.getElementById("designAspectRatio");
+    const designSweepDeg = document.getElementById("designSweepDeg");
+    const designTaperRatio = document.getElementById("designTaperRatio");
+    const designThicknessRatio = document.getElementById("designThicknessRatio");
+    const designSfc = document.getElementById("designSfc");
+    const designSfcLabel = document.getElementById("designSfcLabel");
+    const designPropEfficiencyField = document.getElementById("designPropEfficiencyField");
+    const designPropEfficiency = document.getElementById("designPropEfficiency");
+    const designCd0 = document.getElementById("designCd0");
+    const designOswald = document.getElementById("designOswald");
+    const designTolerance = document.getElementById("designTolerance");
+    const designMaxIterations = document.getElementById("designMaxIterations");
+    const designRunBtn = document.getElementById("designRunBtn");
+    const designCancelBtn = document.getElementById("designCancelBtn");
+    const designRetryBtn = document.getElementById("designRetryBtn");
+    const designProgress = document.getElementById("designProgress");
+    const designRunStatus = document.getElementById("designRunStatus");
+    const designJobHistoryList = document.getElementById("designJobHistoryList");
+    const designHistoryRefreshBtn = document.getElementById("designHistoryRefreshBtn");
+    const designRunTimeline = document.getElementById("designRunTimeline");
+    const designResultsContent = document.getElementById("designResultsContent");
+    const designLoadAdjustBtn = document.getElementById("designLoadAdjustBtn");
+    const designCompareSelector = document.getElementById("designCompareSelector");
+    const designCompareContent = document.getElementById("designCompareContent");
+    const designReportList = document.getElementById("designReportList");
+    const designReportPreview = document.getElementById("designReportPreview");
+    const designPreflightBtn = document.getElementById("designPreflightBtn");
+    const designPreflightState = document.getElementById("designPreflightState");
+    const designPreflightSummary = document.getElementById("designPreflightSummary");
+    const designPreflightConfirm = document.getElementById("designPreflightConfirm");
+    let settingsReturnFocus = null;
+    let designPreflightTimer = null;
+    const designFieldPaths = new Map([
+      [designProjectName, "project_name"],
+      [designRangeKm, "requirements.range_m"],
+      [designPayloadKg, "requirements.payload_kg"],
+      [designCruiseMach, "requirements.cruise_mach"],
+      [designCruiseAltitude, "requirements.cruise_altitude_m"],
+      [designTakeoffDistance, "requirements.takeoff_distance_m"],
+      [designLandingDistance, "requirements.landing_distance_m"],
+      [designMaxLoadFactor, "requirements.max_load_factor"],
+      [designSustainedTurnG, "requirements.sustained_turn_g"],
+      [designServiceCeiling, "requirements.service_ceiling_m"],
+      [designAircraftRole, "requirements.aircraft_role"],
+      [designPropulsionType, "requirements.propulsion_type"],
+      [designReserveFraction, "requirements.reserve_fraction"],
+      [designTailLayout, "requirements.tail_layout"],
+      [designClmaxTakeoff, "requirements.cl_max_takeoff"],
+      [designClmaxLanding, "requirements.cl_max_landing"],
+      [designAssumedClimbRate, "requirements.assumed_climb_rate_m_s"],
+      [designUncertaintyEnabled, "requirements.uncertainty_enabled"],
+      [designMtowGuess, "initial_guess.mtow_kg"],
+      [designWingLoading, "initial_guess.wing_loading_pa"],
+      [designThrustWeight, "initial_guess.thrust_to_weight"],
+      [designAspectRatio, "initial_guess.aspect_ratio"],
+      [designSweepDeg, "initial_guess.sweep_deg"],
+      [designTaperRatio, "initial_guess.taper_ratio"],
+      [designThicknessRatio, "initial_guess.thickness_ratio"],
+      [designPropEfficiency, "initial_guess.prop_efficiency"],
+      [designCd0, "initial_guess.cd0"],
+      [designOswald, "initial_guess.oswald_e"],
+      [designTolerance, "solver.tolerance"],
+      [designMaxIterations, "solver.max_iterations"],
+    ]);
+
+    function setBusy(isBusy, label = "处理中...") {
+      state.busy = isBusy;
+      sendBtn.disabled = isBusy;
+      newSessionBtn.disabled = isBusy;
+      resetSessionBtn.disabled = isBusy;
+      providerSelect.disabled = isBusy;
+      modelInput.disabled = isBusy;
+      skillSelect.disabled = isBusy;
+      skillDisableBtn.disabled = isBusy || !skillSelect.value;
+      autoApproveToggle.disabled = isBusy;
+      stopBtn.disabled = !isBusy;
+      statusBadge.textContent = isBusy ? label : "待命";
+      statusBadge.className = "badge " + (isBusy ? "is-busy" : "is-idle");
+      statusLine.textContent = isBusy ? "正在运行工程智能体..." : "";
+      if (state.config) updateSkillStatus();
+    }
+
+    function setStatus(message, isError = false) {
+      statusLine.textContent = message || "";
+      statusLine.className = "status" + (isError ? " warning" : "");
+      statusLine.setAttribute("role", isError ? "alert" : "status");
+      statusLine.setAttribute("aria-live", isError ? "assertive" : "polite");
+    }
+
+    function setDesignRunBusy(isBusy, message = "") {
+      state.designJobRunning = isBusy;
+      designRunBtn.disabled = isBusy || !designPreflightConfirm.checked;
+      designCancelBtn.disabled = !isBusy || !state.designJobId;
+      designRetryBtn.disabled = isBusy || !state.designJobId;
+      designPreflightBtn.disabled = isBusy;
+      for (const input of designRunForm.querySelectorAll("input, select")) {
+        input.disabled = isBusy || (input.hasAttribute("data-design-advanced") && !designUseAdvanced.checked);
+      }
+      syncDesignEnergyMode();
+      designPreflightConfirm.disabled = isBusy || !state.preflightFingerprint;
+      if (message) designRunStatus.textContent = message;
+      if (isBusy) {
+        statusBadge.textContent = "计算中";
+        statusBadge.className = "badge is-busy";
+      } else if (!state.busy) {
+        statusBadge.textContent = "待命";
+        statusBadge.className = "badge is-idle";
+      }
+      renderDesignRunTimeline();
+    }
+
+    function setActiveView(view) {
+      state.view = view;
+      chatLog.hidden = view !== "chat";
+      skillsView.hidden = view !== "skills";
+      designWorkspace.hidden = view !== "design";
+      composer.hidden = view !== "chat";
+      skillsPageBtn.classList.toggle("active", view === "skills");
+      designWorkspaceBtn.classList.toggle("active", view === "design");
+      newSessionBtn.classList.toggle("active", view === "chat");
+      mainPanel.classList.toggle("is-skills-mode", view === "skills");
+      mainPanel.classList.toggle("is-design-mode", view === "design");
+      if (view === "skills") {
+        renderSkillShowcase();
+      } else if (view === "design") {
+        renderDesignWorkspace();
+        scheduleDesignPreflight();
+      } else {
+        refreshHeroIfEmpty();
+      }
+    }
+
+    function setSettingsOpen(isOpen) {
+      if (isOpen) settingsReturnFocus = document.activeElement;
+      settingsOverlay.classList.toggle("is-open", isOpen);
+      settingsOverlay.setAttribute("aria-hidden", isOpen ? "false" : "true");
+      document.querySelector(".shell").inert = isOpen;
+      if (isOpen) {
+        settingsCloseBtn.focus();
+      } else if (settingsReturnFocus instanceof HTMLElement) {
+        settingsReturnFocus.focus();
+        settingsReturnFocus = null;
+      }
+    }
+
+    function setDesignTab(tab, options = {}) {
+      const allowed = ["requirements", "run", "results", "compare", "reports"];
+      const selected = allowed.includes(tab) ? tab : "requirements";
+      state.designTab = selected;
+      for (const button of document.querySelectorAll("[data-design-tab]")) {
+        const active = button.dataset.designTab === selected;
+        button.classList.toggle("is-active", active);
+        button.setAttribute("aria-selected", active ? "true" : "false");
+        button.tabIndex = active ? 0 : -1;
+        if (active && options.focus) button.focus();
+      }
+      for (const panel of document.querySelectorAll("[data-design-panel]")) {
+        panel.hidden = panel.dataset.designPanel !== selected;
+      }
+      if (selected === "requirements") scheduleDesignPreflight();
+      if (selected === "compare") renderDesignComparison();
+      if (selected === "reports") renderDesignReports();
+    }
+
+    function autosizePrompt() {
+      promptInput.style.height = "auto";
+      promptInput.style.height = Math.min(promptInput.scrollHeight, 220) + "px";
+    }
+
+    function setPromptDraft(text) {
+      promptInput.value = text || "";
+      autosizePrompt();
+      promptInput.focus();
+      setStatus("已填入常用设计任务，可继续补充约束后发送。");
+    }
+
+    function saveLocalState() {
+      const payload = {
+        sessionId: state.sessionId,
+        provider: providerSelect.value || state.provider,
+        model: WEB_MODEL,
+        autoSkill: skillSelect.value || null,
+        autoApprove: autoApproveToggle.checked,
+        designJobId: state.designJobId,
+      };
+      localStorage.setItem(LOCAL_STATE_KEY, JSON.stringify(payload));
+    }
+
+    function loadLocalState() {
+      try {
+        const saved = JSON.parse(localStorage.getItem(LOCAL_STATE_KEY) || "null");
+        return saved;
+      } catch (_err) {
+        return null;
+      }
+    }
+
+    function toUiSkillName(name) {
+      return name || "";
+    }
+
+    function toInternalSkillName(name) {
+      return name || null;
+    }
+
+    async function api(path, options = {}) {
+      const response = await fetch(path, {
+        headers: {
+          "Content-Type": "application/json",
+          ...(options.headers || {}),
+        },
+        ...options,
+      });
+      const text = await response.text();
+      let payload = {};
+      try {
+        payload = text ? JSON.parse(text) : {};
+      } catch (_err) {
+        payload = { error: text || response.statusText };
+      }
+      if (!response.ok) {
+        throw new Error(payload.error || response.statusText);
+      }
+      return payload;
+    }
+
+    function providerByName(name) {
+      return (state.config?.providers || []).find((item) => item.name === name) || null;
+    }
+
+    function populateProviders() {
+      providerSelect.innerHTML = "";
+      for (const provider of state.config.providers) {
+        const option = document.createElement("option");
+        option.value = provider.name;
+        option.textContent = provider.label + (provider.configured ? "" : "（未配置 API Key）");
+        option.disabled = !provider.configured;
+        providerSelect.appendChild(option);
+      }
+    }
+
+    function firstConfiguredProvider() {
+      return (state.config?.providers || []).find((item) => item.configured) || null;
+    }
+
+    function preferredWebProvider() {
+      const openaiProvider = providerByName("openai");
+      if (openaiProvider?.configured) return openaiProvider;
+      return firstConfiguredProvider();
+    }
+
+    function updateModelSuggestions() {
+      modelDatalist.innerHTML = "";
+      const provider = providerByName(providerSelect.value);
+      for (const model of provider?.available_models || []) {
+        const option = document.createElement("option");
+        option.value = model;
+        modelDatalist.appendChild(option);
+      }
+    }
+
+    function populateSkills() {
+      skillSelect.innerHTML = "";
+      capabilityStrip.innerHTML = "";
+      const noneOption = document.createElement("option");
+      noneOption.value = "";
+      noneOption.textContent = "不自动使用";
+      skillSelect.appendChild(noneOption);
+
+      for (const skill of state.config.skills || []) {
+        const option = document.createElement("option");
+        option.value = skill.name;
+        option.textContent = skillDisplayName(skill.name);
+        if (skill.description) option.title = skill.description;
+        skillSelect.appendChild(option);
+
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "capability-button";
+        button.dataset.skill = skill.name;
+        button.textContent = skill.short_label || skillDisplayName(skill.name);
+        button.title = skill.description || skill.when_to_use || skillDisplayName(skill.name);
+        button.addEventListener("click", () => {
+          skillSelect.value = skill.name;
+          updateSkillStatus();
+          saveLocalState();
+        });
+        capabilityStrip.appendChild(button);
+      }
+      renderSkillShowcase();
+    }
+
+    function renderSkillShowcase() {
+      if (!skillsShowcase) return;
+      skillsShowcase.innerHTML = "";
+      const skills = state.config?.skills || [];
+      if (!skills.length) {
+        const empty = document.createElement("div");
+        empty.className = "skill-showcase-card";
+        empty.innerHTML = "<h3>暂无技能</h3><p>当前工作区没有可展示的工程技能。</p>";
+        skillsShowcase.appendChild(empty);
+        return;
+      }
+      for (const skill of skills) {
+        const card = document.createElement("article");
+        card.className = "skill-showcase-card" + (skillSelect.value === skill.name ? " is-active" : "");
+        const header = document.createElement("header");
+        const titleWrap = document.createElement("div");
+        const title = document.createElement("h3");
+        title.textContent = skill.display_name || skillDisplayName(skill.name);
+        const summary = document.createElement("p");
+        summary.textContent = skill.description || skill.when_to_use || "工程能力说明尚未提供。";
+        titleWrap.appendChild(title);
+        header.appendChild(titleWrap);
+
+        const pill = document.createElement("span");
+        pill.className = "skill-pill";
+        pill.textContent = skill.short_label || "技能";
+        header.appendChild(pill);
+        card.appendChild(header);
+        card.appendChild(summary);
+
+        const meta = document.createElement("div");
+        meta.className = "skill-showcase-meta";
+        const useLine = document.createElement("div");
+        useLine.textContent = "适用场景：" + (skill.when_to_use || "通用工程任务");
+        const stateLine = document.createElement("div");
+        stateLine.textContent = "状态：" + (skill.status_note || "可用");
+        meta.appendChild(useLine);
+        meta.appendChild(stateLine);
+        card.appendChild(meta);
+
+        const actions = document.createElement("div");
+        actions.className = "skill-showcase-actions";
+        const action = document.createElement("button");
+        action.type = "button";
+        action.dataset.skill = skill.name;
+        action.className = "skill-action" + (skillSelect.value === skill.name ? " active" : "");
+        action.textContent = skillSelect.value === skill.name ? "当前技能" : "切换到此技能";
+        action.disabled = state.busy;
+        action.setAttribute("aria-pressed", skillSelect.value === skill.name ? "true" : "false");
+        action.addEventListener("click", () => {
+          skillSelect.value = skill.name;
+          updateSkillStatus();
+          saveLocalState();
+          setActiveView("chat");
+          setStatus("已切换到：" + skillDisplayName(skill.name));
+        });
+        actions.appendChild(action);
+        card.appendChild(actions);
+        skillsShowcase.appendChild(card);
+      }
+    }
+
+    function skillByName(name) {
+      return (state.config?.skills || []).find((item) => item.name === name) || null;
+    }
+
+    function skillDisplayName(name) {
+      if (!name) return "无";
+      const skill = skillByName(name);
+      if (skill?.display_name) return skill.display_name;
+      if (name === WEB_AIRCRAFT_SKILL) return "飞行器总体设计";
+      return "/" + name;
+    }
+
+    function updateSkillMetaFromSelection() {
+      const selected = skillSelect.value || "";
+      const sessionSkill = state.autoSkill || "";
+      const pending = selected !== sessionSkill;
+      skillMeta.textContent = "工程模式：" + skillDisplayName(selected) + (pending ? "（下次发送生效）" : "");
+    }
+
+    function updateSkillStatus() {
+      const selected = skillSelect.value;
+      const ragSelected = selected === WEB_AIRCRAFT_SKILL;
+      if (!selected) {
+        skillStatus.textContent = "未启用工程模式";
+        skillStatus.title = "";
+        evidenceMode.textContent = "未启用";
+        updateCapabilityButtons();
+        updateSkillMetaFromSelection();
+        return;
+      }
+      const skill = skillByName(selected);
+      const modeNote = skill?.status_note ? " · " + skill.status_note : "";
+      skillStatus.textContent = "已启用：" + skillDisplayName(selected) + modeNote;
+      skillStatus.title = skill?.description || "";
+      evidenceMode.textContent = ragSelected ? "自动检索" : "按需检索";
+      updateCapabilityButtons();
+      updateSkillMetaFromSelection();
+    }
+
+    function updateCapabilityButtons() {
+      const selected = skillSelect.value || "";
+      for (const button of capabilityStrip.querySelectorAll(".capability-button")) {
+        button.classList.toggle("active", button.dataset.skill === selected);
+      }
+      skillDisableBtn.disabled = state.busy || !selected;
+      skillDisableBtn.textContent = selected ? "关闭工程模式" : "未启用工程模式";
+      if (toolMode) toolMode.textContent = autoApproveToggle.checked ? "自动批准" : "手动确认";
+      if (!skillsView.hidden) renderSkillShowcase();
+      refreshHeroIfEmpty();
+    }
+
+    function clearSkillSelection() {
+      skillSelect.value = "";
+      updateSkillStatus();
+      saveLocalState();
+      setActiveView("chat");
+      setStatus("已关闭工程模式，后续对话按通用模式执行。");
+    }
+
+    function applyConfigDefaults(preferred) {
+      const provider = preferredWebProvider();
+      providerSelect.value = provider?.name || state.config.default_provider;
+      modelInput.value = WEB_MODEL;
+      updateModelSuggestions();
+      const preferredSkill = toUiSkillName(preferred?.autoSkill || "");
+      const skillExists = preferredSkill && Array.from(skillSelect.options).some((item) => item.value === preferredSkill);
+      skillSelect.value = skillExists ? preferredSkill : "";
+      updateSkillStatus();
+      autoApproveToggle.checked = preferred?.autoApprove ?? true;
+      updateCapabilityButtons();
+    }
+
+    function updateMeta(session) {
+      sessionTitle.textContent = session.messages.length ? "工程设计会话" : "新的设计会话";
+      providerMeta.textContent = "模型服务：" + session.provider;
+      modelMeta.textContent = "模型：" + WEB_MODEL;
+      skillMeta.textContent = "工程模式：" + skillDisplayName(toUiSkillName(session.auto_skill));
+      sessionMeta.textContent = "会话：" + session.session_id;
+      state.sessionId = session.session_id;
+      state.provider = session.provider;
+      state.model = WEB_MODEL;
+      state.autoSkill = toUiSkillName(session.auto_skill);
+      providerSelect.value = session.provider;
+      modelInput.value = WEB_MODEL;
+      skillSelect.value = state.autoSkill;
+      updateSkillStatus();
+      saveLocalState();
+    }
+
+    function escapeHtml(text) {
+      return String(text || "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
+    }
+
+    function inlineMarkdown(text) {
+      return renderInlineWithMath(text);
+    }
+
+    function splitInlineMath(text) {
+      const parts = [];
+      let index = 0;
+      while (index < text.length) {
+        const inlineParen = text.indexOf("\\(", index);
+        const dollar = text.indexOf("$", index);
+        const candidates = [inlineParen, dollar].filter((item) => item >= 0);
+        const next = candidates.length ? Math.min(...candidates) : -1;
+        if (next < 0) {
+          parts.push({ type: "text", value: text.slice(index) });
+          break;
+        }
+        if (next > index) parts.push({ type: "text", value: text.slice(index, next) });
+        if (next === inlineParen) {
+          const end = text.indexOf("\\)", next + 2);
+          if (end < 0) {
+            parts.push({ type: "text", value: text.slice(next) });
+            break;
+          }
+          parts.push({ type: "math", value: text.slice(next + 2, end) });
+          index = end + 2;
+          continue;
+        }
+        if (text[next + 1] === "$") {
+          parts.push({ type: "text", value: "$$" });
+          index = next + 2;
+          continue;
+        }
+        const end = text.indexOf("$", next + 1);
+        if (end < 0) {
+          parts.push({ type: "text", value: text.slice(next) });
+          break;
+        }
+        parts.push({ type: "math", value: text.slice(next + 1, end) });
+        index = end + 1;
+      }
+      return parts;
+    }
+
+    function renderInlineWithMath(text) {
+      const codeParts = text.split(/`([^`]+)`/g);
+      return codeParts.map((part, index) => {
+        if (index % 2 === 1) return "<code>" + escapeHtml(part) + "</code>";
+        return splitInlineMath(part).map((innerPart) => {
+          if (innerPart.type === "math") return renderLatex(innerPart.value, false);
+          return renderInlineMarkdownText(innerPart.value);
+        }).join("");
+      }).join("");
+    }
+
+    function renderInlineMarkdownText(text) {
+      return escapeHtml(text).replace(/(^|\s)\*\*([^*]+)\*\*(?=\s|$|[,.，。；;:：!?！？])/g, "$1<strong>$2</strong>");
+    }
+
+    function splitDisplayMath(text) {
+      const parts = [];
+      let index = 0;
+      while (index < text.length) {
+        const dollar = text.indexOf("$$", index);
+        const bracket = text.indexOf("\\[", index);
+        const candidates = [dollar, bracket].filter((item) => item >= 0);
+        const next = candidates.length ? Math.min(...candidates) : -1;
+        if (next < 0) {
+          parts.push({ type: "text", value: text.slice(index) });
+          break;
+        }
+        if (next > index) parts.push({ type: "text", value: text.slice(index, next) });
+        if (next === dollar) {
+          const end = text.indexOf("$$", next + 2);
+          if (end < 0) {
+            parts.push({ type: "text", value: text.slice(next) });
+            break;
+          }
+          parts.push({ type: "math", value: text.slice(next + 2, end) });
+          index = end + 2;
+          continue;
+        }
+        const end = text.indexOf("\\]", next + 2);
+        if (end < 0) {
+          parts.push({ type: "text", value: text.slice(next) });
+          break;
+        }
+        parts.push({ type: "math", value: text.slice(next + 2, end) });
+        index = end + 2;
+      }
+      return parts;
+    }
+
+    function normalizeLatex(source) {
+      return String(source || "")
+        .replace(/\s+/g, " ")
+        .replace(/\\left/g, "")
+        .replace(/\\right/g, "")
+        .trim();
+    }
+
+    function findMatchingBrace(source, openIndex) {
+      let depth = 0;
+      for (let index = openIndex; index < source.length; index += 1) {
+        const char = source[index];
+        if (char === "{" && source[index - 1] !== "\\") depth += 1;
+        if (char === "}" && source[index - 1] !== "\\") {
+          depth -= 1;
+          if (depth === 0) return index;
+        }
+      }
+      return -1;
+    }
+
+    function readLatexGroup(source, start) {
+      if (source[start] !== "{") return null;
+      const end = findMatchingBrace(source, start);
+      if (end < 0) return null;
+      return { value: source.slice(start + 1, end), end };
+    }
+
+    function renderLatex(source, display = false) {
+      return '<span class="' + (display ? "math-display" : "math-inline") + '">' + renderLatexContent(normalizeLatex(source)) + "</span>";
+    }
+
+    function renderLatexContent(source) {
+      const greek = {
+        alpha: "α", beta: "β", gamma: "γ", Gamma: "Γ", delta: "δ", Delta: "Δ",
+        epsilon: "ε", varepsilon: "ε", zeta: "ζ", eta: "η", theta: "θ", Theta: "Θ",
+        lambda: "λ", Lambda: "Λ", mu: "μ", nu: "ν", xi: "ξ", pi: "π", Pi: "Π",
+        rho: "ρ", sigma: "σ", Sigma: "Σ", tau: "τ", phi: "φ", varphi: "φ",
+        Phi: "Φ", chi: "χ", psi: "ψ", Psi: "Ψ", omega: "ω", Omega: "Ω",
+      };
+      const commands = {
+        cdot: "·", times: "×", pm: "±", mp: "∓", le: "≤", leq: "≤", ge: "≥", geq: "≥",
+        approx: "≈", sim: "∼", neq: "≠", ne: "≠", infty: "∞", partial: "∂", nabla: "∇",
+        degree: "°", circ: "°", to: "→", rightarrow: "→", leftarrow: "←",
+      };
+      let html = "";
+      let index = 0;
+      while (index < source.length) {
+        if (source.startsWith("\\frac", index)) {
+          const numerator = readLatexGroup(source, index + 5);
+          const denominator = numerator ? readLatexGroup(source, numerator.end + 1) : null;
+          if (numerator && denominator) {
+            html += '<span class="math-frac"><span class="math-num">' + renderLatexContent(numerator.value) + '</span><span class="math-den">' + renderLatexContent(denominator.value) + "</span></span>";
+            index = denominator.end + 1;
+            continue;
+          }
+        }
+        if (source.startsWith("\\sqrt", index)) {
+          const group = readLatexGroup(source, index + 5);
+          if (group) {
+            html += '<span class="math-sqrt"><span class="math-root">√</span><span class="math-radicand">' + renderLatexContent(group.value) + "</span></span>";
+            index = group.end + 1;
+            continue;
+          }
+        }
+        if (source.startsWith("\\text", index) || source.startsWith("\\mathrm", index)) {
+          const offset = source.startsWith("\\text", index) ? 5 : 7;
+          const group = readLatexGroup(source, index + offset);
+          if (group) {
+            html += '<span class="math-roman">' + escapeHtml(group.value) + "</span>";
+            index = group.end + 1;
+            continue;
+          }
+        }
+        if (source[index] === "\\") {
+          const match = source.slice(index + 1).match(/^[A-Za-z]+/);
+          if (match) {
+            const command = match[0];
+            html += greek[command] || commands[command] || escapeHtml(command);
+            index += command.length + 1;
+            continue;
+          }
+          html += escapeHtml(source[index + 1] || "");
+          index += 2;
+          continue;
+        }
+        if (source[index] === "^" || source[index] === "_") {
+          const isSup = source[index] === "^";
+          const group = source[index + 1] === "{" ? readLatexGroup(source, index + 1) : null;
+          const value = group ? group.value : source[index + 1] || "";
+          html += (isSup ? "<sup>" : "<sub>") + renderLatexContent(value) + (isSup ? "</sup>" : "</sub>");
+          index = group ? group.end + 1 : index + 2;
+          continue;
+        }
+        if ("+-=<>≈≤≥×·/()[]|,".includes(source[index])) {
+          html += '<span class="math-operator">' + escapeHtml(source[index]) + "</span>";
+          index += 1;
+          continue;
+        }
+        if (source[index] === "{") {
+          const group = readLatexGroup(source, index);
+          if (group) {
+            html += renderLatexContent(group.value);
+            index = group.end + 1;
+            continue;
+          }
+        }
+        html += source[index] === " " ? " " : escapeHtml(source[index]);
+        index += 1;
+      }
+      return html;
+    }
+
+    function addCopyButton(container, text, label = "复制") {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = label === "复制代码" ? "code-copy" : "message-tool-button";
+      button.textContent = label;
+      button.addEventListener("click", async () => {
+        try {
+          await navigator.clipboard.writeText(text || "");
+          const old = button.textContent;
+          button.textContent = "已复制";
+          window.setTimeout(() => { button.textContent = old; }, 900);
+        } catch (_err) {
+          button.textContent = "复制失败";
+        }
+      });
+      container.appendChild(button);
+    }
+
+    function appendTextSegment(container, segment) {
+      const lines = segment.replace(/\r\n/g, "\n").split("\n");
+      let paragraph = [];
+      let list = null;
+
+      function flushParagraph() {
+        if (!paragraph.length) return;
+        appendMarkdownText(container, paragraph.join("\n"));
+        paragraph = [];
+      }
+
+      function flushList() {
+        if (!list) return;
+        container.appendChild(list.node);
+        list = null;
+      }
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) {
+          flushParagraph();
+          flushList();
+          continue;
+        }
+        const heading = trimmed.match(/^(#{1,3})\s+(.+)$/);
+        if (heading) {
+          flushParagraph();
+          flushList();
+          const level = String(Math.min(3, heading[1].length + 2));
+          const h = document.createElement("h" + level);
+          h.innerHTML = inlineMarkdown(heading[2]);
+          container.appendChild(h);
+          continue;
+        }
+        const quote = trimmed.match(/^>\s?(.+)$/);
+        if (quote) {
+          flushParagraph();
+          flushList();
+          const blockquote = document.createElement("blockquote");
+          blockquote.innerHTML = inlineMarkdown(quote[1]);
+          container.appendChild(blockquote);
+          continue;
+        }
+        const bullet = trimmed.match(/^[-*]\s+(.+)$/);
+        const ordered = trimmed.match(/^\d+\.\s+(.+)$/);
+        if (bullet || ordered) {
+          flushParagraph();
+          const type = bullet ? "ul" : "ol";
+          if (!list || list.type !== type) {
+            flushList();
+            list = { type, node: document.createElement(type) };
+          }
+          const li = document.createElement("li");
+          li.innerHTML = inlineMarkdown((bullet || ordered)[1]);
+          list.node.appendChild(li);
+          continue;
+        }
+        flushList();
+        paragraph.push(trimmed);
+      }
+      flushParagraph();
+      flushList();
+    }
+
+    function appendMarkdownText(container, text) {
+      for (const part of splitDisplayMath(text)) {
+        if (!part.value) continue;
+        if (part.type === "math") {
+          const wrapper = document.createElement("div");
+          wrapper.innerHTML = renderLatex(part.value, true);
+          container.appendChild(wrapper.firstChild);
+          continue;
+        }
+        const lines = part.value.split("\n").map((line) => line.trim()).filter(Boolean);
+        if (!lines.length) continue;
+        const p = document.createElement("p");
+        p.innerHTML = inlineMarkdown(lines.join(" "));
+        container.appendChild(p);
+      }
+    }
+
+    function renderMarkdownInto(container, text) {
+      container.innerHTML = "";
+      const source = text || "";
+      if (!source) {
+        container.textContent = "";
+        return;
+      }
+      const parts = source.split(/```([\s\S]*?)```/g);
+      for (let index = 0; index < parts.length; index += 1) {
+        if (index % 2 === 0) {
+          appendTextSegment(container, parts[index]);
+          continue;
+        }
+        const raw = parts[index].replace(/^\w+\n/, "");
+        const pre = document.createElement("pre");
+        const code = document.createElement("code");
+        code.textContent = raw.trimEnd();
+        pre.appendChild(code);
+        addCopyButton(pre, code.textContent, "复制代码");
+        container.appendChild(pre);
+      }
+    }
+
+    function renderPreview(value) {
+      if (value == null || value === "") return "";
+      if (typeof value === "string") return value;
+      try {
+        return JSON.stringify(value, null, 2);
+      } catch (_err) {
+        return String(value);
+      }
+    }
+
+    function formatMs(value) {
+      const number = Number(value);
+      if (!Number.isFinite(number)) return "--";
+      if (number >= 1000) return (number / 1000).toFixed(number >= 10000 ? 0 : 1) + "s";
+      return Math.round(number) + "ms";
+    }
+
+    function formatDuration(value) {
+      const number = Number(value);
+      if (!Number.isFinite(number) || number < 0) return "";
+      const totalSeconds = Math.max(1, Math.round(number / 1000));
+      if (totalSeconds < 60) return totalSeconds + "s";
+      const minutes = Math.floor(totalSeconds / 60);
+      const seconds = String(totalSeconds % 60).padStart(2, "0");
+      if (minutes < 60) return minutes + "m " + seconds + "s";
+      const hours = Math.floor(minutes / 60);
+      const remainingMinutes = String(minutes % 60).padStart(2, "0");
+      return hours + "h " + remainingMinutes + "m";
+    }
+
+    function formatCount(value) {
+      const number = Number(value);
+      if (!Number.isFinite(number)) return "--";
+      return number.toLocaleString();
+    }
+
+    function formatBytes(value) {
+      const number = Number(value);
+      if (!Number.isFinite(number) || number < 0) return "--";
+      if (number < 1024) return Math.round(number) + " B";
+      const units = ["KB", "MB", "GB"];
+      let scaled = number / 1024;
+      let unitIndex = 0;
+      while (scaled >= 1024 && unitIndex < units.length - 1) {
+        scaled /= 1024;
+        unitIndex += 1;
+      }
+      return scaled.toFixed(scaled >= 10 ? 1 : 2) + " " + units[unitIndex];
+    }
+
+    function cleanUiText(value) {
+      return String(value ?? "")
+        .replaceAll("aero-intake-exhaust-evaluation", "气动/进排气评估")
+        .replaceAll("aero-propulsion-analysis", "气动/推进特性分析")
+        .replaceAll("flight-performance-analysis", "飞行性能分析")
+        .replaceAll("aircraft-design-skill", "飞行器总体设计")
+        .replaceAll("aircraft-design-rag", "飞行器总体设计")
+        .replaceAll("aircraft-design", "飞行器总体设计")
+        .replaceAll("RAG index", "本地资料索引")
+        .replaceAll("RAG", "本地资料");
+    }
+
+    function normalizeMessageOptions(options) {
+      if (Array.isArray(options)) return { events: options };
+      return options || {};
+    }
+
+    function eventTitle(event) {
+      if (event.kind === "agent_step") return cleanUiText(event.agent_name || event.tool_name || "智能体");
+      if (event.kind === "planning") return "开始分析";
+      if (event.kind === "drafting") return "组织回答";
+      if (event.kind === "rag_retrieval") return "资料检索";
+      const toolName = cleanUiText(event.tool_name || "工具");
+      if (event.kind === "permission") return "权限确认 · " + toolName;
+      if (event.kind === "tool_use") return "调用工具 · " + toolName;
+      if (event.kind === "tool_result") return "工具结果 · " + toolName;
+      return cleanUiText(event.tool_name || "工作项") + " · " + cleanUiText(event.kind || "记录");
+    }
+
+    function eventSummary(event) {
+      return cleanUiText(event.summary || event.message || event.error || "");
+    }
+
+    function compactEventSummary(text, limit = 220) {
+      const cleaned = cleanUiText(text).replace(/\s+/g, " ").trim();
+      if (!cleaned) return "";
+      return cleaned.length <= limit ? cleaned : cleaned.slice(0, limit - 1) + "…";
+    }
+
+    function toolDisplayName(event) {
+      return cleanUiText(event.tool_name || event.tool || "工具");
+    }
+
+    function extractPreviewText(event) {
+      if (event.rag) return "";
+      const preview = renderPreview(event.preview);
+      return compactEventSummary(preview, 360);
+    }
+
+    function eventStatsAt(events, index) {
+      const stats = {
+        searches: 0,
+        fileLists: 0,
+        fileReads: 0,
+        commands: 0,
+        previews: 0,
+      };
+      for (const event of events.slice(0, index + 1)) {
+        const toolName = toolDisplayName(event).toLowerCase();
+        const isDone = event.kind !== "tool_use";
+        if (!isDone) continue;
+        if (event.kind === "rag_retrieval" || toolName.includes("grep") || toolName.includes("search")) stats.searches += 1;
+        else if (toolName.includes("glob")) stats.fileLists += 1;
+        else if (toolName.includes("read")) stats.fileReads += 1;
+        else if (toolName.includes("bash")) stats.commands += 1;
+        else if (toolName.includes("preview")) stats.previews += 1;
+      }
+      return stats;
+    }
+
+    function eventStatusLabel(event, index = 0, events = []) {
+      const toolName = toolDisplayName(event);
+      const stats = eventStatsAt(events, index);
+      if (event.kind === "rag_retrieval") {
+        const hits = Array.isArray(event.rag?.hits) ? event.rag.hits.length : null;
+        if (hits != null) return "已探索 " + hits + " 条资料";
+        return "已完成资料检索";
+      }
+      if (event.kind === "agent_step") return cleanUiText(event.agent_role || "智能体") + " · " + cleanUiText(event.stage || "协同");
+      if (event.kind === "planning") return "已开始分析";
+      if (event.kind === "permission") return "已确认权限";
+      if (event.kind === "tool_use") {
+        const lower = toolName.toLowerCase();
+        if (lower.includes("grep") || lower.includes("search")) return "正在搜索";
+        if (lower.includes("glob")) return "正在列出文件";
+        if (lower.includes("read")) return "正在查看文件";
+        if (lower.includes("bash")) return "正在执行命令";
+        return "正在调用 " + toolName;
+      }
+      if (event.kind === "tool_result") {
+        const lower = toolName.toLowerCase();
+        if (lower.includes("grep") || lower.includes("search")) return "已探索 " + stats.searches + " 次搜索";
+        if (lower.includes("glob")) return "已列出文件";
+        if (lower.includes("read")) return "已探索 " + stats.fileReads + " 个文件";
+        if (lower.includes("bash")) return "已执行 " + stats.commands + " 次命令";
+        if (toolName.toLowerCase().includes("preview")) return "已查看 Preview";
+        return "已完成 " + toolName;
+      }
+      if (event.kind === "request") return event.is_error ? "请求已中断" : "请求状态";
+      if (event.kind === "drafting") return "已开始组织回答";
+      return eventTitle(event);
+    }
+
+    function eventNarrative(event, index, events) {
+      const summary = eventSummary(event);
+      if (event.is_error) return compactEventSummary(summary || "这一步遇到错误，已记录下来供排查。");
+      if (event.kind === "planning") {
+        return compactEventSummary(summary || "我先拆解本轮工程设计需求，判断是否需要检索资料、查看文件或进行计算。");
+      }
+      if (event.kind === "drafting") {
+        return compactEventSummary(summary || "我已经开始把可用依据、计算关系和设计结论组织成回答。");
+      }
+      if (event.kind === "rag_retrieval") {
+        const hits = Array.isArray(event.rag?.hits) ? event.rag.hits.length : 0;
+        if (hits > 0) return "我已经从本地资料里找到 " + hits + " 条相关证据，先把可用依据带入本轮设计判断。";
+        return "我检查了本地资料，但这一轮没有找到直接匹配的证据，会基于已知条件和明确假设继续。";
+      }
+      if (event.kind === "agent_step") {
+        const role = cleanUiText(event.agent_role || "智能体");
+        const name = cleanUiText(event.agent_name || event.tool_name || "协同节点");
+        return compactEventSummary(summary || role + "「" + name + "」完成了本轮协同设计流程中的一个检查点。");
+      }
+      if (event.kind === "permission") {
+        return compactEventSummary(summary || "我确认了这一步所需的本地工具权限，然后继续执行。");
+      }
+      if (event.kind === "tool_use") {
+        const toolName = toolDisplayName(event);
+        const lower = toolName.toLowerCase();
+        if (lower.includes("grep") || lower.includes("search")) return "我在相关资料和项目文件中继续搜索，想把关键参数或依据来源找得更准一些。";
+        if (lower.includes("glob")) return "我先把候选文件列出来，缩小后续查看和引用的范围。";
+        if (lower.includes("read")) return "我打开候选文件查看关键片段，避免只凭文件名或模糊印象判断。";
+        if (lower.includes("bash")) return "我运行本地命令获取可验证输出，再把结果纳入回答。";
+        return "我调用 " + toolName + " 来推进这一轮任务，并记录工具输入用于复查。";
+      }
+      if (event.kind === "tool_result") {
+        const toolName = toolDisplayName(event);
+        const lower = toolName.toLowerCase();
+        if (lower.includes("grep") || lower.includes("search")) return "这次搜索已经返回结果，我会从里面挑出和当前设计问题最相关的依据。";
+        if (lower.includes("glob")) return "候选文件列表已经出来了，下一步可以集中查看最可能有用的资料。";
+        if (lower.includes("read")) return "我已经查看了文件内容，接下来把其中能支撑设计判断的部分整理进回答。";
+        if (lower.includes("bash")) return "命令已经执行完，我会根据输出继续校核或汇总。";
+        return compactEventSummary(summary || "这一步工具已经返回结果，我会把可用信息合并到最终回答里。");
+      }
+      return compactEventSummary(summary || "这一步执行完成，已记录到过程里。");
+    }
+
+    function eventIcon(event) {
+      const toolName = toolDisplayName(event).toLowerCase();
+      if (event.is_error) return "!";
+      if (event.kind === "planning") return "›";
+      if (event.kind === "drafting") return "✎";
+      if (event.kind === "rag_retrieval") return "⌕";
+      if (event.kind === "agent_step") {
+        const name = cleanUiText(event.agent_name || event.tool_name || "");
+        if (name.includes("Supervisor")) return "S";
+        if (name.includes("管理员")) return "M";
+        if (name.includes("检索")) return "⌕";
+        if (name.includes("数据")) return "ƒ";
+        return "A";
+      }
+      if (event.kind === "permission") return "✓";
+      if (toolName.includes("grep") || toolName.includes("search")) return "⌕";
+      if (toolName.includes("glob")) return "▣";
+      if (toolName.includes("read")) return "□";
+      if (toolName.includes("bash")) return "›";
+      if (toolName.includes("preview")) return "⌘";
+      return "·";
+    }
+
+    function latestEventSummary(events) {
+      if (!events.length) return "";
+      const latest = events[events.length - 1];
+      const summary = eventSummary(latest);
+      return summary ? eventTitle(latest) + " · " + summary : eventTitle(latest);
+    }
+
+    function summarizeProcess(events, options = {}) {
+      const elapsed = formatDuration(options.elapsedMs);
+      const parts = [options.isRunning ? "处理中" : "已处理"];
+      if (elapsed) parts.push(elapsed);
+      if (options.isRunning) {
+        const latest = latestEventSummary(events);
+        if (latest) parts.push(latest);
+      } else if (events.length) {
+        parts.push("过程记录 " + events.length);
+      }
+      return parts.join(" · ");
+    }
+
+    function createEvidencePanel(rag) {
+      const panel = document.createElement("div");
+      panel.className = "evidence-panel";
+      const hits = Array.isArray(rag?.hits) ? rag.hits : [];
+      const summary = document.createElement("div");
+      summary.className = "evidence-summary";
+      const cache = rag?.cache?.enabled
+        ? (rag.cache.ready === false ? "索引预热中" : (rag.cache.hit ? "缓存命中" : "缓存未命中"))
+        : "缓存关闭";
+      summary.textContent = [
+        "资料证据",
+        "命中 " + hits.length,
+        "文件 " + (rag?.markdown_files_scanned ?? "--"),
+        "片段 " + (rag?.chunks_indexed ?? "--"),
+        "候选 " + (rag?.candidate_chunks ?? "--"),
+        "检索 " + formatMs(rag?.timings?.total_ms),
+        cache,
+      ].join(" · ");
+      panel.appendChild(summary);
+
+      if (rag?.message) {
+        const note = document.createElement("div");
+        note.className = "evidence-card";
+        note.textContent = cleanUiText(rag.message);
+        panel.appendChild(note);
+      }
+
+      if (!hits.length && !rag?.message) {
+        const empty = document.createElement("div");
+        empty.className = "evidence-card";
+        empty.textContent = "未找到匹配的本地证据。";
+        panel.appendChild(empty);
+        return panel;
+      }
+
+      const initialLimit = 3;
+      let visibleLimit = Math.min(initialLimit, hits.length);
+      const cards = document.createElement("div");
+      cards.className = "evidence-panel";
+      panel.appendChild(cards);
+
+      const renderHits = () => {
+        cards.innerHTML = "";
+        for (const hit of hits.slice(0, visibleLimit)) {
+          cards.appendChild(createEvidenceCard(hit));
+        }
+      };
+
+      renderHits();
+
+      if (hits.length > visibleLimit) {
+        const more = document.createElement("button");
+        more.type = "button";
+        more.className = "evidence-more";
+        more.textContent = "查看更多资料";
+        more.addEventListener("click", () => {
+          visibleLimit = Math.min(10, hits.length);
+          renderHits();
+          more.remove();
+        });
+        panel.appendChild(more);
+      }
+      return panel;
+    }
+
+    function createEvidenceCard(hit) {
+        const card = document.createElement("div");
+        card.className = "evidence-card";
+        const header = document.createElement("header");
+        const path = document.createElement("span");
+        path.className = "evidence-path";
+        path.textContent = (hit.file || "未知文件") + ":" + (hit.start_line || "?") + "-" + (hit.end_line || "?");
+        const score = document.createElement("span");
+        score.textContent = "得分 " + (hit.score ?? "--");
+        header.appendChild(path);
+        header.appendChild(score);
+        card.appendChild(header);
+        if (hit.heading) {
+          const heading = document.createElement("p");
+          heading.textContent = hit.heading;
+          card.appendChild(heading);
+        }
+        const snippet = document.createElement("p");
+        snippet.textContent = hit.snippet || "";
+        card.appendChild(snippet);
+        return card;
+    }
+
+    function collectEvidenceFromEvents(events = []) {
+      return events
+        .filter((event) => event && event.kind === "rag_retrieval" && event.rag)
+        .map((event) => event.rag);
+    }
+
+    function createAnswerEvidence(events = []) {
+      const evidences = collectEvidenceFromEvents(events);
+      if (!evidences.length) return null;
+      const latest = evidences[evidences.length - 1];
+      const hits = Array.isArray(latest?.hits) ? latest.hits : [];
+
+      const details = document.createElement("details");
+      details.className = "answer-evidence";
+      details.open = hits.length > 0;
+
+      const summary = document.createElement("summary");
+      const title = document.createElement("span");
+      title.className = "answer-evidence-title";
+      const strong = document.createElement("span");
+      strong.textContent = "本轮参考资料";
+      const small = document.createElement("small");
+      const cache = latest?.cache?.enabled
+        ? (latest.cache.ready === false ? "资料索引预热中" : (latest.cache.hit ? "缓存命中" : "完成本地检索"))
+        : "本地资料检索";
+      small.textContent = [
+        cache,
+        "用时 " + formatMs(latest?.timings?.total_ms),
+        "候选 " + (latest?.candidate_chunks ?? "--"),
+      ].join(" · ");
+      title.appendChild(strong);
+      title.appendChild(small);
+      const count = document.createElement("span");
+      count.className = "answer-evidence-count";
+      count.textContent = "命中 " + hits.length + " 条";
+      summary.appendChild(title);
+      summary.appendChild(count);
+      details.appendChild(summary);
+
+      const body = document.createElement("div");
+      body.className = "answer-evidence-body";
+      body.appendChild(createEvidencePanel(latest));
+      details.appendChild(body);
+      return details;
+    }
+
+    function createArtifactsPanel(artifacts = []) {
+      const visibleArtifacts = artifacts.filter((artifact) => artifact && artifact.download_url);
+      if (!visibleArtifacts.length) return null;
+
+      const panel = document.createElement("section");
+      panel.className = "artifact-panel";
+
+      const header = document.createElement("div");
+      header.className = "artifact-panel-header";
+      const title = document.createElement("span");
+      title.textContent = "结果下载";
+      const count = document.createElement("span");
+      count.textContent = visibleArtifacts.length + " 个文件包";
+      header.appendChild(title);
+      header.appendChild(count);
+      panel.appendChild(header);
+
+      const list = document.createElement("div");
+      list.className = "artifact-list";
+      for (const artifact of visibleArtifacts) {
+        const item = document.createElement("div");
+        item.className = "artifact-item";
+
+        const info = document.createElement("div");
+        info.className = "artifact-info";
+        const name = document.createElement("div");
+        name.className = "artifact-name";
+        name.textContent = cleanUiText(artifact.name || artifact.filename || "飞行器设计结果包");
+        const meta = document.createElement("div");
+        meta.className = "artifact-meta";
+        const bits = [];
+        if (artifact.file_count != null) bits.push("产物 " + formatCount(artifact.file_count));
+        if (artifact.size_bytes != null) bits.push(formatBytes(artifact.size_bytes));
+        if (artifact.source_dir) bits.push("来源 " + artifact.source_dir);
+        meta.textContent = bits.join(" · ") || "可下载的技能生成结果";
+        info.appendChild(name);
+        info.appendChild(meta);
+
+        const link = document.createElement("a");
+        link.className = "artifact-download";
+        link.href = artifact.download_url;
+        link.download = artifact.filename || "";
+        link.textContent = "下载结果包";
+
+        item.appendChild(info);
+        item.appendChild(link);
+        list.appendChild(item);
+      }
+      panel.appendChild(list);
+      return panel;
+    }
+
+    function createEventList(events) {
+      const eventList = document.createElement("div");
+      eventList.className = "event-list";
+
+      for (let index = 0; index < events.length; index += 1) {
+        const event = events[index];
+        const item = document.createElement("div");
+        item.className = "event" + (event.is_error ? " is-error" : "");
+
+        const meta = document.createElement("div");
+        meta.className = "event-meta";
+        const icon = document.createElement("span");
+        icon.className = "event-icon";
+        icon.textContent = eventIcon(event);
+        const label = document.createElement("span");
+        label.className = "event-label";
+        label.textContent = eventStatusLabel(event, index, events);
+        meta.appendChild(icon);
+        meta.appendChild(label);
+        item.appendChild(meta);
+
+        const body = document.createElement("div");
+        body.className = "event-body";
+        body.textContent = eventNarrative(event, index, events);
+        item.appendChild(body);
+
+        const summary = eventSummary(event);
+        if (summary && summary !== body.textContent) {
+          const subtext = document.createElement("div");
+          subtext.className = "event-subtext";
+          subtext.textContent = summary;
+          item.appendChild(subtext);
+        }
+
+        if (event.rag) {
+          item.appendChild(createEvidencePanel(event.rag));
+        }
+
+        const preview = extractPreviewText(event);
+        if (preview) {
+          const pre = document.createElement("div");
+          pre.className = "event-preview";
+          pre.textContent = preview;
+          item.appendChild(pre);
+        }
+
+        eventList.appendChild(item);
+      }
+
+      return eventList;
+    }
+
+    function updateProcessPanel(wrapper, events = [], options = {}) {
+      let details = wrapper.querySelector(":scope > details.process-panel");
+      const bubble = wrapper.querySelector(":scope > .bubble");
+      if (!details) {
+        details = document.createElement("details");
+        details.className = "process-panel";
+        if (bubble) wrapper.insertBefore(details, bubble);
+        else wrapper.appendChild(details);
+      }
+      details.classList.toggle("is-running", Boolean(options.isRunning));
+      details.classList.toggle("is-error", Boolean(options.isError));
+      details.open = true;
+
+      details.innerHTML = "";
+      const summary = document.createElement("summary");
+      const text = document.createElement("span");
+      text.className = "process-summary";
+      text.textContent = summarizeProcess(events, options);
+      const chevron = document.createElement("span");
+      chevron.className = "process-chevron";
+      chevron.textContent = ">";
+      summary.appendChild(text);
+      summary.appendChild(chevron);
+      details.appendChild(summary);
+
+      const body = document.createElement("div");
+      body.className = "process-body";
+      if (events.length) {
+        body.appendChild(createEventList(events));
+      } else {
+        const empty = document.createElement("div");
+        empty.className = "process-empty";
+        empty.textContent = options.isRunning ? "正在等待模型输出和工具活动。" : "本轮没有调用工具或资料检索。";
+        body.appendChild(empty);
+      }
+      details.appendChild(body);
+      return details;
+    }
+
+    function createDesignResultPanel(job) {
+      if (!job?.result) return null;
+      const summary = job.result.summary || {};
+      const panel = document.createElement("section");
+      panel.className = "design-result-panel";
+
+      const header = document.createElement("div");
+      header.className = "design-result-header";
+      const title = document.createElement("strong");
+      title.textContent = job.request?.project_name || "总体设计结果";
+      const outcome = designOutcome(job);
+      const status = document.createElement("span");
+      status.className = "design-result-state is-" + outcome.tone + (outcome.tone === "fail" ? " is-error" : "");
+      status.textContent = outcome.label;
+      status.setAttribute("role", outcome.tone === "fail" ? "alert" : "status");
+      header.appendChild(title);
+      header.appendChild(status);
+      panel.appendChild(header);
+
+      const metricData = [
+        ["最大起飞重量", summary.mtow_kg, "kg", 1],
+        ["机翼面积", summary.wing_area_m2, "m²", 2],
+        ["翼载", summary.wing_loading_pa, "Pa", 0],
+        ["推重比", summary.thrust_to_weight, "", 3],
+        ["海平面推力", summary.thrust_sl_n, "N", 0],
+        ["翼展", summary.span_m, "m", 2],
+        ["实际航程", Number(summary.actual_range_m) / 1000, "km", 0],
+        ["迭代次数", summary.iterations, "次", 0],
+      ];
+      const metrics = document.createElement("div");
+      metrics.className = "design-result-metrics";
+      for (const [labelText, rawValue, unit, digits] of metricData) {
+        const metric = document.createElement("div");
+        metric.className = "design-result-metric";
+        const label = document.createElement("span");
+        label.textContent = labelText;
+        const value = document.createElement("strong");
+        const numeric = Number(rawValue);
+        value.textContent = Number.isFinite(numeric) ? numeric.toFixed(digits) + (unit ? " " + unit : "") : "--";
+        metric.appendChild(label);
+        metric.appendChild(value);
+        metrics.appendChild(metric);
+      }
+      panel.appendChild(metrics);
+
+      const mtow = Number(summary.mtow_kg);
+      const weightParts = [
+        ["空重", Number(summary.empty_weight_kg), "design-weight-empty"],
+        ["燃油", Number(summary.fuel_weight_kg), "design-weight-fuel"],
+        ["载荷", Number(summary.payload_kg), "design-weight-payload"],
+      ];
+      if (Number.isFinite(mtow) && mtow > 0 && weightParts.every((part) => Number.isFinite(part[1]))) {
+        const accounted = weightParts.reduce((total, part) => total + Math.max(0, part[1]), 0);
+        weightParts.push(["其他", Math.max(0, mtow - accounted), "design-weight-other"]);
+        const weight = document.createElement("div");
+        weight.className = "design-weight-summary";
+        const weightTitle = document.createElement("span");
+        weightTitle.textContent = "重量组成";
+        const bar = document.createElement("div");
+        bar.className = "design-weight-bar";
+        const legend = document.createElement("div");
+        legend.className = "design-weight-legend";
+        for (const [name, value, className] of weightParts) {
+          const segment = document.createElement("span");
+          segment.className = className;
+          segment.style.width = Math.max(0, value / mtow * 100).toFixed(2) + "%";
+          segment.title = name + " " + value.toFixed(1) + " kg";
+          bar.appendChild(segment);
+          const item = document.createElement("span");
+          item.textContent = name + " " + value.toFixed(1) + " kg";
+          legend.appendChild(item);
+        }
+        weight.appendChild(weightTitle);
+        weight.appendChild(bar);
+        weight.appendChild(legend);
+        panel.appendChild(weight);
+      }
+
+      const footer = document.createElement("div");
+      footer.className = "design-result-footer";
+      const footerItems = [
+        "耗时 " + Number(job.result.duration_seconds || 0).toFixed(1) + " s",
+        "产物 " + (summary.artifact_count ?? job.result.artifacts?.length ?? 0),
+        "校验问题 " + (summary.issue_count ?? job.result.issues?.length ?? 0),
+        "任务 " + job.job_id,
+      ];
+      for (const text of footerItems) {
+        const item = document.createElement("span");
+        item.textContent = text;
+        footer.appendChild(item);
+      }
+      panel.appendChild(footer);
+      return panel;
+    }
+
+    function createMessage(role, text, options = {}) {
+      const normalized = normalizeMessageOptions(options);
+      const events = normalized.events || [];
+      const artifacts = Array.isArray(normalized.artifacts) ? normalized.artifacts : [];
+      const wrapper = document.createElement("article");
+      wrapper.className = "message " + role;
+
+      const label = document.createElement("div");
+      label.className = "message-label";
+      label.textContent = role === "user" ? "你" : role === "assistant" ? "工程助手" : "系统";
+      wrapper.appendChild(label);
+
+      const bubble = document.createElement("div");
+      bubble.className = "bubble";
+      const fallbackText = role === "assistant" && !normalized.isRunning ? "[没有文本响应]" : "";
+      renderMarkdownInto(bubble, text || fallbackText);
+      wrapper.appendChild(bubble);
+
+      if (role === "assistant") {
+        updateProcessPanel(wrapper, events, {
+          elapsedMs: normalized.elapsedMs,
+          isRunning: Boolean(normalized.isRunning),
+          isError: Boolean(normalized.isError),
+          open: Boolean(normalized.openProcess && events.length),
+        });
+        const answerEvidence = createAnswerEvidence(events);
+        if (answerEvidence) wrapper.appendChild(answerEvidence);
+        const designResult = createDesignResultPanel(normalized.designJob);
+        if (designResult) wrapper.appendChild(designResult);
+        const artifactsPanel = createArtifactsPanel(artifacts);
+        if (artifactsPanel) wrapper.appendChild(artifactsPanel);
+      }
+
+      if (text) {
+        const tools = document.createElement("div");
+        tools.className = "message-tools";
+        addCopyButton(tools, text);
+        wrapper.appendChild(tools);
+      }
+
+      return wrapper;
+    }
+
+    function clearRenderedMessages() {
+      chatLog.innerHTML = "";
+    }
+
+    function renderHero() {
+      const hero = document.createElement("div");
+      hero.className = "hero";
+      const selectedSkill = skillSelect.value ? skillDisplayName(skillSelect.value) : "未启用工程模式";
+      const evidenceLabel = skillSelect.value
+        ? (skillSelect.value === WEB_AIRCRAFT_SKILL ? "自动检索" : "按需检索")
+        : "未启用";
+      const toolLabel = autoApproveToggle.checked ? "自动批准" : "手动确认";
+      hero.innerHTML =
+        '<div class="hero-copy">' +
+          "<strong>工程设计流程</strong>" +
+          "<span>围绕任务需求、总体参数、约束边界、动力、气动和飞行性能开展对话；工程模式和运行参数统一放在设置中管理。</span>" +
+        "</div>" +
+        '<div class="hero-stack" aria-label="当前工作台状态">' +
+          '<div class="hero-stat"><span>默认模型</span><strong>' + WEB_MODEL + "</strong></div>" +
+          '<div class="hero-stat"><span>工程模式</span><strong>' + escapeHtml(selectedSkill) + "</strong></div>" +
+          '<div class="hero-stat"><span>资料证据</span><strong>' + escapeHtml(evidenceLabel) + "</strong></div>" +
+          '<div class="hero-stat"><span>工具确认</span><strong>' + escapeHtml(toolLabel) + "</strong></div>" +
+        "</div>";
+      chatLog.appendChild(hero);
+    }
+
+    function renderMessages(messages) {
+      clearRenderedMessages();
+      if (!messages.length) {
+        renderHero();
+        return;
+      }
+
+      for (const message of messages) {
+        if (!message.text && !message.blocks?.length && !message.artifacts?.length) {
+          continue;
+        }
+        let text = message.text || "";
+        if (!text && message.blocks?.length) {
+          text = message.blocks.map((block) => block.label).join("\n");
+        }
+        chatLog.appendChild(createMessage(message.role, text, {
+          events: message.events || [],
+          artifacts: message.artifacts || [],
+        }));
+      }
+      chatLog.scrollTop = chatLog.scrollHeight;
+    }
+
+    function refreshHeroIfEmpty() {
+      if (chatLog.querySelector(".message")) return;
+      renderMessages([]);
+    }
+
+    function appendAssistantReply(reply, options = {}) {
+      const events = options.events || reply.events || [];
+      const artifacts = options.artifacts || reply.artifacts || [];
+      chatLog.appendChild(createMessage("assistant", reply.text, {
+        events,
+        artifacts,
+        designJob: options.designJob,
+        elapsedMs: options.elapsedMs,
+        openProcess: Boolean(options.openProcess),
+      }));
+      chatLog.scrollTop = chatLog.scrollHeight;
+    }
+
+    function renderSessionList() {
+      sessionList.innerHTML = "";
+      if (!state.sessions.length) {
+        const empty = document.createElement("p");
+        empty.className = "hint";
+        empty.textContent = "暂无活动的浏览器会话。";
+        sessionList.appendChild(empty);
+        return;
+      }
+      for (const session of state.sessions) {
+        const row = document.createElement("div");
+        row.className = "session-row";
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "session-item" + (session.session_id === state.sessionId ? " active" : "");
+        const title = document.createElement("strong");
+        title.textContent = session.provider + " · " + session.model;
+        const subtitle = document.createElement("span");
+        subtitle.textContent = (session.last_message || "新的设计会话") + " · " + session.message_count + " 条消息";
+        button.appendChild(title);
+        button.appendChild(subtitle);
+        button.addEventListener("click", () => loadSession(session.session_id));
+
+        const deleteButton = document.createElement("button");
+        deleteButton.type = "button";
+        deleteButton.className = "session-delete";
+        deleteButton.textContent = "×";
+        deleteButton.title = "删除会话记录";
+        deleteButton.setAttribute("aria-label", "删除会话记录 " + session.session_id);
+        deleteButton.addEventListener("click", (event) => {
+          event.stopPropagation();
+          deleteSession(session.session_id);
+        });
+
+        row.appendChild(button);
+        row.appendChild(deleteButton);
+        sessionList.appendChild(row);
+      }
+    }
+
+    async function refreshSessions() {
+      try {
+        const payload = await api("/api/sessions");
+        state.sessions = payload.sessions || [];
+        renderSessionList();
+      } catch (_err) {
+        state.sessions = [];
+        renderSessionList();
+      }
+    }
+
+    async function createSession(options = {}) {
+      setBusy(true, "正在启动...");
+      try {
+        const payload = await api("/api/sessions", {
+          method: "POST",
+          body: JSON.stringify({
+            provider: providerSelect.value,
+            model: WEB_MODEL,
+            auto_skill: toInternalSkillName(skillSelect.value),
+            auto_approve: autoApproveToggle.checked,
+          }),
+        });
+        updateMeta(payload.session);
+        renderMessages(payload.session.messages);
+        setActiveView("chat");
+        await refreshSessions();
+        setStatus("新设计会话已就绪。");
+      } catch (error) {
+        setStatus(error.message, true);
+      } finally {
+        if (!options.keepBusy) setBusy(false);
+      }
+    }
+
+    async function loadSession(sessionId) {
+      const payload = await api("/api/sessions/" + encodeURIComponent(sessionId));
+      updateMeta(payload.session);
+      renderMessages(payload.session.messages);
+      setActiveView("chat");
+      renderSessionList();
+    }
+
+    async function deleteSession(sessionId) {
+      if (state.busy) return;
+      const isCurrent = sessionId === state.sessionId;
+      if (!window.confirm("删除这条会话记录？此操作会移除服务器上的历史文件。")) return;
+      setBusy(true, "正在删除...");
+      try {
+        await api("/api/sessions/" + encodeURIComponent(sessionId), { method: "DELETE" });
+        state.sessions = state.sessions.filter((session) => session.session_id !== sessionId);
+        if (isCurrent) {
+          state.sessionId = null;
+          saveLocalState();
+          await createSession({ keepBusy: true });
+        } else {
+          await refreshSessions();
+        }
+        setStatus("会话记录已删除。");
+      } catch (error) {
+        setStatus(error.message, true);
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    async function resetSession() {
+      if (!state.sessionId) return;
+      setBusy(true, "正在清空...");
+      try {
+        const payload = await api("/api/sessions/" + encodeURIComponent(state.sessionId) + "/reset", {
+          method: "POST",
+          body: JSON.stringify({
+            auto_approve: autoApproveToggle.checked,
+            auto_skill: toInternalSkillName(skillSelect.value),
+          }),
+        });
+        updateMeta(payload.session);
+        renderMessages(payload.session.messages);
+        await refreshSessions();
+        setStatus("对话已清空。");
+      } catch (error) {
+        setStatus(error.message, true);
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    async function ensureMatchingSession() {
+      if (!state.sessionId) {
+        await createSession({ keepBusy: true });
+        return;
+      }
+      if (providerSelect.value !== state.provider || WEB_MODEL !== state.model) {
+        await createSession({ keepBusy: true });
+        return;
+      }
+      if ((skillSelect.value || "") !== (state.autoSkill || "")) {
+        await createSession({ keepBusy: true });
+      }
+    }
+
+    function parseSseBlock(block) {
+      const lines = block.split("\n");
+      let event = "message";
+      const dataLines = [];
+      for (const line of lines) {
+        if (line.startsWith("event:")) event = line.slice(6).trim();
+        if (line.startsWith("data:")) dataLines.push(line.slice(5).trimStart());
+      }
+      if (!dataLines.length) return null;
+      try {
+        return { event, data: JSON.parse(dataLines.join("\n")) };
+      } catch (_err) {
+        return null;
+      }
+    }
+
+    async function streamApi(path, body, handlers = {}) {
+      const response = await fetch(path, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        signal: state.abortController?.signal,
+      });
+      if (!response.ok || !response.body) {
+        const text = await response.text();
+        let payload = {};
+        try { payload = text ? JSON.parse(text) : {}; } catch (_err) { payload = { error: text }; }
+        throw new Error(payload.error || response.statusText);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let finalPayload = null;
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const blocks = buffer.split("\n\n");
+        buffer = blocks.pop() || "";
+        for (const block of blocks) {
+          const parsed = parseSseBlock(block);
+          if (!parsed) continue;
+          if (parsed.event === "chunk") handlers.onChunk?.(parsed.data.text || "");
+          if (parsed.event === "tool") handlers.onTool?.(parsed.data);
+          if (parsed.event === "error") throw new Error(parsed.data.error || "流式请求失败");
+          if (parsed.event === "done") {
+            finalPayload = parsed.data;
+            await reader.cancel().catch(() => {});
+            break;
+          }
+        }
+        if (finalPayload) break;
+      }
+      if (buffer.trim()) {
+        const parsed = parseSseBlock(buffer);
+        if (parsed?.event === "done") finalPayload = parsed.data;
+      }
+      if (!finalPayload) throw new Error("流式响应在完成前中断。");
+      return finalPayload;
+    }
+
+    function designInputNumber(input, label) {
+      const value = Number(input.value);
+      if (!Number.isFinite(value)) throw new Error(label + "必须是有效数字。");
+      return value;
+    }
+
+    function currentDesignEnergyMode() {
+      return designPropulsionType.value === "jet" ? "jet" : "prop";
+    }
+
+    function designEnergyPath(mode = currentDesignEnergyMode()) {
+      return "initial_guess." + DESIGN_ENERGY_CONFIG[mode].field;
+    }
+
+    function resetDesignEnergyValues() {
+      state.designEnergyValues.prop = DESIGN_ENERGY_CONFIG.prop.defaultValue;
+      state.designEnergyValues.jet = DESIGN_ENERGY_CONFIG.jet.defaultValue;
+      state.designLegacyEnergy.prop = null;
+      state.designLegacyEnergy.jet = null;
+      designPropEfficiency.value = "0.8";
+    }
+
+    function captureDesignEnergyValue() {
+      const mode = designSfc.dataset.energyMode;
+      const value = Number(designSfc.value);
+      if (DESIGN_ENERGY_CONFIG[mode] && Number.isFinite(value)) {
+        state.designEnergyValues[mode] = value;
+      }
+    }
+
+    function designCruiseSpeedMps() {
+      const altitudeM = Math.max(0, Number(designCruiseAltitude.value) || 0);
+      const mach = Math.max(0, Number(designCruiseMach.value) || 0);
+      const temperatureK = 288.15 - 0.0065 * Math.min(altitudeM, 11000);
+      return mach * Math.sqrt(1.4 * 287.05287 * temperatureK);
+    }
+
+    function migrateLegacyDesignSfc(value, mode) {
+      const legacy = Number(value);
+      if (!Number.isFinite(legacy) || legacy <= 0) return null;
+      if (mode === "jet") return legacy / 9.80665;
+      const efficiency = Number(designPropEfficiency.value);
+      const speedMps = designCruiseSpeedMps();
+      if (!Number.isFinite(efficiency) || efficiency <= 0 || speedMps <= 0) return null;
+      return legacy * efficiency / (9.80665 * speedMps);
+    }
+
+    function syncDesignEnergyMode(options = {}) {
+      if (options.captureCurrent !== false) captureDesignEnergyValue();
+      const mode = currentDesignEnergyMode();
+      const config = DESIGN_ENERGY_CONFIG[mode];
+      designSfc.dataset.energyMode = mode;
+      designSfcLabel.textContent = config.label;
+      designSfc.min = String(config.min);
+      designSfc.max = String(config.max);
+      designSfc.value = String(state.designEnergyValues[mode] ?? config.defaultValue);
+      designPropEfficiencyField.hidden = mode !== "prop";
+      designSfc.disabled = state.designJobRunning || !designUseAdvanced.checked;
+      designPropEfficiency.disabled = state.designJobRunning || !designUseAdvanced.checked || mode !== "prop";
+    }
+
+    function restoreDesignFieldSources(provenance = null) {
+      state.designFieldSources = {};
+      for (const path of designFieldPaths.values()) state.designFieldSources[path] = "default";
+      state.designFieldSources[designEnergyPath("prop")] = "default";
+      state.designFieldSources[designEnergyPath("jet")] = "default";
+      if (!provenance || typeof provenance !== "object") return;
+      const inputFields = provenance.input_fields || {};
+      for (const group of ["requirements", "initial_guess", "solver"]) {
+        const fields = inputFields[group];
+        if (!fields || typeof fields !== "object") continue;
+        for (const [name, entry] of Object.entries(fields)) {
+          const source = typeof entry === "string" ? entry : entry?.source;
+          if (["user", "default", "derived"].includes(source)) state.designFieldSources[group + "." + name] = source;
+        }
+      }
+      const projectSource = typeof provenance.project_name === "string" ? provenance.project_name : provenance.project_name?.source;
+      if (["user", "default", "derived"].includes(projectSource)) state.designFieldSources.project_name = projectSource;
+    }
+
+    function buildDesignRequestProvenance(request) {
+      const inputFields = { requirements: {} };
+      for (const [name, value] of Object.entries(request.requirements || {})) {
+        const path = "requirements." + name;
+        inputFields.requirements[name] = {
+          source: state.designFieldSources[path] || "default",
+          value,
+        };
+      }
+      if (request.initial_guess) {
+        inputFields.initial_guess = {};
+        for (const [name, value] of Object.entries(request.initial_guess)) {
+          const path = "initial_guess." + name;
+          inputFields.initial_guess[name] = {
+            source: state.designFieldSources[path] || "default",
+            value,
+          };
+        }
+      }
+      if (request.tolerance !== undefined || request.max_iterations !== undefined) {
+        inputFields.solver = {};
+        if (request.tolerance !== undefined) {
+          inputFields.solver.tolerance = {
+            source: state.designFieldSources["solver.tolerance"] || "default",
+            value: request.tolerance,
+          };
+        }
+        if (request.max_iterations !== undefined) {
+          inputFields.solver.max_iterations = {
+            source: state.designFieldSources["solver.max_iterations"] || "default",
+            value: request.max_iterations,
+          };
+        }
+      }
+      const energyMode = request.requirements?.propulsion_type === "jet" ? "jet" : "prop";
+      const energyField = DESIGN_ENERGY_CONFIG[energyMode].field;
+      const energyWasSubmitted = Object.prototype.hasOwnProperty.call(request.initial_guess || {}, energyField);
+      const legacyEnergy = energyWasSubmitted && Boolean(state.designLegacyEnergy[energyMode]);
+      return {
+        request_contract_version: 2,
+        propulsion_energy: {
+          propulsion_type: request.requirements?.propulsion_type,
+          canonical_field: energyField,
+          source: !energyWasSubmitted
+            ? "default"
+            : legacyEnergy
+            ? "legacy_migrated_at_cruise_condition"
+            : (state.designFieldSources[designEnergyPath(energyMode)] || "default"),
+          legacy_field: legacyEnergy ? "sfc_cruise_1_s" : null,
+          legacy_semantics: legacyEnergy
+            ? "equivalent fuel-weight-flow / thrust at the declared cruise condition [1/s]"
+            : null,
+        },
+        project_name: {
+          source: state.designFieldSources.project_name || "default",
+          value: request.project_name,
+        },
+        input_fields: inputFields,
+        ui: { custom_initial_guess: designUseAdvanced.checked },
+      };
+    }
+
+    function buildDesignJobRequest() {
+      const request = {
+        project_name: designProjectName.value.trim(),
+        requirements: {
+          range_m: designInputNumber(designRangeKm, "航程") * 1000,
+          payload_kg: designInputNumber(designPayloadKg, "有效载荷"),
+          cruise_mach: designInputNumber(designCruiseMach, "巡航马赫数"),
+          cruise_altitude_m: designInputNumber(designCruiseAltitude, "巡航高度"),
+          takeoff_distance_m: designInputNumber(designTakeoffDistance, "起飞距离"),
+          landing_distance_m: designInputNumber(designLandingDistance, "着陆距离"),
+          max_load_factor: designInputNumber(designMaxLoadFactor, "最大过载"),
+          sustained_turn_g: designInputNumber(designSustainedTurnG, "持续盘旋过载"),
+          service_ceiling_m: designInputNumber(designServiceCeiling, "实用升限"),
+          aircraft_role: designAircraftRole.value,
+          propulsion_type: designPropulsionType.value,
+          reserve_fraction: designInputNumber(designReserveFraction, "储备燃油比例"),
+          tail_layout: designTailLayout.value,
+          cl_max_takeoff: designInputNumber(designClmaxTakeoff, "起飞 CLmax"),
+          cl_max_landing: designInputNumber(designClmaxLanding, "着陆 CLmax"),
+          assumed_climb_rate_m_s: designInputNumber(designAssumedClimbRate, "假定爬升率"),
+          uncertainty_enabled: designUncertaintyEnabled.checked,
+        },
+      };
+      if (request.requirements.service_ceiling_m < request.requirements.cruise_altitude_m) {
+        throw new Error("实用升限不能低于巡航高度。");
+      }
+      if (designUseAdvanced.checked) {
+        const energyConfig = DESIGN_ENERGY_CONFIG[currentDesignEnergyMode()];
+        request.initial_guess = {
+          mtow_kg: designInputNumber(designMtowGuess, "MTOW 初猜"),
+          wing_loading_pa: designInputNumber(designWingLoading, "翼载初猜"),
+          thrust_to_weight: designInputNumber(designThrustWeight, "推重比初猜"),
+          aspect_ratio: designInputNumber(designAspectRatio, "展弦比"),
+          sweep_deg: designInputNumber(designSweepDeg, "后掠角"),
+          taper_ratio: designInputNumber(designTaperRatio, "梯形比"),
+          thickness_ratio: designInputNumber(designThicknessRatio, "厚度比"),
+          cd0: designInputNumber(designCd0, "零升阻力系数"),
+          oswald_e: designInputNumber(designOswald, "Oswald 效率因子"),
+        };
+        request.initial_guess[energyConfig.field] = designInputNumber(designSfc, energyConfig.inputLabel);
+        if (request.requirements.propulsion_type === "prop") {
+          request.initial_guess.prop_efficiency = designInputNumber(designPropEfficiency, "螺旋桨效率");
+        }
+        request.tolerance = designInputNumber(designTolerance, "收敛容差");
+        request.max_iterations = Math.trunc(designInputNumber(designMaxIterations, "最大迭代次数"));
+      }
+      request.provenance = buildDesignRequestProvenance(request);
+      return request;
+    }
+
+    function designProgressEvent(event) {
+      const failed = ["failed", "engineering_infeasible", "nonconverged", "cancelled", "timed_out", "interrupted"].includes(event.stage);
+      return {
+        kind: "design_stage",
+        tool_name: "AircraftDesignRunner",
+        stage: event.stage,
+        summary: event.message,
+        preview: event.detail || { progress: event.progress },
+        is_error: failed,
+        error: failed ? event.message : null,
+      };
+    }
+
+    function refreshDesignJobMessage() {
+      if (!state.designJobMessage) {
+        state.designJobMessage = createMessage("assistant", "", {
+          events: state.designJobEvents,
+          isRunning: true,
+          openProcess: true,
+        });
+        chatLog.appendChild(state.designJobMessage);
+      }
+      updateProcessPanel(state.designJobMessage, state.designJobEvents, {
+        isRunning: true,
+        open: true,
+      });
+      chatLog.scrollTop = chatLog.scrollHeight;
+    }
+
+    function designJobStatusLabel(status) {
+      return {
+        queued: "排队中",
+        preparing: "准备中",
+        running: "计算中",
+        validating: "工程校验中",
+        completed: "已完成",
+        engineering_infeasible: "工程不可行",
+        nonconverged: "未收敛",
+        failed: "失败",
+        cancelled: "已取消",
+        timed_out: "已超时",
+        interrupted: "已中断",
+      }[status] || status || "未知";
+    }
+
+    function designJobTimestamp(value) {
+      const date = new Date(value || "");
+      if (Number.isNaN(date.getTime())) return "时间未知";
+      return date.toLocaleString("zh-CN", {
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    }
+
+    function designNode(tag, className = "", textContent = "") {
+      const node = document.createElement(tag);
+      if (className) node.className = className;
+      if (textContent !== "") node.textContent = textContent;
+      return node;
+    }
+
+    function finiteDesignNumber(value) {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+
+    function formatDesignValue(value, unit = "", digits = 2) {
+      if (value === null || value === undefined || value === "") return "--";
+      const numeric = finiteDesignNumber(value);
+      if (numeric !== null) {
+        const magnitude = Math.abs(numeric);
+        const places = magnitude >= 100 ? 1 : magnitude >= 10 ? Math.min(digits, 2) : digits;
+        return numeric.toLocaleString("zh-CN", { maximumFractionDigits: places }) + (unit ? " " + unit : "");
+      }
+      if (typeof value === "boolean") return value ? "是" : "否";
+      if (typeof value === "object") return JSON.stringify(value);
+      return String(value) + (unit ? " " + unit : "");
+    }
+
+    function designEngineering(job) {
+      return job?.result?.engineering || {};
+    }
+
+    function designOutcome(job) {
+      if (!job) return { tone: "warn", label: "尚未选择任务", detail: "选择任务后查看工程状态。" };
+      const engineering = designEngineering(job);
+      const overall = String(engineering.overall_status || "").toLowerCase();
+      const numerical = engineering.numerical_converged ?? job.result?.converged ?? null;
+      const feasible = engineering.engineering_feasible ?? null;
+      const failedStatuses = ["failed", "cancelled", "timed_out", "interrupted"];
+      if (failedStatuses.includes(job.status)) {
+        return { tone: "fail", label: designJobStatusLabel(job.status), detail: job.error || job.message || "任务未完成。" };
+      }
+      if (job.status === "nonconverged" || overall === "nonconverged" || numerical === false) {
+        return { tone: "fail", label: "数值未收敛", detail: "当前结果不能作为工程可行方案。" };
+      }
+      if (job.status === "engineering_infeasible" || overall === "infeasible" || feasible === false) {
+        return { tone: "fail", label: "工程不可行", detail: "计算已完成，但至少一个阻断约束或阶段门未通过。" };
+      }
+      if ((overall === "feasible" || feasible === true) && numerical !== false) {
+        return { tone: "pass", label: "工程可行", detail: "数值已收敛，阻断约束和阶段门均通过。" };
+      }
+      if (["queued", "running", "preparing", "validating"].includes(job.status) || !job.terminal) {
+        return { tone: "warn", label: designJobStatusLabel(job.status), detail: job.message || "工程校验尚未完成。" };
+      }
+      return {
+        tone: "warn",
+        label: job.status === "completed" ? "计算完成，待工程判定" : designJobStatusLabel(job.status),
+        detail: "结果缺少完整工程可行性字段，不能标记为通过。",
+      };
+    }
+
+    function normalizeDesignStages(value) {
+      if (Array.isArray(value)) return value;
+      if (!value || typeof value !== "object") return [];
+      return Object.entries(value).map(([id, item]) => ({ id, ...(item || {}) }));
+    }
+
+    function normalizeDesignConstraints(value) {
+      if (Array.isArray(value)) return value;
+      if (!value || typeof value !== "object") return [];
+      return Object.entries(value).map(([id, item]) => ({ id, ...(item || {}) }));
+    }
+
+    function formatConstraintRequirement(item) {
+      const direction = {
+        min: ">=", minimum: ">=", greater_than_or_equal: ">=", ">=": ">=",
+        max: "<=", maximum: "<=", less_than_or_equal: "<=", "<=": "<=",
+        eq: "=", equal: "=", "=": "=",
+      }[item.direction] || item.direction || "";
+      return (direction ? direction + " " : "") + formatDesignValue(item.required ?? item.target, item.unit);
+    }
+
+    function createDesignTable(headers, rows, className = "") {
+      const wrapper = designNode("div", "design-table-wrap");
+      const table = designNode("table", "design-data-table" + (className ? " " + className : ""));
+      const thead = document.createElement("thead");
+      const headingRow = document.createElement("tr");
+      for (const headerText of headers) headingRow.appendChild(designNode("th", "", headerText));
+      thead.appendChild(headingRow);
+      table.appendChild(thead);
+      const tbody = document.createElement("tbody");
+      for (const row of rows) {
+        const tr = document.createElement("tr");
+        if (row.className) tr.className = row.className;
+        for (const cellValue of row.cells) {
+          const td = document.createElement("td");
+          if (cellValue instanceof Node) td.appendChild(cellValue);
+          else td.textContent = cellValue;
+          tr.appendChild(td);
+        }
+        tbody.appendChild(tr);
+      }
+      table.appendChild(tbody);
+      wrapper.appendChild(table);
+      return wrapper;
+    }
+
+    function renderDesignRunTimeline() {
+      designRunTimeline.innerHTML = "";
+      const events = state.designJobEvents || [];
+      if (!events.length) {
+        designRunTimeline.appendChild(designNode("div", "design-empty-state compact", "任务开始后，这里会显示阶段进度。"));
+        return;
+      }
+      const list = designNode("ol", "design-timeline-list");
+      for (const event of events) {
+        const item = designNode("li", event.is_error ? "is-fail" : "");
+        item.appendChild(designNode("strong", "", designJobStatusLabel(event.stage)));
+        item.appendChild(designNode("span", "", event.summary || "阶段已更新"));
+        list.appendChild(item);
+      }
+      designRunTimeline.appendChild(list);
+    }
+
+    function localPreflightPayload(request) {
+      const assumptions = [
+        { path: "requirements.aircraft_role", value: request.requirements.aircraft_role, source: "user" },
+        { path: "requirements.propulsion_type", value: request.requirements.propulsion_type, source: "user" },
+        { path: "requirements.reserve_fraction", value: request.requirements.reserve_fraction, source: "user" },
+        { path: "requirements.tail_layout", value: request.requirements.tail_layout, source: "user" },
+        { path: "requirements.cl_max_takeoff", value: request.requirements.cl_max_takeoff, source: "user" },
+        { path: "requirements.cl_max_landing", value: request.requirements.cl_max_landing, source: "user" },
+        { path: "initial_guess", value: request.initial_guess ? "自定义" : "按任务自动选择", source: request.initial_guess ? "user" : "default" },
+      ];
+      const warnings = [];
+      if (request.requirements.reserve_fraction < 0.05) warnings.push("储备燃油比例低于 5%，应确认任务放行规则。");
+      if (request.requirements.cl_max_landing < request.requirements.cl_max_takeoff) warnings.push("着陆 CLmax 低于起飞 CLmax，请确认增升构型。");
+      return { ready: true, request, assumptions, warnings, field_sources: {} };
+    }
+
+    function applyClientProvenanceToPreflight(payload, request) {
+      const normalized = payload?.request || request;
+      const fields = request?.provenance?.input_fields || {};
+      const assumptions = Array.isArray(payload.assumptions) ? [...payload.assumptions] : [];
+      const fieldSources = { ...(payload.field_sources || {}) };
+      for (const group of ["requirements", "initial_guess", "solver"]) {
+        for (const [name, entry] of Object.entries(fields[group] || {})) {
+          const path = group + "." + name;
+          const source = typeof entry === "string" ? entry : entry?.source;
+          if (!["user", "default", "derived"].includes(source)) continue;
+          fieldSources[path] = source;
+          const existingIndex = assumptions.findIndex((item) => item.path === path);
+          const value = normalized?.[group]?.[name] ?? entry?.value;
+          if (source === "user" && existingIndex >= 0) {
+            assumptions.splice(existingIndex, 1);
+          } else if (source !== "user" && existingIndex >= 0) {
+            assumptions[existingIndex] = { ...assumptions[existingIndex], value, source };
+          } else if (source !== "user") {
+            assumptions.push({ path, value, source });
+          }
+        }
+      }
+      payload.field_sources = fieldSources;
+      payload.assumptions = assumptions;
+      return payload;
+    }
+
+    function renderDesignPreflight(payload, usedFallback = false) {
+      designPreflightSummary.innerHTML = "";
+      const assumptions = Array.isArray(payload?.assumptions) ? [...payload.assumptions] : [];
+      const warnings = Array.isArray(payload?.warnings) ? payload.warnings : [];
+      const fieldSources = payload?.field_sources && typeof payload.field_sources === "object" ? payload.field_sources : {};
+      const valueAtPath = (root, path) => String(path).split(".").reduce((value, key) => value?.[key], root);
+      for (const [path, source] of Object.entries(fieldSources)) {
+        if (assumptions.some((item) => item.path === path)) continue;
+        assumptions.push({ path, value: valueAtPath(payload?.request, path), source });
+      }
+      const summary = designNode("div", "design-preflight-grid");
+      for (const assumption of assumptions) {
+        const item = designNode("div", "design-preflight-item");
+        item.appendChild(designNode("span", "", assumption.path || assumption.name || "假设"));
+        item.appendChild(designNode("strong", "", formatDesignValue(assumption.value)));
+        item.appendChild(designNode("small", "", assumption.source === "user" ? "用户输入" : assumption.source === "derived" ? "推导值" : "默认值"));
+        summary.appendChild(item);
+      }
+      designPreflightSummary.appendChild(summary);
+      if (warnings.length) {
+        const warningBox = designNode("div", "design-preflight-warnings");
+        warningBox.setAttribute("role", "alert");
+        warningBox.appendChild(designNode("strong", "", "需要确认"));
+        const list = document.createElement("ul");
+        for (const warning of warnings) list.appendChild(designNode("li", "", typeof warning === "string" ? warning : warning.message || JSON.stringify(warning)));
+        warningBox.appendChild(list);
+        designPreflightSummary.appendChild(warningBox);
+      }
+      designPreflightState.textContent = payload?.ready === false ? "存在冲突" : usedFallback ? "本地检查" : "服务端已校验";
+      designPreflightState.className = payload?.ready === false ? "is-fail" : warnings.length ? "is-warn" : "is-pass";
+      designPreflightConfirm.disabled = payload?.ready === false;
+      designRunBtn.disabled = state.designJobRunning || !designPreflightConfirm.checked || payload?.ready === false;
+    }
+
+    function designRequestFingerprint(request) {
+      return JSON.stringify(request);
+    }
+
+    function markDesignPreflightDirty() {
+      state.preflightFingerprint = null;
+      state.preflightRequestFingerprint = null;
+      state.confirmedPreflightFingerprint = null;
+      designPreflightConfirm.checked = false;
+      designPreflightConfirm.disabled = true;
+      designRunBtn.disabled = true;
+      designPreflightState.textContent = "需要重新检查";
+      designPreflightState.className = "is-warn";
+    }
+
+    function scheduleDesignPreflight() {
+      window.clearTimeout(designPreflightTimer);
+      designPreflightTimer = window.setTimeout(() => void runDesignPreflight(), 280);
+    }
+
+    async function runDesignPreflight() {
+      if (!designRunForm.checkValidity()) {
+        designPreflightState.textContent = "请完善字段";
+        designPreflightState.className = "is-fail";
+        designPreflightConfirm.disabled = true;
+        designRunBtn.disabled = true;
+        return null;
+      }
+      let request;
+      try {
+        request = buildDesignJobRequest();
+      } catch (error) {
+        designPreflightState.textContent = error.message;
+        designPreflightState.className = "is-fail";
+        designPreflightConfirm.disabled = true;
+        designRunBtn.disabled = true;
+        return null;
+      }
+      const fingerprint = designRequestFingerprint(request);
+      designPreflightState.textContent = "正在检查";
+      designPreflightState.className = "is-warn";
+      designPreflightBtn.disabled = true;
+      let payload;
+      let usedFallback = false;
+      try {
+        payload = await api("/api/design-jobs/preflight", {
+          method: "POST",
+          body: JSON.stringify({ request }),
+        });
+      } catch (_error) {
+        payload = localPreflightPayload(request);
+        payload.warnings = ["预检服务暂不可用，已完成本地字段检查。", ...(payload.warnings || [])];
+        usedFallback = true;
+      } finally {
+        designPreflightBtn.disabled = false;
+      }
+      payload = applyClientProvenanceToPreflight(payload, request);
+      let currentFingerprint;
+      try {
+        currentFingerprint = designRequestFingerprint(buildDesignJobRequest());
+      } catch (_error) {
+        return null;
+      }
+      if (fingerprint !== currentFingerprint) return null;
+      const reviewFingerprint = JSON.stringify({
+        request: fingerprint,
+        assumptions: payload?.assumptions || [],
+        warnings: payload?.warnings || [],
+        field_sources: payload?.field_sources || {},
+      });
+      const changed = state.preflightFingerprint !== reviewFingerprint;
+      state.preflightRequestFingerprint = fingerprint;
+      state.preflightFingerprint = reviewFingerprint;
+      if (changed && state.confirmedPreflightFingerprint !== reviewFingerprint) designPreflightConfirm.checked = false;
+      renderDesignPreflight(payload, usedFallback);
+      return payload;
+    }
+
+    function renderDesignWorkspace() {
+      const job = state.activeDesignJob;
+      if (job) {
+        const outcome = designOutcome(job);
+        designActiveJobLabel.textContent = (job.request?.project_name || "未命名设计") + " · " + outcome.label + " · " + job.job_id;
+      } else {
+        designActiveJobLabel.textContent = "填写并确认需求后开始计算。";
+      }
+      setDesignTab(state.designTab);
+      renderDesignRunTimeline();
+      renderDesignResults();
+      renderDesignCompareSelector();
+      renderDesignComparison();
+      renderDesignReports();
+    }
+
+    function designStatusChip(label, tone = "warn") {
+      return designNode("span", "design-status-chip is-" + tone, label);
+    }
+
+    function stageDisplayName(id) {
+      return {
+        requirements: "需求归一化",
+        class1: "Class I 总体闭合",
+        class1_sizing: "Class I 总体闭合",
+        class2: "Class II 初步设计",
+        stage2_aero: "气动分析",
+        stage3_propulsion: "推进校核",
+        stage4_mission: "任务性能",
+        stage5_stability: "稳定与操纵",
+        stage6_structures: "结构与载荷",
+        stage7_optimization: "方案优化",
+        class3: "Class III 几何与结构",
+        geometry: "几何生成",
+        report: "统一报告",
+        reporting: "统一报告",
+      }[id] || String(id || "阶段").replaceAll("_", " ");
+    }
+
+    function createDesignSection(title, description = "") {
+      const section = designNode("section", "design-data-section");
+      const heading = designNode("div", "design-data-section-heading");
+      heading.appendChild(designNode("h4", "", title));
+      if (description) heading.appendChild(designNode("p", "", description));
+      section.appendChild(heading);
+      return section;
+    }
+
+    function convergenceSeries(history) {
+      if (!Array.isArray(history)) return { points: [], label: "" };
+      const candidates = [
+        { keys: ["mtow_kg", "mtow", "weight_kg", "weight"], label: "MTOW (kg)" },
+        { keys: ["error", "relative_error", "residual", "delta"], label: "收敛误差" },
+      ];
+      for (const candidate of candidates) {
+        const points = history.map((item, index) => {
+          const value = candidate.keys.map((key) => finiteDesignNumber(item?.[key])).find((entry) => entry !== null);
+          const iteration = finiteDesignNumber(item?.iteration) ?? finiteDesignNumber(item?.index) ?? index + 1;
+          return value === undefined || value === null ? null : { x: iteration, y: value };
+        }).filter(Boolean);
+        if (points.length >= 2) return { points, label: candidate.label };
+      }
+      return { points: [], label: "" };
+    }
+
+    function createConvergenceChart(history) {
+      const series = convergenceSeries(history);
+      if (series.points.length < 2) return designNode("div", "design-empty-state compact", "当前结果未提供可绘制的迭代历史。" );
+      const width = 760;
+      const height = 240;
+      const pad = { left: 58, right: 24, top: 26, bottom: 42 };
+      const xs = series.points.map((point) => point.x);
+      const ys = series.points.map((point) => point.y);
+      const minX = Math.min(...xs);
+      const maxX = Math.max(...xs);
+      let minY = Math.min(...ys);
+      let maxY = Math.max(...ys);
+      const yPadding = Math.max((maxY - minY) * 0.12, Math.abs(maxY) * 0.002, 1e-8);
+      minY -= yPadding;
+      maxY += yPadding;
+      const xScale = (value) => pad.left + ((value - minX) / Math.max(maxX - minX, 1)) * (width - pad.left - pad.right);
+      const yScale = (value) => height - pad.bottom - ((value - minY) / Math.max(maxY - minY, 1e-12)) * (height - pad.top - pad.bottom);
+      const ns = "http://www.w3.org/2000/svg";
+      const svg = document.createElementNS(ns, "svg");
+      svg.setAttribute("class", "design-convergence-chart");
+      svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+      svg.setAttribute("role", "img");
+      svg.setAttribute("aria-labelledby", "designConvergenceTitle designConvergenceDesc");
+      const title = document.createElementNS(ns, "title");
+      title.id = "designConvergenceTitle";
+      title.textContent = "总体设计迭代收敛曲线";
+      const desc = document.createElementNS(ns, "desc");
+      desc.id = "designConvergenceDesc";
+      desc.textContent = `${series.points.length} 个迭代点，显示 ${series.label} 随迭代次数的变化。`;
+      svg.appendChild(title);
+      svg.appendChild(desc);
+      for (const [x1, y1, x2, y2] of [
+        [pad.left, pad.top, pad.left, height - pad.bottom],
+        [pad.left, height - pad.bottom, width - pad.right, height - pad.bottom],
+      ]) {
+        const line = document.createElementNS(ns, "line");
+        line.setAttribute("x1", x1);
+        line.setAttribute("y1", y1);
+        line.setAttribute("x2", x2);
+        line.setAttribute("y2", y2);
+        line.setAttribute("class", "design-chart-axis");
+        svg.appendChild(line);
+      }
+      const polyline = document.createElementNS(ns, "polyline");
+      polyline.setAttribute("points", series.points.map((point) => `${xScale(point.x)},${yScale(point.y)}`).join(" "));
+      polyline.setAttribute("class", "design-chart-line");
+      svg.appendChild(polyline);
+      for (const point of series.points) {
+        const circle = document.createElementNS(ns, "circle");
+        circle.setAttribute("cx", xScale(point.x));
+        circle.setAttribute("cy", yScale(point.y));
+        circle.setAttribute("r", 3.5);
+        circle.setAttribute("class", "design-chart-point");
+        svg.appendChild(circle);
+      }
+      const labels = [
+        [pad.left - 8, pad.top + 4, formatDesignValue(maxY, "", 3), "end"],
+        [pad.left - 8, height - pad.bottom + 4, formatDesignValue(minY, "", 3), "end"],
+        [pad.left, height - 14, String(minX), "middle"],
+        [width - pad.right, height - 14, String(maxX), "middle"],
+      ];
+      for (const [x, y, textValue, anchor] of labels) {
+        const textNode = document.createElementNS(ns, "text");
+        textNode.setAttribute("x", x);
+        textNode.setAttribute("y", y);
+        textNode.setAttribute("text-anchor", anchor);
+        textNode.setAttribute("class", "design-chart-label");
+        textNode.textContent = textValue;
+        svg.appendChild(textNode);
+      }
+      return svg;
+    }
+
+    function renderDesignResults() {
+      designResultsContent.innerHTML = "";
+      const job = state.activeDesignJob;
+      designLoadAdjustBtn.disabled = !job?.request;
+      if (!job) {
+        designResultsContent.appendChild(designNode("div", "design-empty-state", "选择一个历史任务后查看工程结果。"));
+        return;
+      }
+      const engineering = designEngineering(job);
+      const outcome = designOutcome(job);
+      const summary = job.result?.summary || {};
+      const headline = designNode("section", "design-outcome is-" + outcome.tone);
+      headline.dataset.testid = "design-outcome";
+      headline.setAttribute("role", outcome.tone === "fail" ? "alert" : "status");
+      const headlineCopy = designNode("div", "design-outcome-copy");
+      headlineCopy.appendChild(designNode("span", "", "工程判定"));
+      headlineCopy.appendChild(designNode("strong", "", outcome.label));
+      headlineCopy.appendChild(designNode("p", "", outcome.detail));
+      headline.appendChild(headlineCopy);
+      const headlineStates = designNode("div", "design-outcome-states");
+      const numerical = engineering.numerical_converged ?? job.result?.converged ?? null;
+      const feasible = engineering.engineering_feasible ?? null;
+      headlineStates.appendChild(designStatusChip(numerical === true ? "数值已收敛" : numerical === false ? "数值未收敛" : "收敛状态未知", numerical === true ? "pass" : numerical === false ? "fail" : "warn"));
+      headlineStates.appendChild(designStatusChip(feasible === true ? "约束已通过" : feasible === false ? "约束未通过" : "可行性待判定", feasible === true ? "pass" : feasible === false ? "fail" : "warn"));
+      headline.appendChild(headlineStates);
+      designResultsContent.appendChild(headline);
+
+      const metricSection = createDesignSection("关键设计点");
+      const metricData = [
+        ["最大起飞重量", summary.mtow_kg, "kg", 1],
+        ["机翼面积", summary.wing_area_m2, "m²", 2],
+        ["翼载", engineering.design_point?.wing_loading_pa ?? summary.wing_loading_pa, "Pa", 0],
+        ["推重比", engineering.design_point?.thrust_to_weight ?? summary.thrust_to_weight, "", 3],
+        ["海平面推力", summary.thrust_sl_n, "N", 0],
+        ["翼展", summary.span_m, "m", 2],
+        ["实际航程", finiteDesignNumber(summary.actual_range_m) === null ? null : Number(summary.actual_range_m) / 1000, "km", 1],
+        ["迭代次数", summary.iterations, "次", 0],
+      ];
+      const metrics = designNode("div", "design-result-metrics workspace-metrics");
+      for (const [label, value, unit, digits] of metricData) {
+        const metric = designNode("div", "design-result-metric");
+        metric.appendChild(designNode("span", "", label));
+        metric.appendChild(designNode("strong", "", formatDesignValue(value, unit, digits)));
+        metrics.appendChild(metric);
+      }
+      metricSection.appendChild(metrics);
+      designResultsContent.appendChild(metricSection);
+
+      const constraints = normalizeDesignConstraints(engineering.constraints);
+      const constraintSection = createDesignSection("约束裕度", constraints.length ? "正裕度表示满足当前约束；阻断项未通过时方案不可行。" : "");
+      if (constraints.length) {
+        const rows = constraints.map((item) => {
+          const passed = item.passed;
+          const tone = passed === true ? "pass" : passed === false ? "fail" : "warn";
+          const label = item.label || item.name || item.id || "约束";
+          const constraintName = designNode("div", "design-constraint-name");
+          constraintName.appendChild(designNode("strong", "", label));
+          if (item.blocking) constraintName.appendChild(designNode("small", "", "阻断约束"));
+          const marginText = formatDesignValue(item.margin, item.unit);
+          const ratio = finiteDesignNumber(item.margin_ratio);
+          return {
+            className: "is-" + tone,
+            cells: [
+              constraintName,
+              stageDisplayName(item.stage || item.category),
+              formatConstraintRequirement(item),
+              formatDesignValue(item.actual, item.unit),
+              marginText + (ratio === null ? "" : ` (${(ratio * 100).toFixed(1)}%)`),
+              designStatusChip(passed === true ? "通过" : passed === false ? "未通过" : "待判定", tone),
+            ],
+          };
+        });
+        const constraintTable = createDesignTable(["约束", "阶段", "要求", "实际", "裕度", "判定"], rows);
+        constraintTable.dataset.testid = "design-constraints-table";
+        constraintSection.appendChild(constraintTable);
+      } else {
+        constraintSection.appendChild(designNode("div", "design-empty-state compact", "该任务未输出逐项约束，不能仅凭任务完成状态判断工程可行。"));
+      }
+      designResultsContent.appendChild(constraintSection);
+
+      const stages = normalizeDesignStages(engineering.stage_status);
+      const stageSection = createDesignSection("阶段门");
+      if (stages.length) {
+        const grid = designNode("div", "design-stage-grid");
+        for (const stage of stages) {
+          const rawStatus = String(stage.status || "unknown").toLowerCase();
+          const tone = ["passed", "pass", "completed", "feasible"].includes(rawStatus) ? "pass" : ["failed", "fail", "infeasible", "error"].includes(rawStatus) ? "fail" : "warn";
+          const item = designNode("div", "design-stage-item is-" + tone);
+          item.appendChild(designNode("span", "", stageDisplayName(stage.name || stage.id)));
+          item.appendChild(designStatusChip(rawStatus === "passed" ? "通过" : rawStatus === "failed" ? "未通过" : rawStatus, tone));
+          if (stage.message || stage.error) item.appendChild(designNode("p", "", stage.message || stage.error));
+          grid.appendChild(item);
+        }
+        stageSection.appendChild(grid);
+      } else {
+        stageSection.appendChild(designNode("div", "design-empty-state compact", "该任务未输出阶段门状态。"));
+      }
+      designResultsContent.appendChild(stageSection);
+
+      const history = engineering.iteration_history || job.result?.iteration_history || [];
+      const convergenceSection = createDesignSection("收敛历史");
+      convergenceSection.appendChild(createConvergenceChart(history));
+      designResultsContent.appendChild(convergenceSection);
+
+      const comparisons = normalizeDesignConstraints(engineering.requirement_comparisons);
+      const requirementSection = createDesignSection("需求与实际");
+      if (comparisons.length) {
+        const rows = comparisons.map((item) => ({
+          className: item.passed === true ? "is-pass" : item.passed === false ? "is-fail" : "is-warn",
+          cells: [
+            item.label || item.name || item.id || item.requirement || "指标",
+            formatConstraintRequirement(item),
+            formatDesignValue(item.actual, item.unit),
+            formatDesignValue(item.margin, item.unit),
+            designStatusChip(item.passed === true ? "满足" : item.passed === false ? "不满足" : "待判定", item.passed === true ? "pass" : item.passed === false ? "fail" : "warn"),
+          ],
+        }));
+        requirementSection.appendChild(createDesignTable(["指标", "需求", "实际", "裕度", "判定"], rows));
+      } else {
+        requirementSection.appendChild(designNode("div", "design-empty-state compact", "该任务未输出独立回算的需求对比。"));
+      }
+      designResultsContent.appendChild(requirementSection);
+
+      const recommendations = [...new Set([
+        ...(Array.isArray(engineering.recommendations) ? engineering.recommendations : []),
+        ...(Array.isArray(engineering.diagnostic_recommendations) ? engineering.diagnostic_recommendations : []),
+      ].map(String))];
+      if (recommendations.length) {
+        const recommendationSection = createDesignSection("诊断与下一步");
+        const list = designNode("ol", "design-recommendations");
+        for (const recommendation of recommendations) list.appendChild(designNode("li", "", String(recommendation)));
+        recommendationSection.appendChild(list);
+        designResultsContent.appendChild(recommendationSection);
+      }
+
+      const provenance = engineering.provenance;
+      if (provenance && typeof provenance === "object" && Object.keys(provenance).length) {
+        const provenanceSection = createDesignSection("结果追溯");
+        const list = designNode("dl", "design-provenance");
+        for (const [key, value] of Object.entries(provenance)) {
+          list.appendChild(designNode("dt", "", key.replaceAll("_", " ")));
+          list.appendChild(designNode("dd", "", formatDesignValue(value)));
+        }
+        provenanceSection.appendChild(list);
+        designResultsContent.appendChild(provenanceSection);
+      }
+    }
+
+    function designJobById(jobId) {
+      return state.designJobDetails[jobId] || state.designJobs.find((job) => job.job_id === jobId) || null;
+    }
+
+    async function fetchDesignJobDetail(jobId) {
+      const cached = state.designJobDetails[jobId];
+      if (cached) return cached;
+      const payload = await api("/api/design-jobs/" + encodeURIComponent(jobId));
+      if (payload.job) state.designJobDetails[jobId] = payload.job;
+      return payload.job || null;
+    }
+
+    function loadDesignForAdjustment(job) {
+      if (!job?.request) return;
+      applyDesignJobRequest(job.request);
+      markDesignPreflightDirty();
+      setActiveView("design");
+      setDesignTab("requirements", { focus: true });
+      designProjectName.focus();
+      scheduleDesignPreflight();
+      setStatus("已载入 " + (job.request.project_name || job.job_id) + "，修改需求并重新确认后即可运行。" );
+    }
+
+    function renderDesignCompareSelector() {
+      designCompareSelector.innerHTML = "";
+      if (!state.designJobs.length) {
+        designCompareSelector.appendChild(designNode("div", "design-empty-state compact", "暂无可对比任务。"));
+        return;
+      }
+      state.compareJobIds = state.compareJobIds.filter((jobId) => state.designJobs.some((job) => job.job_id === jobId));
+      const selectedCount = state.compareJobIds.length;
+      for (const job of state.designJobs.slice(0, 20)) {
+        const selected = state.compareJobIds.includes(job.job_id);
+        const row = designNode("div", "design-compare-option" + (selected ? " is-selected" : ""));
+        const label = document.createElement("label");
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.checked = selected;
+        checkbox.disabled = !selected && selectedCount >= 4;
+        checkbox.value = job.job_id;
+        const copy = designNode("span", "design-compare-option-copy");
+        copy.appendChild(designNode("strong", "", job.request?.project_name || "未命名设计"));
+        copy.appendChild(designNode("small", "", designJobTimestamp(job.finished_at || job.created_at) + " · " + designOutcome(job).label));
+        label.appendChild(checkbox);
+        label.appendChild(copy);
+        const adjust = designNode("button", "design-inline-action", "载入并调整");
+        adjust.type = "button";
+        adjust.addEventListener("click", async () => {
+          try {
+            const detail = await fetchDesignJobDetail(job.job_id);
+            loadDesignForAdjustment(detail || job);
+          } catch (error) {
+            setStatus(error.message, true);
+          }
+        });
+        checkbox.addEventListener("change", async () => {
+          if (checkbox.checked) {
+            if (state.compareJobIds.length >= 4) {
+              checkbox.checked = false;
+              return;
+            }
+            state.compareJobIds.push(job.job_id);
+            try { await fetchDesignJobDetail(job.job_id); } catch (_error) { /* Compact result remains usable. */ }
+          } else {
+            state.compareJobIds = state.compareJobIds.filter((jobId) => jobId !== job.job_id);
+          }
+          renderDesignCompareSelector();
+          renderDesignComparison();
+        });
+        row.appendChild(label);
+        row.appendChild(adjust);
+        designCompareSelector.appendChild(row);
+      }
+    }
+
+    function compareMetricValue(job, key) {
+      const summary = job?.result?.summary || {};
+      if (key === "actual_range_km") {
+        const value = finiteDesignNumber(summary.actual_range_m);
+        return value === null ? null : value / 1000;
+      }
+      if (key === "wing_loading_pa") return finiteDesignNumber(designEngineering(job).design_point?.wing_loading_pa ?? summary.wing_loading_pa);
+      if (key === "thrust_to_weight") return finiteDesignNumber(designEngineering(job).design_point?.thrust_to_weight ?? summary.thrust_to_weight);
+      return finiteDesignNumber(summary[key]);
+    }
+
+    function formatDesignDelta(value, baseline, unit, digits) {
+      if (value === null || baseline === null) return "--";
+      const delta = value - baseline;
+      const sign = delta > 0 ? "+" : "";
+      return formatDesignValue(value, unit, digits) + " (Δ " + sign + formatDesignValue(delta, unit, digits) + ")";
+    }
+
+    function renderDesignComparison() {
+      designCompareContent.innerHTML = "";
+      const jobs = state.compareJobIds.map(designJobById).filter(Boolean);
+      if (jobs.length < 2) {
+        designCompareContent.appendChild(designNode("div", "design-empty-state", "至少选择两个任务开始对比。"));
+        return;
+      }
+      const headline = createDesignSection("工程判定对比", "第一列为基准方案。" );
+      const outcomeRows = [{
+        cells: ["工程状态", ...jobs.map((job) => designStatusChip(designOutcome(job).label, designOutcome(job).tone))],
+      }];
+      headline.appendChild(createDesignTable(["项目", ...jobs.map((job, index) => (index === 0 ? "基准 · " : "") + (job.request?.project_name || job.job_id))], outcomeRows));
+      designCompareContent.appendChild(headline);
+
+      const metrics = [
+        ["mtow_kg", "最大起飞重量", "kg", 1],
+        ["empty_weight_kg", "空重", "kg", 1],
+        ["fuel_weight_kg", "燃油重量", "kg", 1],
+        ["wing_area_m2", "机翼面积", "m²", 2],
+        ["wing_loading_pa", "翼载", "Pa", 0],
+        ["thrust_to_weight", "推重比", "", 3],
+        ["span_m", "翼展", "m", 2],
+        ["actual_range_km", "实际航程", "km", 1],
+      ];
+      const metricRows = metrics.map(([key, label, unit, digits]) => {
+        const values = jobs.map((job) => compareMetricValue(job, key));
+        return {
+          cells: [label, formatDesignValue(values[0], unit, digits), ...values.slice(1).map((value) => formatDesignDelta(value, values[0], unit, digits))],
+        };
+      });
+      const metricSection = createDesignSection("参数差值");
+      metricSection.appendChild(createDesignTable(["参数", ...jobs.map((job, index) => index === 0 ? "基准值" : job.request?.project_name || `方案 ${index + 1}`)], metricRows, "design-delta-table"));
+      designCompareContent.appendChild(metricSection);
+
+      const constraintIds = [];
+      const constraintMaps = jobs.map((job) => {
+        const map = new Map();
+        for (const constraint of normalizeDesignConstraints(designEngineering(job).constraints)) {
+          const id = constraint.id || constraint.label || constraint.name;
+          if (id && !constraintIds.includes(id)) constraintIds.push(id);
+          if (id) map.set(id, constraint);
+        }
+        return map;
+      });
+      if (constraintIds.length) {
+        const constraintRows = constraintIds.map((id) => {
+          const label = constraintMaps.map((map) => map.get(id)).find(Boolean)?.label || id;
+          return {
+            cells: [label, ...constraintMaps.map((map) => {
+              const constraint = map.get(id);
+              if (!constraint) return "--";
+              const tone = constraint.passed === true ? "pass" : constraint.passed === false ? "fail" : "warn";
+              const copy = designNode("span", "design-margin-value is-" + tone, formatDesignValue(constraint.margin, constraint.unit));
+              return copy;
+            })],
+          };
+        });
+        const constraintSection = createDesignSection("约束裕度对比");
+        constraintSection.appendChild(createDesignTable(["约束", ...jobs.map((job) => job.request?.project_name || job.job_id)], constraintRows));
+        designCompareContent.appendChild(constraintSection);
+      }
+    }
+
+    function designResultFiles(job) {
+      const candidates = job?.result_files || job?.result?.result_files || job?.result?.files || [];
+      return Array.isArray(candidates) ? candidates : [];
+    }
+
+    function resultFileKey(file) {
+      return file.id || file.preview_url || file.download_url || file.name || file.filename;
+    }
+
+    function resultFileKind(file) {
+      const declared = String(file.kind || file.format || "").toLowerCase();
+      const name = String(file.name || file.filename || "").toLowerCase();
+      if (declared.includes("image") || /\.(png|jpe?g|webp|gif)$/.test(name)) return "image";
+      if (declared.includes("markdown") || declared === "md" || name.endsWith(".md")) return "markdown";
+      if (declared.includes("html") || name.endsWith(".html")) return "html";
+      if (declared.includes("json") || name.endsWith(".json")) return "json";
+      if (declared.includes("text") || /\.(txt|log|csv)$/.test(name)) return "text";
+      return "download";
+    }
+
+    function renderDesignReports() {
+      designReportList.innerHTML = "";
+      const job = state.activeDesignJob;
+      const files = designResultFiles(job);
+      if (!job) {
+        designReportList.appendChild(designNode("div", "design-empty-state compact", "选择一个任务后查看报告。"));
+        designReportPreview.innerHTML = "";
+        delete designReportPreview.dataset.fileKey;
+        designReportPreview.appendChild(designNode("div", "design-empty-state", "选择文件后在这里预览。"));
+        return;
+      }
+      if (!files.length) {
+        designReportList.appendChild(designNode("div", "design-empty-state compact", "该任务尚未提供可预览文件。"));
+      }
+      if (files.length && !files.some((file) => resultFileKey(file) === state.selectedResultFile)) {
+        state.selectedResultFile = resultFileKey(files[0]);
+      }
+      for (const file of files) {
+        const key = resultFileKey(file);
+        const button = designNode("button", "design-report-item" + (state.selectedResultFile === key ? " is-active" : ""));
+        button.type = "button";
+        button.appendChild(designNode("strong", "", file.name || file.filename || "结果文件"));
+        button.appendChild(designNode("span", "", resultFileKind(file) + (file.size_bytes ? " · " + formatBytes(file.size_bytes) : "")));
+        button.addEventListener("click", () => {
+          state.selectedResultFile = key;
+          renderDesignReports();
+        });
+        designReportList.appendChild(button);
+      }
+      for (const artifact of job.artifacts || []) {
+        if (!artifact.download_url) continue;
+        const link = designNode("a", "design-report-download");
+        link.href = artifact.download_url;
+        link.download = artifact.filename || "";
+        link.appendChild(designNode("strong", "", artifact.name || "完整结果包"));
+        link.appendChild(designNode("span", "", "下载 " + (artifact.format || "文件") + (artifact.size_bytes ? " · " + formatBytes(artifact.size_bytes) : "")));
+        designReportList.appendChild(link);
+      }
+      const selected = files.find((file) => resultFileKey(file) === state.selectedResultFile);
+      if (selected && designReportPreview.dataset.fileKey !== resultFileKey(selected)) {
+        void previewDesignResultFile(selected);
+      } else if (!files.length) {
+        designReportPreview.innerHTML = "";
+        delete designReportPreview.dataset.fileKey;
+        designReportPreview.appendChild(designNode("div", "design-empty-state", "报告预览接口尚未提供，可下载完整结果包。"));
+      }
+    }
+
+    async function previewDesignResultFile(file) {
+      const key = resultFileKey(file);
+      designReportPreview.innerHTML = "";
+      designReportPreview.dataset.fileKey = key;
+      const toolbar = designNode("div", "design-report-preview-header");
+      toolbar.appendChild(designNode("strong", "", file.name || file.filename || "结果预览"));
+      if (file.download_url) {
+        const download = designNode("a", "secondary", "下载");
+        download.href = file.download_url;
+        download.download = file.filename || "";
+        toolbar.appendChild(download);
+      }
+      designReportPreview.appendChild(toolbar);
+      const kind = resultFileKind(file);
+      const previewUrl = file.preview_url;
+      if (!previewUrl && file.content === undefined) {
+        designReportPreview.appendChild(designNode("div", "design-empty-state", "该文件不支持在线预览。"));
+        return;
+      }
+      try {
+        if (kind === "image") {
+          const image = document.createElement("img");
+          image.src = previewUrl;
+          image.alt = file.name || file.filename || "工程结果图";
+          image.className = "design-report-image";
+          image.addEventListener("error", () => {
+            if (state.selectedResultFile !== key) return;
+            delete designReportPreview.dataset.fileKey;
+            image.replaceWith(designNode("div", "design-empty-state is-error", "无法加载图片预览，可使用下载链接查看文件。"));
+          }, { once: true });
+          designReportPreview.appendChild(image);
+          return;
+        }
+        if (kind === "html") {
+          const frame = document.createElement("iframe");
+          frame.src = previewUrl;
+          frame.title = file.name || file.filename || "交互式工程报告";
+          frame.className = "design-report-frame";
+          frame.setAttribute("sandbox", "allow-scripts");
+          designReportPreview.appendChild(frame);
+          return;
+        }
+        let content = file.content;
+        if (content === undefined) {
+          const response = await fetch(previewUrl);
+          if (!response.ok) throw new Error("无法加载文件预览。");
+          content = kind === "json" ? await response.json() : await response.text();
+        }
+        if (state.selectedResultFile !== key) return;
+        if (kind === "markdown") {
+          const article = designNode("article", "design-report-markdown bubble");
+          renderMarkdownInto(article, String(content || ""));
+          designReportPreview.appendChild(article);
+        } else {
+          const pre = designNode("pre", "design-report-code");
+          pre.textContent = typeof content === "string" ? content : JSON.stringify(content, null, 2);
+          designReportPreview.appendChild(pre);
+        }
+      } catch (error) {
+        if (state.selectedResultFile !== key) return;
+        delete designReportPreview.dataset.fileKey;
+        const failure = designNode("div", "design-empty-state is-error", error.message);
+        failure.setAttribute("role", "alert");
+        designReportPreview.appendChild(failure);
+      }
+    }
+
+    function renderDesignJobHistory() {
+      designJobHistoryList.innerHTML = "";
+      if (!state.designJobs.length) {
+        const empty = document.createElement("div");
+        empty.className = "design-job-history-empty";
+        empty.textContent = "暂无总体设计任务。";
+        designJobHistoryList.appendChild(empty);
+        return;
+      }
+      for (const job of state.designJobs.slice(0, 12)) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "design-job-history-row" + (job.job_id === state.designJobId ? " is-active" : "");
+        button.dataset.jobId = job.job_id;
+        button.title = "打开任务 " + job.job_id;
+
+        const copy = document.createElement("span");
+        copy.className = "design-job-history-copy";
+        const title = document.createElement("strong");
+        title.textContent = job.request?.project_name || "未命名设计";
+        const requirements = job.request?.requirements || {};
+        const meta = document.createElement("span");
+        const rangeKm = Number(requirements.range_m) / 1000;
+        meta.textContent = [
+          Number.isFinite(rangeKm) ? rangeKm.toFixed(0) + " km" : "航程未知",
+          Number.isFinite(requirements.payload_kg) ? requirements.payload_kg.toFixed(0) + " kg" : "载荷未知",
+          designJobTimestamp(job.finished_at || job.created_at),
+        ].join(" · ");
+        copy.appendChild(title);
+        copy.appendChild(meta);
+
+        const outcome = designOutcome(job);
+        const status = document.createElement("span");
+        status.className = "design-job-history-status is-" + outcome.tone;
+        status.textContent = outcome.label;
+        button.appendChild(copy);
+        button.appendChild(status);
+        button.addEventListener("click", async () => {
+          setActiveView("design");
+          setDesignTab(job.terminal ? "results" : "run", { focus: true });
+          try {
+            await openDesignJob(job.job_id, { renderResult: false, monitor: true });
+          } catch (error) {
+            setStatus(error.message, true);
+          }
+        });
+        designJobHistoryList.appendChild(button);
+      }
+      renderDesignCompareSelector();
+    }
+
+    function applyDesignJobRequest(request) {
+      if (!request) return;
+      resetDesignEnergyValues();
+      restoreDesignFieldSources(request.provenance);
+      const requirements = request.requirements || {};
+      designProjectName.value = request.project_name || "uav_design";
+      if (Number.isFinite(requirements.range_m)) designRangeKm.value = requirements.range_m / 1000;
+      if (Number.isFinite(requirements.payload_kg)) designPayloadKg.value = requirements.payload_kg;
+      if (Number.isFinite(requirements.cruise_mach)) designCruiseMach.value = requirements.cruise_mach;
+      if (Number.isFinite(requirements.cruise_altitude_m)) designCruiseAltitude.value = requirements.cruise_altitude_m;
+      if (Number.isFinite(requirements.takeoff_distance_m)) designTakeoffDistance.value = requirements.takeoff_distance_m;
+      if (Number.isFinite(requirements.landing_distance_m)) designLandingDistance.value = requirements.landing_distance_m;
+      if (Number.isFinite(requirements.max_load_factor)) designMaxLoadFactor.value = requirements.max_load_factor;
+      if (Number.isFinite(requirements.sustained_turn_g)) designSustainedTurnG.value = requirements.sustained_turn_g;
+      if (Number.isFinite(requirements.service_ceiling_m)) designServiceCeiling.value = requirements.service_ceiling_m;
+      if (requirements.aircraft_role) designAircraftRole.value = requirements.aircraft_role;
+      if (requirements.propulsion_type) designPropulsionType.value = requirements.propulsion_type;
+      const reserveFraction = requirements.reserve_fraction ?? requirements.reserve_fuel_fraction;
+      if (Number.isFinite(reserveFraction)) designReserveFraction.value = reserveFraction;
+      if (requirements.tail_layout) designTailLayout.value = requirements.tail_layout;
+      const clmaxTakeoff = requirements.cl_max_takeoff ?? requirements.clmax_takeoff;
+      const clmaxLanding = requirements.cl_max_landing ?? requirements.clmax_landing;
+      if (Number.isFinite(clmaxTakeoff)) designClmaxTakeoff.value = clmaxTakeoff;
+      if (Number.isFinite(clmaxLanding)) designClmaxLanding.value = clmaxLanding;
+      if (Number.isFinite(requirements.assumed_climb_rate_m_s)) designAssumedClimbRate.value = requirements.assumed_climb_rate_m_s;
+      const uncertainty = requirements.uncertainty_enabled ?? requirements.allow_uncertainty;
+      if (typeof uncertainty === "boolean") designUncertaintyEnabled.checked = uncertainty;
+      const initial = request.initial_guess;
+      if (initial) {
+        const initialSources = request.provenance?.input_fields?.initial_guess || {};
+        const provenanceExplicit = Object.values(initialSources).some((entry) => (typeof entry === "string" ? entry : entry?.source) === "user");
+        const useAdvanced = request.provenance?.ui?.custom_initial_guess ?? (request.provenance ? provenanceExplicit : true);
+        designUseAdvanced.checked = Boolean(useAdvanced);
+        designAdvancedPanel.open = Boolean(useAdvanced);
+        if (Number.isFinite(initial.mtow_kg)) designMtowGuess.value = initial.mtow_kg;
+        if (Number.isFinite(initial.wing_loading_pa)) designWingLoading.value = initial.wing_loading_pa;
+        if (Number.isFinite(initial.thrust_to_weight)) designThrustWeight.value = initial.thrust_to_weight;
+        if (Number.isFinite(initial.aspect_ratio)) designAspectRatio.value = initial.aspect_ratio;
+        if (Number.isFinite(initial.sweep_deg)) designSweepDeg.value = initial.sweep_deg;
+        if (Number.isFinite(initial.taper_ratio)) designTaperRatio.value = initial.taper_ratio;
+        if (Number.isFinite(initial.thickness_ratio)) designThicknessRatio.value = initial.thickness_ratio;
+        if (Number.isFinite(initial.prop_efficiency)) designPropEfficiency.value = initial.prop_efficiency;
+        for (const mode of ["prop", "jet"]) {
+          const field = DESIGN_ENERGY_CONFIG[mode].field;
+          if (Number.isFinite(initial[field])) state.designEnergyValues[mode] = initial[field];
+        }
+        const energyMode = currentDesignEnergyMode();
+        const energyField = DESIGN_ENERGY_CONFIG[energyMode].field;
+        const energyProvenance = request.provenance?.propulsion_energy;
+        const migratedCanonical = Number.isFinite(initial[energyField])
+          && energyProvenance?.canonical_field === energyField
+          && (
+            energyProvenance?.source === "legacy_migrated_at_cruise_condition"
+            || energyProvenance?.source === "legacy_sfc_cruise_1_s_migrated"
+            || energyProvenance?.legacy_field === "sfc_cruise_1_s"
+          );
+        if (migratedCanonical) {
+          state.designLegacyEnergy[energyMode] = energyProvenance.legacy_field || true;
+        }
+        if (!Number.isFinite(initial[energyField]) && Number.isFinite(initial.sfc_cruise_1_s)) {
+          const migrated = migrateLegacyDesignSfc(initial.sfc_cruise_1_s, energyMode);
+          if (Number.isFinite(migrated)) {
+            state.designEnergyValues[energyMode] = migrated;
+            state.designLegacyEnergy[energyMode] = initial.sfc_cruise_1_s;
+            const legacyEntry = initialSources.sfc_cruise_1_s;
+            const legacySource = typeof legacyEntry === "string" ? legacyEntry : legacyEntry?.source;
+            state.designFieldSources[designEnergyPath(energyMode)] = ["user", "default", "derived"].includes(legacySource)
+              ? legacySource
+              : "user";
+          }
+        }
+        if (Number.isFinite(initial.cd0)) designCd0.value = initial.cd0;
+        if (Number.isFinite(initial.oswald_e)) designOswald.value = initial.oswald_e;
+        if (Number.isFinite(request.tolerance)) designTolerance.value = request.tolerance;
+        if (Number.isFinite(request.max_iterations)) designMaxIterations.value = request.max_iterations;
+      }
+      syncDesignEnergyMode({ captureCurrent: false });
+      syncAdvancedInputs();
+      markDesignPreflightDirty();
+    }
+
+    function syncAdvancedInputs() {
+      for (const input of designRunForm.querySelectorAll("[data-design-advanced]")) {
+        input.disabled = state.designJobRunning || !designUseAdvanced.checked;
+      }
+      if (designUseAdvanced.checked) designAdvancedPanel.open = true;
+      syncDesignEnergyMode();
+    }
+
+    async function refreshDesignJobs(options = {}) {
+      try {
+        const payload = await api("/api/design-jobs");
+        state.designJobs = payload.jobs || [];
+        renderDesignJobHistory();
+        if (!options.restoreLatest || !state.designJobs.length) return;
+        const preferredId = options.preferredJobId || state.designJobId;
+        const selected = state.designJobs.find((job) => job.job_id === preferredId) || state.designJobs[0];
+        await openDesignJob(selected.job_id, { renderResult: true, monitor: true, restoring: true });
+      } catch (error) {
+        state.designJobs = [];
+        renderDesignJobHistory();
+        if (!options.silent) setStatus(error.message, true);
+      }
+    }
+
+    async function openDesignJob(jobId, options = {}) {
+      state.designStreamController?.abort();
+      state.designStreamController = null;
+      const payload = await api("/api/design-jobs/" + encodeURIComponent(jobId));
+      const job = payload.job;
+      const previousJobId = state.activeDesignJob?.job_id;
+      state.designJobId = job.job_id;
+      state.activeDesignJob = job;
+      state.designJobDetails[job.job_id] = job;
+      if (previousJobId !== job.job_id) state.selectedResultFile = null;
+      state.designJobSequence = job.last_sequence || 0;
+      state.designJobEvents = (job.events || []).map(designProgressEvent);
+      if (state.designJobMessage) state.designJobMessage.remove();
+      state.designJobMessage = null;
+      applyDesignJobRequest(job.request);
+      designProgress.value = job.progress || 0;
+      designRunStatus.textContent = job.message || designJobStatusLabel(job.status);
+      saveLocalState();
+      renderDesignJobHistory();
+      renderDesignWorkspace();
+
+      if (!job.terminal) {
+        setDesignRunBusy(true, job.message || "正在恢复任务");
+        refreshDesignJobMessage();
+        if (options.monitor !== false) void monitorDesignJob(job.job_id);
+        return job;
+      }
+
+      setDesignRunBusy(false);
+      designRetryBtn.disabled = false;
+      if (options.renderResult !== false && state.renderedDesignJobId !== job.job_id) {
+        appendAssistantReply(
+          { text: designResultText(job), artifacts: job.artifacts || [] },
+          { events: state.designJobEvents, artifacts: job.artifacts || [], designJob: job, openProcess: false },
+        );
+        state.renderedDesignJobId = job.job_id;
+      }
+      if (options.restoring) {
+        const outcome = designOutcome(job);
+        setStatus("已恢复最近一次总体设计任务：" + outcome.label + "。", outcome.tone === "fail");
+      }
+      return job;
+    }
+
+    async function streamDesignJob(jobId, afterSequence, signal) {
+      const streamPath = "/api/design-jobs/" + encodeURIComponent(jobId) + "/stream?after=" + afterSequence;
+      const response = await fetch(streamPath, { signal });
+      if (!response.ok || !response.body) throw new Error("无法连接设计任务进度流。");
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let completed = null;
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const blocks = buffer.split("\n\n");
+        buffer = blocks.pop() || "";
+        for (const block of blocks) {
+          const parsed = parseSseBlock(block);
+          if (!parsed) continue;
+          if (parsed.event === "progress") {
+            if ((parsed.data.sequence || 0) <= state.designJobSequence) continue;
+            state.designJobSequence = parsed.data.sequence || state.designJobSequence;
+            designProgress.value = parsed.data.progress || 0;
+            designRunStatus.textContent = parsed.data.message || "正在计算";
+            state.designJobEvents.push(designProgressEvent(parsed.data));
+            refreshDesignJobMessage();
+            renderDesignRunTimeline();
+          }
+          if (parsed.event === "error") throw new Error(parsed.data.error || "设计任务进度流失败。");
+          if (parsed.event === "done") {
+            completed = parsed.data;
+            await reader.cancel().catch(() => {});
+            break;
+          }
+        }
+        if (completed) break;
+      }
+      if (!completed) throw new Error("设计任务在返回结果前中断。");
+      return completed;
+    }
+
+    function waitForDesignPoll(delayMs, signal) {
+      return new Promise((resolve, reject) => {
+        if (signal.aborted) {
+          reject(new DOMException("Aborted", "AbortError"));
+          return;
+        }
+        const timer = window.setTimeout(() => {
+          signal.removeEventListener("abort", onAbort);
+          resolve();
+        }, delayMs);
+        const onAbort = () => {
+          window.clearTimeout(timer);
+          reject(new DOMException("Aborted", "AbortError"));
+        };
+        signal.addEventListener("abort", onAbort, { once: true });
+      });
+    }
+
+    async function pollDesignJobUntilTerminal(jobId, signal) {
+      let transientFailures = 0;
+      while (!signal.aborted && state.designJobId === jobId) {
+        try {
+          const payload = await api("/api/design-jobs/" + encodeURIComponent(jobId), { signal });
+          const job = payload.job;
+          transientFailures = 0;
+          state.activeDesignJob = job;
+          state.designJobDetails[job.job_id] = job;
+          state.designJobSequence = job.last_sequence || state.designJobSequence;
+          state.designJobEvents = (job.events || []).map(designProgressEvent);
+          designProgress.value = job.progress || 0;
+          designRunStatus.textContent = job.message || designJobStatusLabel(job.status);
+          renderDesignRunTimeline();
+          if (job.terminal) return { job };
+        } catch (error) {
+          if (signal.aborted) throw error;
+          transientFailures += 1;
+          designRunStatus.textContent = "任务仍在服务端运行，正在重新查询" + (transientFailures > 1 ? "（" + transientFailures + "）" : "");
+        }
+        await waitForDesignPoll(Math.min(1000 + transientFailures * 500, 5000), signal);
+      }
+      throw new DOMException("Aborted", "AbortError");
+    }
+
+    function designResultText(job) {
+      const outcome = designOutcome(job);
+      const issueText = (job.result?.issues || []).map((issue) => "- " + issue.message).join("\n");
+      const title = outcome.tone === "pass" ? "总体设计方案工程可行" : outcome.tone === "fail" ? "总体设计方案未通过工程判定" : "总体设计计算已完成";
+      return "### " + title + "\n\n" + outcome.detail + (issueText ? "\n\n" + issueText : "");
+    }
+
+    async function monitorDesignJob(jobId) {
+      const controller = new AbortController();
+      state.designStreamController = controller;
+      let reconnects = 0;
+      try {
+        let payload = null;
+        while (!payload) {
+          try {
+            payload = await streamDesignJob(jobId, state.designJobSequence, controller.signal);
+          } catch (error) {
+            if (controller.signal.aborted || state.designJobId !== jobId) return;
+            reconnects += 1;
+            if (reconnects > 3) {
+              designRunStatus.textContent = "实时进度连接不可用，已切换为任务状态查询";
+              payload = await pollDesignJobUntilTerminal(jobId, controller.signal);
+              break;
+            }
+            designRunStatus.textContent = "进度连接中断，正在继续接收...";
+            await new Promise((resolve) => setTimeout(resolve, reconnects * 350));
+          }
+        }
+        if (state.designJobId !== jobId) return;
+        let job = payload.job;
+        try {
+          const detailPayload = await api("/api/design-jobs/" + encodeURIComponent(jobId));
+          job = detailPayload.job || job;
+        } catch (_error) {
+          // The terminal stream payload still contains the engineering result.
+        }
+        state.activeDesignJob = job;
+        state.designJobDetails[job.job_id] = job;
+        if (state.designJobMessage) state.designJobMessage.remove();
+        state.designJobMessage = null;
+        appendAssistantReply(
+          { text: designResultText(job), artifacts: job.artifacts || [] },
+          { events: state.designJobEvents, artifacts: job.artifacts || [], designJob: job, openProcess: false },
+        );
+        state.renderedDesignJobId = job.job_id;
+        designProgress.value = 100;
+        designRunStatus.textContent = job.message || job.status;
+        setDesignRunBusy(false);
+        designRetryBtn.disabled = false;
+        const outcome = designOutcome(job);
+        setStatus("总体设计任务结束：" + outcome.label + "。", outcome.tone === "fail");
+        renderDesignWorkspace();
+        if (state.view === "design") setDesignTab("results", { focus: true });
+        await refreshDesignJobs({ silent: true });
+      } catch (error) {
+        if (controller.signal.aborted || state.designJobId !== jobId) return;
+        if (state.designJobMessage) state.designJobMessage.remove();
+        state.designJobMessage = null;
+        chatLog.appendChild(createMessage("system", error.message));
+        setDesignRunBusy(false, error.message);
+        setStatus(error.message, true);
+      } finally {
+        if (state.designStreamController === controller) state.designStreamController = null;
+      }
+    }
+
+    async function submitDesignJob(event) {
+      event.preventDefault();
+      if (state.designJobRunning) return;
+      try {
+        const request = buildDesignJobRequest();
+        const fingerprint = designRequestFingerprint(request);
+        if (
+          !designPreflightConfirm.checked
+          || state.preflightRequestFingerprint !== fingerprint
+          || state.confirmedPreflightFingerprint !== state.preflightFingerprint
+        ) {
+          await runDesignPreflight();
+          setActiveView("design");
+          setDesignTab("requirements", { focus: true });
+          throw new Error("需求或假设已变化，请重新核对并勾选提交前确认。" );
+        }
+        setSettingsOpen(false);
+        setActiveView("design");
+        setDesignTab("run", { focus: true });
+        state.designJobEvents = [];
+        state.designJobMessage = null;
+        state.designJobSequence = 0;
+        state.renderedDesignJobId = null;
+        designProgress.value = 0;
+        setDesignRunBusy(true, "正在提交任务");
+        refreshDesignJobMessage();
+        const payload = await api("/api/design-jobs", {
+          method: "POST",
+          body: JSON.stringify({ request, timeout_seconds: 180 }),
+        });
+        state.designJobId = payload.job.job_id;
+        state.activeDesignJob = payload.job;
+        state.designJobDetails[payload.job.job_id] = payload.job;
+        saveLocalState();
+        state.designJobs = [payload.job, ...state.designJobs.filter((job) => job.job_id !== payload.job.job_id)];
+        renderDesignJobHistory();
+        renderDesignWorkspace();
+        designCancelBtn.disabled = false;
+        await monitorDesignJob(state.designJobId);
+      } catch (error) {
+        setDesignRunBusy(false, error.message);
+        setStatus(error.message, true);
+      }
+    }
+
+    async function cancelDesignJob() {
+      if (!state.designJobId || !state.designJobRunning) return;
+      designCancelBtn.disabled = true;
+      designRunStatus.textContent = "正在取消任务";
+      try {
+        await api("/api/design-jobs/" + encodeURIComponent(state.designJobId) + "/cancel", {
+          method: "POST",
+          body: "{}",
+        });
+      } catch (error) {
+        setStatus(error.message, true);
+      }
+    }
+
+    async function retryDesignJob() {
+      if (!state.designJobId || state.designJobRunning) return;
+      try {
+        setActiveView("design");
+        setDesignTab("run", { focus: true });
+        state.designJobEvents = [];
+        state.designJobMessage = null;
+        state.designJobSequence = 0;
+        state.renderedDesignJobId = null;
+        designProgress.value = 0;
+        setDesignRunBusy(true, "正在重新提交任务");
+        refreshDesignJobMessage();
+        const payload = await api("/api/design-jobs/" + encodeURIComponent(state.designJobId) + "/retry", {
+          method: "POST",
+          body: "{}",
+        });
+        state.designJobId = payload.job.job_id;
+        state.activeDesignJob = payload.job;
+        state.designJobDetails[payload.job.job_id] = payload.job;
+        saveLocalState();
+        state.designJobs = [payload.job, ...state.designJobs.filter((job) => job.job_id !== payload.job.job_id)];
+        renderDesignJobHistory();
+        renderDesignWorkspace();
+        await monitorDesignJob(state.designJobId);
+      } catch (error) {
+        setDesignRunBusy(false, error.message);
+        setStatus(error.message, true);
+      }
+    }
+
+    async function sendPrompt(event) {
+      event.preventDefault();
+      const message = promptInput.value.trim();
+      if (!message || state.busy) return;
+
+      setBusy(true, "正在思考...");
+      setStatus("");
+      state.abortController = new AbortController();
+      const turnStartedAt = performance.now();
+      let liveAssistant = null;
+      let liveText = "";
+      let hasDraftEvent = false;
+      const liveEvents = [{
+        kind: "planning",
+        tool_name: skillDisplayName(skillSelect.value) || "工程设计",
+        summary: "我先拆解任务目标、约束条件和可能需要补充的资料，再开始组织回答。",
+        is_error: false,
+      }];
+      const ensureLiveAssistant = () => {
+        if (!liveAssistant) {
+          liveAssistant = createMessage("assistant", "", {
+            events: liveEvents,
+            elapsedMs: performance.now() - turnStartedAt,
+            isRunning: true,
+          });
+          chatLog.appendChild(liveAssistant);
+        }
+        return liveAssistant;
+      };
+      const refreshLiveProcess = (openProcess = false) => {
+        const assistant = ensureLiveAssistant();
+        updateProcessPanel(assistant, liveEvents, {
+          elapsedMs: performance.now() - turnStartedAt,
+          isRunning: true,
+          open: true,
+        });
+      };
+      try {
+        await ensureMatchingSession();
+        if (!state.sessionId) {
+          throw new Error("会话尚未就绪。");
+        }
+
+        const userMessage = createMessage("user", message);
+        chatLog.appendChild(userMessage);
+        chatLog.scrollTop = chatLog.scrollHeight;
+        promptInput.value = "";
+        autosizePrompt();
+        refreshLiveProcess(true);
+        chatLog.scrollTop = chatLog.scrollHeight;
+
+        const payload = await streamApi(
+          "/api/sessions/" + encodeURIComponent(state.sessionId) + "/messages/stream",
+          {
+            message,
+            auto_approve: autoApproveToggle.checked,
+            auto_skill: toInternalSkillName(skillSelect.value),
+          },
+          {
+            onChunk: (chunk) => {
+              liveText += chunk;
+              if (!hasDraftEvent) {
+              liveEvents.push({
+                kind: "drafting",
+                  tool_name: skillDisplayName(skillSelect.value) || "工程设计",
+                  summary: "我已经开始把当前可用信息整理成正式回答。",
+                  is_error: false,
+              });
+                hasDraftEvent = true;
+              }
+              const assistant = ensureLiveAssistant();
+              const bubble = assistant.querySelector(".bubble");
+              if (bubble) renderMarkdownInto(bubble, liveText);
+              updateProcessPanel(assistant, liveEvents, {
+                elapsedMs: performance.now() - turnStartedAt,
+                isRunning: true,
+              });
+              chatLog.scrollTop = chatLog.scrollHeight;
+            },
+            onTool: (toolEvent) => {
+              liveEvents.push(toolEvent);
+              refreshLiveProcess(true);
+              chatLog.scrollTop = chatLog.scrollHeight;
+              if (toolEvent.summary) setStatus(toolEvent.summary);
+            },
+          },
+        );
+        if (liveAssistant) liveAssistant.remove();
+
+        updateMeta(payload.session);
+        appendAssistantReply(payload.reply, {
+          elapsedMs: performance.now() - turnStartedAt,
+          events: liveEvents.length ? liveEvents : payload.reply.events,
+          artifacts: payload.reply.artifacts,
+        });
+        await refreshSessions();
+        const usage = payload.reply.usage || {};
+        const tokenBits = [];
+        if (usage.input_tokens) tokenBits.push("输入 " + usage.input_tokens);
+        if (usage.output_tokens) tokenBits.push("输出 " + usage.output_tokens);
+        const resultArtifacts = payload.reply.artifacts || [];
+        const artifactFailure = (payload.reply.events || []).find((item) => item.kind === "artifact" && item.is_error);
+        if (resultArtifacts.length) {
+          setStatus("本轮完成，设计结果包已生成。" + (tokenBits.length ? " " + tokenBits.join(" / ") : ""));
+        } else if (skillSelect.value === WEB_AIRCRAFT_SKILL && artifactFailure) {
+          setStatus("计算未生成新的结果文件，请展开过程查看失败原因。", true);
+        } else {
+          setStatus(tokenBits.length ? "本轮完成：" + tokenBits.join(" / ") : "本轮完成。");
+        }
+      } catch (error) {
+        const messageText = error.name === "AbortError" ? "已在本地停止请求；服务器可能仍会完成已开始的回合。" : error.message;
+        if (liveAssistant) {
+          liveEvents.push({
+            kind: "request",
+            tool_name: "网页请求",
+            summary: messageText,
+            error: messageText,
+            is_error: true,
+          });
+          updateProcessPanel(liveAssistant, liveEvents, {
+            elapsedMs: performance.now() - turnStartedAt,
+            isError: true,
+            open: true,
+          });
+        }
+        chatLog.appendChild(createMessage("system", messageText));
+        chatLog.scrollTop = chatLog.scrollHeight;
+        setStatus(messageText, true);
+      } finally {
+        state.abortController = null;
+        setBusy(false);
+      }
+    }
+
+    providerSelect.addEventListener("change", () => {
+      const provider = providerByName(providerSelect.value);
+      if (provider) {
+        modelInput.value = WEB_MODEL;
+      }
+      updateModelSuggestions();
+      saveLocalState();
+    });
+
+    skillSelect.addEventListener("change", () => {
+      updateSkillStatus();
+      saveLocalState();
+    });
+    modelInput.addEventListener("change", saveLocalState);
+    autoApproveToggle.addEventListener("change", () => {
+      updateCapabilityButtons();
+      saveLocalState();
+    });
+
+    newSessionBtn.addEventListener("click", () => {
+      setActiveView("chat");
+      createSession();
+    });
+    designWorkspaceBtn.addEventListener("click", () => setActiveView("design"));
+    designBackChatBtn.addEventListener("click", () => setActiveView("chat"));
+    skillsPageBtn.addEventListener("click", () => setActiveView("skills"));
+    skillsBackBtn.addEventListener("click", () => setActiveView("chat"));
+    skillDisableBtn.addEventListener("click", clearSkillSelection);
+    settingsToggleBtn.addEventListener("click", () => setSettingsOpen(true));
+    settingsTopBtn.addEventListener("click", () => setSettingsOpen(true));
+    settingsCloseBtn.addEventListener("click", () => setSettingsOpen(false));
+    settingsOpenDesignBtn.addEventListener("click", () => {
+      setSettingsOpen(false);
+      setActiveView("design");
+    });
+    settingsOverlay.addEventListener("click", (event) => {
+      if (event.target === settingsOverlay) setSettingsOpen(false);
+    });
+    document.addEventListener("keydown", (event) => {
+      if (!settingsOverlay.classList.contains("is-open")) return;
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setSettingsOpen(false);
+        return;
+      }
+      if (event.key === "Tab") {
+        const focusable = Array.from(settingsOverlay.querySelectorAll("button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex='-1'])"));
+        if (!focusable.length) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
+      }
+    });
+    resetSessionBtn.addEventListener("click", resetSession);
+    designRunForm.addEventListener("submit", submitDesignJob);
+    designCancelBtn.addEventListener("click", cancelDesignJob);
+    designRetryBtn.addEventListener("click", retryDesignJob);
+    designHistoryRefreshBtn.addEventListener("click", () => refreshDesignJobs());
+    designUseAdvanced.addEventListener("change", syncAdvancedInputs);
+    designPropulsionType.addEventListener("change", () => syncDesignEnergyMode());
+    designPreflightBtn.addEventListener("click", () => void runDesignPreflight());
+    designPreflightConfirm.addEventListener("change", () => {
+      if (designPreflightConfirm.checked && state.preflightFingerprint) {
+        state.confirmedPreflightFingerprint = state.preflightFingerprint;
+      } else {
+        state.confirmedPreflightFingerprint = null;
+      }
+      designRunBtn.disabled = state.designJobRunning || state.confirmedPreflightFingerprint !== state.preflightFingerprint;
+    });
+    designRunForm.addEventListener("input", (event) => {
+      if (event.target === designPreflightConfirm) return;
+      if (event.target === designSfc) {
+        captureDesignEnergyValue();
+        const mode = currentDesignEnergyMode();
+        state.designLegacyEnergy[mode] = null;
+        state.designFieldSources[designEnergyPath(mode)] = "user";
+      } else {
+        const path = designFieldPaths.get(event.target);
+        if (path) state.designFieldSources[path] = "user";
+      }
+      markDesignPreflightDirty();
+      scheduleDesignPreflight();
+    });
+    designLoadAdjustBtn.addEventListener("click", () => loadDesignForAdjustment(state.activeDesignJob));
+    document.querySelectorAll("[data-design-tab]").forEach((button) => {
+      button.addEventListener("click", () => setDesignTab(button.dataset.designTab));
+      button.addEventListener("keydown", (event) => {
+        if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+        event.preventDefault();
+        const tabs = Array.from(document.querySelectorAll("[data-design-tab]"));
+        const current = tabs.indexOf(button);
+        const next = event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 : (current + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
+        setDesignTab(tabs[next].dataset.designTab, { focus: true });
+      });
+    });
+    stopBtn.addEventListener("click", () => {
+      state.abortController?.abort();
+      setStatus("正在停止本地请求...", true);
+    });
+    clearDraftBtn.addEventListener("click", () => {
+      promptInput.value = "";
+      autosizePrompt();
+      promptInput.focus();
+      setStatus("草稿已清空。");
+    });
+    document.querySelectorAll(".prompt-chip").forEach((button) => {
+      button.addEventListener("click", () => setPromptDraft(button.dataset.prompt || button.textContent || ""));
+    });
+    promptInput.addEventListener("input", autosizePrompt);
+    promptInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        document.getElementById("composerForm").requestSubmit();
+      }
+    });
+    document.getElementById("composerForm").addEventListener("submit", sendPrompt);
+
+    async function init() {
+      setBusy(true, "正在加载...");
+      try {
+        state.config = await api("/api/config");
+        workspaceRoot.textContent = state.config.workspace_root;
+        populateProviders();
+        populateSkills();
+        const local = loadLocalState();
+        applyConfigDefaults(local);
+        syncDesignEnergyMode({ captureCurrent: false });
+        restoreDesignFieldSources();
+        markDesignPreflightDirty();
+        scheduleDesignPreflight();
+        if (local?.sessionId) {
+          try {
+            await loadSession(local.sessionId);
+            const pendingSkill = toUiSkillName(local.autoSkill || "");
+            if (pendingSkill && Array.from(skillSelect.options).some((item) => item.value === pendingSkill)) {
+              skillSelect.value = pendingSkill;
+              updateSkillStatus();
+              saveLocalState();
+            }
+            await refreshSessions();
+            setStatus("已恢复上次会话。");
+          } catch (_err) {
+            await createSession();
+          }
+        } else {
+          await createSession();
+        }
+        await refreshDesignJobs({
+          restoreLatest: true,
+          preferredJobId: local?.designJobId || null,
+          silent: true,
+        });
+      } catch (error) {
+        setStatus(error.message, true);
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    init();

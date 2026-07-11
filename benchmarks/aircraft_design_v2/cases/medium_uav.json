@@ -1,0 +1,56 @@
+{
+  "case_id": "medium_uav",
+  "description": "Medium long-range propeller UAV used by the web workflow",
+  "request": {
+    "project_name": "benchmark_medium_uav",
+    "requirements": {
+      "range_m": 1200000.0,
+      "payload_kg": 500.0,
+      "cruise_mach": 0.22,
+      "cruise_altitude_m": 6000.0,
+      "takeoff_distance_m": 1000.0,
+      "landing_distance_m": 1000.0,
+      "max_load_factor": 3.8,
+      "sustained_turn_g": 2.0,
+      "service_ceiling_m": 8000.0,
+      "aircraft_role": "uav",
+      "propulsion_type": "prop",
+      "reserve_fraction": 0.05,
+      "tail_layout": "conventional",
+      "cl_max_takeoff": 1.8,
+      "cl_max_landing": 2.0,
+      "assumed_climb_rate_m_s": 5.0,
+      "uncertainty_enabled": false
+    },
+    "initial_guess": {
+      "mtow_kg": 2500.0,
+      "wing_loading_pa": 3000.0,
+      "thrust_to_weight": 0.6,
+      "aspect_ratio": 10.0,
+      "sweep_deg": 5.0,
+      "taper_ratio": 0.5,
+      "thickness_ratio": 0.12,
+      "sfc_cruise_1_s": 0.00022222222222222223,
+      "cd0": 0.025,
+      "oswald_e": 0.82
+    },
+    "tolerance": 0.001,
+    "max_iterations": 50
+  },
+  "acceptance": {
+    "mtow_kg": {"minimum": 2200.0, "maximum": 2700.0},
+    "empty_weight_kg": {"minimum": 1100.0, "maximum": 1400.0},
+    "fuel_weight_kg": {"minimum": 600.0, "maximum": 800.0},
+    "wing_area_m2": {"minimum": 7.0, "maximum": 9.0},
+    "thrust_sl_n": {"minimum": 13000.0, "maximum": 16000.0},
+    "empty_fraction": {"minimum": 0.45, "maximum": 0.6},
+    "iterations": {"minimum": 5, "maximum": 25},
+    "weight_closure_relative_error_max": 0.002
+  },
+  "monotonic_check": {
+    "input_path": "requirements.payload_kg",
+    "factor": 1.2,
+    "output": "mtow_kg",
+    "direction": "increase"
+  }
+}

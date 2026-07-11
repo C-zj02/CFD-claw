@@ -59,7 +59,8 @@ def main(argv: list[str] | None = None) -> int:
     svg = render_svg(normalized, width=args.width, height=args.height)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(svg, encoding="utf-8", newline="\n")
+    with output_path.open("w", encoding="utf-8", newline="\n") as handle:
+        handle.write(svg)
 
     if csv_path is not None:
         csv_path.parent.mkdir(parents=True, exist_ok=True)

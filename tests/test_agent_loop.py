@@ -227,9 +227,10 @@ class TestAgentLoop(unittest.TestCase):
             on_text_chunk=chunks.append,
         )
 
-        self.assertIn("工具预算已用尽", result.response_text)
-        self.assertIn("工具预算已用尽", "".join(chunks))
+        self.assertEqual("Need one more read.", result.response_text)
+        self.assertEqual("Need one more read.", "".join(chunks))
         self.assertNotIn("DSML", result.response_text)
+        self.assertNotIn("工具预算已用尽", result.response_text)
         self.assertEqual(mock_provider.chat.call_count, 2)
 
     def test_agent_loop_stream_emits_final_text_chunks(self):

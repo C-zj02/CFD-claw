@@ -16,6 +16,9 @@ from ..providers.anthropic_provider import AnthropicProvider
 from ..providers.minimax_provider import MinimaxProvider
 
 
+DEFAULT_AGENT_MAX_TURNS = 100
+
+
 def _is_anthropic_provider(provider: BaseProvider) -> bool:
     return isinstance(provider, (AnthropicProvider, MinimaxProvider))
 
@@ -257,7 +260,7 @@ def run_agent_loop(
     provider: BaseProvider,
     tool_registry: ToolRegistry,
     tool_context: ToolContext,
-    max_turns: int = 20,
+    max_turns: int = DEFAULT_AGENT_MAX_TURNS,
     stream: bool = False,
     verbose: bool = False,
     on_event: ToolEventHandler | None = None,
@@ -512,17 +515,20 @@ def run_agent_loop(
         total_usage["input_tokens"] += final_response.usage.get("input_tokens", 0)
         total_usage["output_tokens"] += final_response.usage.get("output_tokens", 0)
 
-    final_assistant_content = _persist_assistant_response(final_response)
-    should_emit_final_content = not final_streamed_live_text
     if final_response.tool_uses:
-        final_assistant_content = (
-            "工具预算已用尽，模型仍尝试继续调用工具。"
-            "我已停止继续执行工具，以避免无限检索或内部工具标记泄漏。"
-            "请基于上方已经完成的检索和读取结果重新发起一次更小范围的问题，"
-            "或提高该技能的 max-turns 后重试。"
-        )
+        final_assistant_content = (final_response.content or "").strip()
+        if not final_assistant_content and last_user_visible_message is not None:
+            final_assistant_content = last_user_visible_message
+        if not final_assistant_content:
+            final_assistant_content = (
+                "本轮已完成可执行步骤，但模型仍请求更多工具。"
+                "已忽略后续工具调用以避免会话卡住，请基于已有结果继续。"
+            )
         conversation.add_assistant_message(final_assistant_content)
-        should_emit_final_content = True
+        should_emit_final_content = not final_streamed_live_text or not (final_response.content or "").strip()
+    else:
+        final_assistant_content = _persist_assistant_response(final_response)
+        should_emit_final_content = not final_streamed_live_text
     if stream and final_assistant_content and should_emit_final_content:
         _emit_text_chunks(on_text_chunk, final_assistant_content)
     if (final_assistant_content or "").strip() == "" and last_user_visible_message is not None:

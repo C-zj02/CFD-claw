@@ -1,0 +1,56 @@
+{
+  "case_id": "business_jet",
+  "description": "Subsonic swept-wing jet transport scale case",
+  "request": {
+    "project_name": "benchmark_business_jet",
+    "requirements": {
+      "range_m": 2000000.0,
+      "payload_kg": 1000.0,
+      "cruise_mach": 0.78,
+      "cruise_altitude_m": 11000.0,
+      "takeoff_distance_m": 1500.0,
+      "landing_distance_m": 1400.0,
+      "max_load_factor": 3.8,
+      "sustained_turn_g": 1.5,
+      "service_ceiling_m": 15000.0,
+      "aircraft_role": "business_jet",
+      "propulsion_type": "jet",
+      "reserve_fraction": 0.06,
+      "tail_layout": "conventional",
+      "cl_max_takeoff": 1.8,
+      "cl_max_landing": 2.2,
+      "assumed_climb_rate_m_s": 10.0,
+      "uncertainty_enabled": false
+    },
+    "initial_guess": {
+      "mtow_kg": 10000.0,
+      "wing_loading_pa": 4500.0,
+      "thrust_to_weight": 0.45,
+      "aspect_ratio": 8.0,
+      "sweep_deg": 25.0,
+      "taper_ratio": 0.35,
+      "thickness_ratio": 0.11,
+      "sfc_cruise_1_s": 0.000018,
+      "cd0": 0.022,
+      "oswald_e": 0.8
+    },
+    "tolerance": 0.001,
+    "max_iterations": 50
+  },
+  "acceptance": {
+    "mtow_kg": {"minimum": 1600.0, "maximum": 2200.0},
+    "empty_weight_kg": {"minimum": 750.0, "maximum": 950.0},
+    "fuel_weight_kg": {"minimum": 15.0, "maximum": 30.0},
+    "wing_area_m2": {"minimum": 3.5, "maximum": 4.8},
+    "thrust_sl_n": {"minimum": 7000.0, "maximum": 9500.0},
+    "empty_fraction": {"minimum": 0.4, "maximum": 0.55},
+    "iterations": {"minimum": 10, "maximum": 30},
+    "weight_closure_relative_error_max": 0.002
+  },
+  "monotonic_check": {
+    "input_path": "requirements.payload_kg",
+    "factor": 1.2,
+    "output": "mtow_kg",
+    "direction": "increase"
+  }
+}

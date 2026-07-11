@@ -6,7 +6,7 @@ allowed-tools:
   - Read
   - Glob
 arguments: [query]
-max-turns: 6
+max-turns: 100
 run-command: python ${CLAUDE_SKILL_DIR}/scripts/search_rag.py --data-dir ${CLAUDE_PROJECT_DIR}/RAG-data --query $ARGUMENTS --format json --use-cache --top-k 8 --max-snippet-chars 700
 ---
 

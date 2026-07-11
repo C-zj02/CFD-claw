@@ -1,0 +1,406 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>飞行器设计工作台</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <div class="shell">
+    <aside class="panel sidebar">
+      <section class="window-strip" aria-label="窗口导航">
+        <div class="traffic-lights" aria-hidden="true">
+          <span class="traffic traffic-red"></span>
+          <span class="traffic traffic-yellow"></span>
+          <span class="traffic traffic-green"></span>
+        </div>
+        <div class="window-actions" aria-hidden="true">
+          <span>⌘</span>
+          <span>←</span>
+          <span>→</span>
+        </div>
+      </section>
+
+      <nav class="sidebar-nav" aria-label="工作台导航">
+        <button id="newSessionBtn" class="nav-item" type="button"><span class="nav-icon">✎</span><span>新对话</span></button>
+        <button id="designWorkspaceBtn" class="nav-item" type="button"><span class="nav-icon">▦</span><span>总体设计</span></button>
+        <button id="skillsPageBtn" class="nav-item" type="button"><span class="nav-icon">◇</span><span>技能</span></button>
+      </nav>
+
+      <section class="sidebar-project">
+        <div class="sidebar-heading">飞行器工程智能体</div>
+        <h1>飞行器设计工作台</h1>
+        <p>总体方案、性能边界、气动/推进和本地资料证据。</p>
+        <div class="workspace" id="workspaceRoot">正在加载工作区...</div>
+      </section>
+
+      <section class="sidebar-group">
+        <div class="sidebar-heading">会话</div>
+        <div id="sessionList" class="session-list">
+          <p class="hint">暂无活动的浏览器会话。</p>
+        </div>
+      </section>
+
+      <div class="sidebar-spacer" aria-hidden="true"></div>
+
+      <button id="settingsToggleBtn" class="settings-entry" type="button">
+        <span class="nav-icon">⚙</span>
+        <span>设置</span>
+      </button>
+    </aside>
+
+    <main class="panel main">
+      <header class="topbar">
+        <div>
+          <h2 id="sessionTitle">准备开始设计</h2>
+          <div class="meta">
+            <span id="providerMeta">模型服务：--</span>
+            <span id="modelMeta">模型：--</span>
+            <span id="skillMeta">工程模式：无</span>
+            <span id="sessionMeta">会话：--</span>
+          </div>
+        </div>
+        <div class="topbar-actions">
+          <div class="badge is-idle" id="statusBadge" role="status" aria-live="polite">待命</div>
+          <button id="settingsTopBtn" class="icon-button" type="button" aria-label="打开设置">☷</button>
+        </div>
+      </header>
+
+      <section id="chatLog" class="chat">
+        <div class="hero">
+          <div class="hero-copy">
+            <strong>飞行器设计流程</strong>
+            <span>先描述任务、约束和已有数据；需要专项能力时在设置中选择工程模式。每轮回答会保留可展开的过程记录、资料证据和工具活动。</span>
+          </div>
+          <div class="hero-stack" aria-label="工作台能力摘要">
+            <div class="hero-stat"><span>过程可见</span><strong>智能体事件</strong></div>
+            <div class="hero-stat"><span>证据来源</span><strong>本地 RAG</strong></div>
+            <div class="hero-stat"><span>默认模型</span><strong>deepseek-v4-pro</strong></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="skillsView" class="skills-view" hidden>
+        <div class="skills-view-inner">
+          <header class="skills-hero">
+            <div>
+              <span class="skills-kicker">工程能力</span>
+              <h2>技能展示</h2>
+              <p>这里展示当前可用的飞行器设计能力。选择技能后，会同步到本轮会话的工程模式。</p>
+            </div>
+            <div class="skills-hero-actions">
+              <button id="skillDisableBtn" class="secondary" type="button">关闭工程模式</button>
+              <button id="skillsBackBtn" class="secondary" type="button">返回对话</button>
+            </div>
+          </header>
+          <div id="skillsShowcase" class="skills-showcase" aria-label="技能展示列表"></div>
+        </div>
+      </section>
+
+      <section id="designWorkspace" class="design-workspace" hidden aria-labelledby="designWorkspaceTitle">
+        <div class="design-workspace-inner">
+          <header class="design-workspace-header">
+            <div>
+              <span class="design-workspace-kicker">确定性总体设计</span>
+              <h2 id="designWorkspaceTitle">固定翼方案工作台</h2>
+              <p id="designActiveJobLabel">填写并确认需求后开始计算。</p>
+            </div>
+            <button id="designBackChatBtn" class="secondary" type="button">返回对话</button>
+          </header>
+
+          <div class="design-workspace-tabs" role="tablist" aria-label="总体设计工作流">
+            <button id="designTabRequirements" class="design-workspace-tab is-active" type="button" role="tab" aria-selected="true" aria-controls="designPanelRequirements" data-design-tab="requirements" data-testid="design-tab-requirements">需求</button>
+            <button id="designTabRun" class="design-workspace-tab" type="button" role="tab" aria-selected="false" aria-controls="designPanelRun" data-design-tab="run" data-testid="design-tab-run">运行</button>
+            <button id="designTabResults" class="design-workspace-tab" type="button" role="tab" aria-selected="false" aria-controls="designPanelResults" data-design-tab="results" data-testid="design-tab-results">结果</button>
+            <button id="designTabCompare" class="design-workspace-tab" type="button" role="tab" aria-selected="false" aria-controls="designPanelCompare" data-design-tab="compare" data-testid="design-tab-compare">对比</button>
+            <button id="designTabReports" class="design-workspace-tab" type="button" role="tab" aria-selected="false" aria-controls="designPanelReports" data-design-tab="reports" data-testid="design-tab-reports">报告</button>
+          </div>
+
+          <div class="design-workspace-body">
+            <section id="designPanelRequirements" class="design-workspace-panel" role="tabpanel" aria-labelledby="designTabRequirements" data-design-panel="requirements">
+              <div class="design-section-heading">
+                <div>
+                  <h3>需求与假设</h3>
+                  <p>任务边界、构型与求解假设。</p>
+                </div>
+                <button id="designPreflightBtn" class="secondary" type="button">检查需求</button>
+              </div>
+              <form id="designRunForm" class="design-run-form">
+                <fieldset class="design-fieldset">
+                  <legend>任务指标</legend>
+                  <div class="design-run-grid">
+                    <div class="design-run-field wide">
+                      <label for="designProjectName">项目名称</label>
+                      <input id="designProjectName" type="text" value="uav_design" maxlength="80" required>
+                    </div>
+                    <div class="design-run-field">
+                      <label for="designRangeKm">航程（km）</label>
+                      <input id="designRangeKm" type="number" value="1200" min="1" max="30000" step="1" required>
+                    </div>
+                    <div class="design-run-field">
+                      <label for="designPayloadKg">有效载荷（kg）</label>
+                      <input id="designPayloadKg" type="number" value="500" min="0" max="500000" step="1" required>
+                    </div>
+                    <div class="design-run-field">
+                      <label for="designCruiseMach">巡航马赫数</label>
+                      <input id="designCruiseMach" type="number" value="0.22" min="0.03" max="5" step="0.01" required>
+                    </div>
+                    <div class="design-run-field">
+                      <label for="designCruiseAltitude">巡航高度（m）</label>
+                      <input id="designCruiseAltitude" type="number" value="6000" min="0" max="35000" step="100" required>
+                    </div>
+                    <div class="design-run-field">
+                      <label for="designTakeoffDistance">起飞距离（m）</label>
+                      <input id="designTakeoffDistance" type="number" value="1000" min="20" max="10000" step="10" required>
+                    </div>
+                    <div class="design-run-field">
+                      <label for="designLandingDistance">着陆距离（m）</label>
+                      <input id="designLandingDistance" type="number" value="1000" min="20" max="10000" step="10" required>
+                    </div>
+                    <div class="design-run-field">
+                      <label for="designMaxLoadFactor">最大过载</label>
+                      <input id="designMaxLoadFactor" type="number" value="3.8" min="1" max="15" step="0.1" required>
+                    </div>
+                    <div class="design-run-field">
+                      <label for="designSustainedTurnG">持续盘旋过载</label>
+                      <input id="designSustainedTurnG" type="number" value="2" min="0" max="10" step="0.1" required>
+                    </div>
+                    <div class="design-run-field wide">
+                      <label for="designServiceCeiling">实用升限（m）</label>
+                      <input id="designServiceCeiling" type="number" value="8000" min="100" max="40000" step="100" required>
+                    </div>
+                  </div>
+                </fieldset>
+
+                <fieldset class="design-fieldset">
+                  <legend>构型与任务假设</legend>
+                  <div class="design-run-grid design-configuration-grid">
+                    <div class="design-run-field">
+                      <label for="designAircraftRole">任务类型</label>
+                      <select id="designAircraftRole">
+                        <option value="uav" selected>无人机</option>
+                        <option value="general_aviation">通用航空</option>
+                        <option value="transport">运输机</option>
+                        <option value="trainer">教练机</option>
+                        <option value="fighter">战斗机</option>
+                      </select>
+                    </div>
+                    <div class="design-run-field">
+                      <label for="designPropulsionType">推进类型</label>
+                      <select id="designPropulsionType">
+                        <option value="prop" selected>螺旋桨</option>
+                        <option value="jet">喷气</option>
+                      </select>
+                    </div>
+                    <div class="design-run-field">
+                      <label for="designReserveFraction">储备燃油比例</label>
+                      <input id="designReserveFraction" type="number" value="0.10" min="0" max="0.5" step="0.01" required>
+                    </div>
+                    <div class="design-run-field">
+                      <label for="designTailLayout">尾翼布局</label>
+                      <select id="designTailLayout">
+                        <option value="conventional" selected>常规尾翼</option>
+                        <option value="t_tail">T 形尾翼</option>
+                        <option value="v_tail">V 形尾翼</option>
+                        <option value="twin_fin">双垂尾</option>
+                      </select>
+                    </div>
+                    <div class="design-run-field">
+                      <label for="designClmaxTakeoff">起飞 CLmax</label>
+                      <input id="designClmaxTakeoff" type="number" value="1.8" min="0.5" max="4.5" step="0.05" required>
+                    </div>
+                    <div class="design-run-field">
+                      <label for="designClmaxLanding">着陆 CLmax</label>
+                      <input id="designClmaxLanding" type="number" value="2.1" min="0.5" max="5" step="0.05" required>
+                    </div>
+                    <div class="design-run-field">
+                      <label for="designAssumedClimbRate">假定爬升率（m/s）</label>
+                      <input id="designAssumedClimbRate" type="number" value="5" min="0.5" max="300" step="0.5" required>
+                    </div>
+                    <div class="toggle design-uncertainty-toggle wide">
+                      <input id="designUncertaintyEnabled" type="checkbox" checked>
+                      <label for="designUncertaintyEnabled">运行名义、乐观与保守不确定性场景</label>
+                    </div>
+                  </div>
+                </fieldset>
+
+                <div class="toggle design-advanced-toggle">
+                  <input id="designUseAdvanced" type="checkbox">
+                  <label for="designUseAdvanced">使用自定义初始参数</label>
+                </div>
+                <details class="design-advanced" id="designAdvancedPanel">
+                  <summary>初始参数与求解设置</summary>
+                  <div class="design-run-grid">
+                    <div class="design-run-field"><label for="designMtowGuess">MTOW 初猜（kg）</label><input id="designMtowGuess" data-design-advanced type="number" value="2500" min="1" max="2000000" step="1" disabled></div>
+                    <div class="design-run-field"><label for="designWingLoading">翼载初猜（Pa）</label><input id="designWingLoading" data-design-advanced type="number" value="3000" min="50" max="20000" step="10" disabled></div>
+                    <div class="design-run-field"><label for="designThrustWeight">推重比初猜</label><input id="designThrustWeight" data-design-advanced type="number" value="0.6" min="0.02" max="3" step="0.01" disabled></div>
+                    <div class="design-run-field"><label for="designAspectRatio">展弦比</label><input id="designAspectRatio" data-design-advanced type="number" value="10" min="1" max="40" step="0.1" disabled></div>
+                    <div class="design-run-field"><label for="designSweepDeg">后掠角（deg）</label><input id="designSweepDeg" data-design-advanced type="number" value="5" min="0" max="75" step="0.5" disabled></div>
+                    <div class="design-run-field"><label for="designTaperRatio">梯形比</label><input id="designTaperRatio" data-design-advanced type="number" value="0.5" min="0.05" max="1" step="0.01" disabled></div>
+                    <div class="design-run-field"><label for="designThicknessRatio">厚度比</label><input id="designThicknessRatio" data-design-advanced type="number" value="0.12" min="0.03" max="0.3" step="0.01" disabled></div>
+                    <div class="design-run-field"><label id="designSfcLabel" for="designSfc">螺旋桨 BSFC（kg/J）</label><input id="designSfc" data-design-advanced data-energy-mode="prop" type="number" value="8.45e-8" min="1e-10" max="1e-5" step="any" disabled></div>
+                    <div id="designPropEfficiencyField" class="design-run-field"><label for="designPropEfficiency">螺旋桨效率</label><input id="designPropEfficiency" data-design-advanced type="number" value="0.8" min="0.1" max="1" step="0.01" disabled></div>
+                    <div class="design-run-field"><label for="designCd0">零升阻力系数</label><input id="designCd0" data-design-advanced type="number" value="0.025" min="0.001" max="0.3" step="0.001" disabled></div>
+                    <div class="design-run-field"><label for="designOswald">Oswald 效率因子</label><input id="designOswald" data-design-advanced type="number" value="0.82" min="0.1" max="1.2" step="0.01" disabled></div>
+                    <div class="design-run-field"><label for="designTolerance">收敛容差</label><input id="designTolerance" data-design-advanced type="number" value="0.001" min="0.000001" max="0.1" step="any" disabled></div>
+                    <div class="design-run-field"><label for="designMaxIterations">最大迭代次数</label><input id="designMaxIterations" data-design-advanced type="number" value="50" min="1" max="500" step="1" disabled></div>
+                  </div>
+                </details>
+
+                <section class="design-preflight" aria-labelledby="designPreflightTitle" data-testid="design-preflight">
+                  <div class="design-preflight-title">
+                    <h4 id="designPreflightTitle">提交前确认</h4>
+                    <span id="designPreflightState">本地检查</span>
+                  </div>
+                  <div id="designPreflightSummary" role="status" aria-live="polite"></div>
+                  <div class="toggle design-preflight-confirmation">
+                    <input id="designPreflightConfirm" type="checkbox">
+                    <label for="designPreflightConfirm">我已核对本次需求、默认值和工程假设</label>
+                  </div>
+                </section>
+                <div class="design-run-actions">
+                  <button id="designRunBtn" class="primary" type="submit" data-testid="design-run-submit" disabled>确认需求并开始计算</button>
+                </div>
+              </form>
+            </section>
+
+            <section id="designPanelRun" class="design-workspace-panel" role="tabpanel" aria-labelledby="designTabRun" data-design-panel="run" hidden>
+              <div class="design-section-heading">
+                <div><h3>运行与历史</h3><p>阶段进度与任务记录。</p></div>
+                <button id="designHistoryRefreshBtn" class="secondary" type="button">刷新任务</button>
+              </div>
+              <div class="design-run-monitor">
+                <div class="design-run-progress">
+                  <progress id="designProgress" max="100" value="0" aria-label="总体设计计算进度"></progress>
+                  <span id="designRunStatus" role="status" aria-live="polite">等待提交</span>
+                </div>
+                <div class="design-run-actions">
+                  <button id="designCancelBtn" class="secondary" type="button" disabled>取消任务</button>
+                  <button id="designRetryBtn" class="secondary" type="button" disabled>重试任务</button>
+                </div>
+                <div id="designRunTimeline" class="design-run-timeline" aria-live="polite"></div>
+              </div>
+              <div class="design-job-history">
+                <div class="design-job-history-header"><h4>总体设计任务</h4></div>
+                <div id="designJobHistoryList" class="design-job-history-list" aria-live="polite">
+                  <div class="design-job-history-empty">正在加载任务记录...</div>
+                </div>
+              </div>
+            </section>
+
+            <section id="designPanelResults" class="design-workspace-panel" role="tabpanel" aria-labelledby="designTabResults" data-design-panel="results" hidden>
+              <div class="design-section-heading">
+                <div><h3>工程结果</h3><p>收敛、约束裕度与阶段门。</p></div>
+                <button id="designLoadAdjustBtn" class="secondary" type="button" disabled>载入并调整</button>
+              </div>
+              <div id="designResultsContent" class="design-results-content" aria-live="polite">
+                <div class="design-empty-state">选择一个历史任务后查看工程结果。</div>
+              </div>
+            </section>
+
+            <section id="designPanelCompare" class="design-workspace-panel" role="tabpanel" aria-labelledby="designTabCompare" data-design-panel="compare" hidden>
+              <div class="design-section-heading">
+                <div><h3>方案对比</h3><p>2–4 个历史方案，以首个方案为基准。</p></div>
+              </div>
+              <div id="designCompareSelector" class="design-compare-selector" aria-label="待对比设计任务"></div>
+              <div id="designCompareContent" class="design-compare-content" aria-live="polite" data-testid="design-comparison">
+                <div class="design-empty-state">至少选择两个任务开始对比。</div>
+              </div>
+            </section>
+
+            <section id="designPanelReports" class="design-workspace-panel" role="tabpanel" aria-labelledby="designTabReports" data-design-panel="reports" hidden>
+              <div class="design-section-heading">
+                <div><h3>报告与产物</h3><p>报告、工程图、交互页面与结构化数据。</p></div>
+              </div>
+              <div class="design-report-layout">
+                <div id="designReportList" class="design-report-list" aria-label="结果文件列表" data-testid="design-report-list"></div>
+                <div id="designReportPreview" class="design-report-preview" aria-live="polite" data-testid="design-report-preview">
+                  <div class="design-empty-state">选择文件后在这里预览。</div>
+                </div>
+              </div>
+            </section>
+          </div>
+        </div>
+      </section>
+
+      <footer class="composer">
+        <div class="status" id="statusLine" role="status" aria-live="polite"></div>
+        <div class="prompt-strip" aria-label="常用飞行器设计任务">
+          <button class="prompt-chip" type="button" data-prompt="设计一架航程 1200 km、载荷 500 kg 的固定翼无人机，给出总体参数、翼载、推重比和约束分析思路。">固定翼无人机总体方案</button>
+          <button class="prompt-chip" type="button" data-prompt="基于本地资料，比较电推进、涡桨和活塞动力在中小型无人机方案中的适用边界。">动力方案对比</button>
+          <button class="prompt-chip" type="button" data-prompt="为一架低速长航时飞行器梳理约束边界：失速、爬升、巡航、起飞距离和续航。">性能约束梳理</button>
+          <button class="prompt-chip" type="button" data-prompt="规划一个进气道/喷管 CFD dry-run：说明边界命名、网格策略、求解设置、监测量和结果包。">CFD 流程规划</button>
+        </div>
+        <form id="composerForm" class="composer-row">
+          <textarea id="promptInput" placeholder="输入工程设计需求，例如：设计一架航程 1200 km、载荷 500 kg 的固定翼无人机..."></textarea>
+          <div class="composer-actions">
+            <button id="sendBtn" class="primary" type="submit">发送</button>
+            <button id="stopBtn" class="secondary" type="button" disabled>停止</button>
+            <button id="clearDraftBtn" class="secondary" type="button">清空</button>
+          </div>
+        </form>
+      </footer>
+    </main>
+  </div>
+
+  <div id="settingsOverlay" class="settings-overlay" aria-hidden="true">
+    <aside class="settings-panel" role="dialog" aria-modal="true" aria-labelledby="settingsDialogTitle" tabindex="-1">
+      <header class="settings-header">
+        <div>
+          <div class="settings-kicker">设置</div>
+          <h2 id="settingsDialogTitle">工作台设置</h2>
+        </div>
+        <button id="settingsCloseBtn" class="icon-button" type="button" aria-label="关闭设置">×</button>
+      </header>
+
+      <section class="settings-section">
+        <h3>模型与会话</h3>
+        <div class="field">
+          <label for="providerSelect">模型服务</label>
+          <select id="providerSelect"></select>
+        </div>
+        <div class="field">
+          <label for="modelInput">模型</label>
+          <div class="model-picker">
+            <input id="modelInput" type="text" list="modelDatalist" value="deepseek-v4-pro" placeholder="deepseek-v4-pro" readonly>
+            <datalist id="modelDatalist"></datalist>
+          </div>
+          <p class="field-help">当前网页端固定使用 deepseek-v4-pro。</p>
+        </div>
+        <div class="toggle">
+          <input id="autoApproveToggle" type="checkbox" checked>
+          <label for="autoApproveToggle">自动批准工作区工具请求</label>
+        </div>
+        <div class="actions">
+          <button id="resetSessionBtn" class="secondary" type="button">清空对话</button>
+        </div>
+      </section>
+
+      <section class="settings-section">
+        <h3>设计能力</h3>
+        <div class="field">
+          <label for="skillSelect">工程模式</label>
+          <select id="skillSelect"></select>
+          <p class="field-help">默认不自动启用；需要专项能力时再选择对应工程模式。</p>
+          <div class="capability-strip" id="capabilityStrip" aria-label="工程模式快捷选择"></div>
+        </div>
+        <div class="skill-status" id="skillStatus">未启用工程模式</div>
+        <button id="settingsOpenDesignBtn" class="primary settings-design-button" type="button">打开总体设计工作台</button>
+      </section>
+
+      <section class="settings-section">
+        <h3>运行状态</h3>
+        <div class="ops-grid">
+          <div class="ops-row"><span>默认模型</span><strong>deepseek-v4-pro</strong></div>
+          <div class="ops-row"><span>资料证据</span><strong id="evidenceMode">按模式启用</strong></div>
+          <div class="ops-row"><span>工具确认</span><strong id="toolMode">自动批准</strong></div>
+          <div class="ops-row"><span>历史记录</span><strong>本地保存</strong></div>
+        </div>
+      </section>
+    </aside>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

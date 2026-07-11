@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import json
+import re
 import tempfile
 import threading
 import unittest
+import zipfile
 from pathlib import Path
 from unittest.mock import patch
 
@@ -15,6 +17,10 @@ from src.tool_system.agent_loop import ToolEvent
 from src.tool_system.defaults import build_default_registry
 from src.tool_system.registry import ToolRegistry
 from src.web import ClawdWebService
+from src.web.app import APP_JS, INDEX_HTML as STATIC_INDEX_HTML, STYLES_CSS
+
+
+INDEX_HTML = "\n".join((STATIC_INDEX_HTML, STYLES_CSS, APP_JS))
 
 
 class FakeProvider(BaseProvider):
@@ -41,6 +47,23 @@ class FakeProvider(BaseProvider):
         return [self.model or "fake-model"]
 
 
+class ArtifactProducingProvider(FakeProvider):
+    """Fake provider that follows the injected per-session output contract."""
+
+    def chat(self, messages, tools=None, **kwargs) -> ChatResponse:
+        last_message = messages[-1]
+        content = str(last_message.get("content", "")) if isinstance(last_message, dict) else str(last_message.content)
+        match = re.search(r"Pass this exact base output directory to --output-dir: (.+)", content)
+        if match:
+            output_dir = Path(match.group(1).strip()) / "case_alpha"
+            output_dir.mkdir(parents=True, exist_ok=True)
+            (output_dir / "design_report.md").write_text("# report", encoding="utf-8")
+            (output_dir / "design_data.json").write_text('{"mtow": 260}', encoding="utf-8")
+            (output_dir / "geometry.obj").write_text("o aircraft", encoding="utf-8")
+            (output_dir / "helper.py").write_text("print('not an artifact')", encoding="utf-8")
+        return super().chat(messages, tools=tools, **kwargs)
+
+
 class TestBrowserRegistry(unittest.TestCase):
     """Tool registration behavior for the browser mode."""
 
@@ -49,6 +72,83 @@ class TestBrowserRegistry(unittest.TestCase):
         tool_names = {spec.name for spec in registry.list_specs()}
         self.assertNotIn("AskUserQuestion", tool_names)
         self.assertIn("Read", tool_names)
+
+
+class TestBrowserMarkup(unittest.TestCase):
+    """Static browser UI markup should stay in the Codex-style workbench shape."""
+
+    def test_index_html_uses_workbench_style_hero(self) -> None:
+        self.assertIn('class="hero-copy"', INDEX_HTML)
+        self.assertIn('class="hero-stack"', INDEX_HTML)
+        self.assertIn('process-panel', INDEX_HTML)
+        self.assertIn('prompt-chip', INDEX_HTML)
+        self.assertIn('deepseek-v4-pro', INDEX_HTML)
+
+    def test_index_html_loads_external_static_assets(self) -> None:
+        self.assertIn('href="/static/styles.css"', STATIC_INDEX_HTML)
+        self.assertIn('src="/static/app.js"', STATIC_INDEX_HTML)
+        self.assertNotIn("<style>", STATIC_INDEX_HTML)
+        self.assertNotIn("<script>", STATIC_INDEX_HTML)
+
+    def test_index_html_keeps_codex_style_agent_layout(self) -> None:
+        self.assertIn("grid-template-columns: 400px minmax(0, 1fr);", INDEX_HTML)
+        self.assertIn(".settings-overlay", INDEX_HTML)
+        self.assertIn('id="settingsToggleBtn"', INDEX_HTML)
+        self.assertIn('id="skillsPageBtn"', INDEX_HTML)
+        self.assertIn('id="skillsView"', INDEX_HTML)
+        self.assertIn('id="skillDisableBtn"', INDEX_HTML)
+        self.assertIn("技能展示", INDEX_HTML)
+        self.assertIn("关闭工程模式", INDEX_HTML)
+        self.assertIn(".topbar-actions", INDEX_HTML)
+        self.assertIn(".message.assistant {\n      align-self: center;", INDEX_HTML)
+        self.assertIn("details.open = true;", INDEX_HTML)
+        self.assertIn("badge is-idle", INDEX_HTML)
+        self.assertIn(".badge.is-busy", INDEX_HTML)
+        self.assertIn("grid-template-rows: auto minmax(0, 1fr);", INDEX_HTML)
+        self.assertIn(".sidebar .sidebar-group,", INDEX_HTML)
+        self.assertIn(".main.is-design-mode .topbar", INDEX_HTML)
+        self.assertIn("草稿已清空。", INDEX_HTML)
+        self.assertIn("artifact-panel", INDEX_HTML)
+        self.assertIn("结果下载", INDEX_HTML)
+        self.assertIn("下载结果包", INDEX_HTML)
+        self.assertNotIn(">插件<", INDEX_HTML)
+        self.assertNotIn(">自动化<", INDEX_HTML)
+        self.assertNotRegex(INDEX_HTML, r"letter-spacing:\s*-")
+
+    def test_index_html_exposes_deterministic_design_workflow(self) -> None:
+        self.assertIn('id="designRunForm"', INDEX_HTML)
+        self.assertIn('id="designRangeKm" type="number" value="1200" min="1" max="30000" step="1"', INDEX_HTML)
+        self.assertIn('id="designProgress"', INDEX_HTML)
+        self.assertIn('id="designCancelBtn"', INDEX_HTML)
+        self.assertIn('id="designRetryBtn"', INDEX_HTML)
+        self.assertIn('id="designJobHistoryList"', INDEX_HTML)
+        self.assertIn('id="designHistoryRefreshBtn"', INDEX_HTML)
+        self.assertIn('id="designMaxLoadFactor"', INDEX_HTML)
+        self.assertIn('id="designSustainedTurnG"', INDEX_HTML)
+        self.assertIn('id="designUseAdvanced"', INDEX_HTML)
+        self.assertIn('id="designMtowGuess"', INDEX_HTML)
+        self.assertIn('id="designMaxIterations"', INDEX_HTML)
+        self.assertIn('id="designSfcLabel" for="designSfc">螺旋桨 BSFC（kg/J）</label>', INDEX_HTML)
+        self.assertIn('id="designSfc" data-design-advanced data-energy-mode="prop" type="number" value="8.45e-8"', INDEX_HTML)
+        self.assertIn('id="designPropEfficiencyField"', INDEX_HTML)
+        self.assertIn('id="designPropEfficiency" data-design-advanced type="number" value="0.8"', INDEX_HTML)
+        self.assertIn('field: "prop_bsfc_kg_per_j"', INDEX_HTML)
+        self.assertIn('field: "jet_tsfc_kg_per_n_s"', INDEX_HTML)
+        self.assertIn("function syncDesignEnergyMode", INDEX_HTML)
+        self.assertIn("sfc_cruise_1_s", INDEX_HTML)
+        self.assertIn("createDesignResultPanel", INDEX_HTML)
+        self.assertIn("design-result-metrics", INDEX_HTML)
+        self.assertIn("design-weight-bar", INDEX_HTML)
+        self.assertIn('api("/api/design-jobs"', INDEX_HTML)
+        self.assertIn('designRunForm.addEventListener("submit", submitDesignJob);', INDEX_HTML)
+        self.assertIn('designCancelBtn.addEventListener("click", cancelDesignJob);', INDEX_HTML)
+        self.assertIn('designRetryBtn.addEventListener("click", retryDesignJob);', INDEX_HTML)
+        self.assertIn('designHistoryRefreshBtn.addEventListener("click", () => refreshDesignJobs());', INDEX_HTML)
+        self.assertIn('designUseAdvanced.addEventListener("change", syncAdvancedInputs);', INDEX_HTML)
+        self.assertIn('"/stream?after=" + afterSequence', INDEX_HTML)
+        self.assertIn('await refreshDesignJobs({', INDEX_HTML)
+        self.assertIn('const pendingSkill = toUiSkillName(local.autoSkill || "");', INDEX_HTML)
+        self.assertIn('buffer.split("\\n\\n")', INDEX_HTML)
 
 
 class TestClawdWebService(unittest.TestCase):
@@ -131,6 +231,12 @@ class TestClawdWebService(unittest.TestCase):
     ) -> None:
         mock_session_home.return_value = self.home
         workspace = self.home / "workspace"
+        latest_skill_dir = workspace / ".clawd" / "skills" / "aircraft-design-skill"
+        latest_skill_dir.mkdir(parents=True)
+        (latest_skill_dir / "SKILL.md").write_text(
+            "---\nname: aircraft-design-skill\ndescription: Latest aircraft design skill\n---\nUse latest skill.",
+            encoding="utf-8",
+        )
         skill_dir = workspace / ".clawd" / "skills" / "aircraft-design-rag"
         skill_dir.mkdir(parents=True)
         (skill_dir / "SKILL.md").write_text(
@@ -149,11 +255,12 @@ class TestClawdWebService(unittest.TestCase):
             reply = service.send_message(created["session"]["session_id"], "What is RD-170?")
 
         self.assertEqual(payload["default_auto_skill"], None)
-        self.assertEqual(payload["skills"][0]["name"], "aircraft-design")
+        self.assertEqual(payload["skills"][0]["name"], "aircraft-design-skill")
         self.assertEqual(payload["skills"][0]["display_name"], "飞行器总体设计")
-        self.assertEqual(created["session"]["auto_skill"], "aircraft-design")
+        self.assertEqual(created["session"]["auto_skill"], "aircraft-design-skill")
         self.assertIn("飞行器总体设计", reply["reply"]["text"])
         self.assertNotIn("aircraft-design-rag", reply["reply"]["text"])
+        self.assertNotIn("aircraft-conceptual-design", reply["reply"]["text"])
 
     @patch("src.agent.session.Path.home")
     @patch("src.web.app.build_default_registry", side_effect=lambda **_kwargs: ToolRegistry())
@@ -167,7 +274,9 @@ class TestClawdWebService(unittest.TestCase):
         mock_session_home.return_value = self.home
         workspace = self.home / "workspace"
         for skill_name in (
+            "aircraft-design-skill",
             "aircraft-design-rag",
+            "aircraft-conceptual-design",
             "aero-intake-exhaust-evaluation",
             "aero-propulsion-analysis",
             "flight-performance-analysis",
@@ -184,19 +293,8 @@ class TestClawdWebService(unittest.TestCase):
             payload = service.get_bootstrap_payload()
 
         names = [skill["name"] for skill in payload["skills"]]
-        self.assertEqual(
-            names,
-            [
-                "aircraft-design",
-                "aero-intake-exhaust-evaluation",
-                "aero-propulsion-analysis",
-                "flight-performance-analysis",
-            ],
-        )
-        self.assertEqual(
-            [skill["display_name"] for skill in payload["skills"]],
-            ["飞行器总体设计", "气动/进排气评估", "气动/推进特性分析", "飞行性能分析"],
-        )
+        self.assertEqual(names, ["aircraft-design-skill"])
+        self.assertEqual([skill["display_name"] for skill in payload["skills"]], ["飞行器总体设计"])
         self.assertTrue(all(skill["short_label"] for skill in payload["skills"]))
 
     def test_bootstrap_payload_marks_configured_providers(self) -> None:
@@ -248,14 +346,28 @@ class TestClawdWebService(unittest.TestCase):
         _mock_build_registry,
     ) -> None:
         workspace = self.home / "workspace"
+        skill_dir = workspace / ".clawd" / "skills" / "aircraft-design-skill"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text(
+            "---\nname: aircraft-design-skill\ndescription: Latest aircraft design skill\n---\nUse latest skill.",
+            encoding="utf-8",
+        )
         service = ClawdWebService(workspace_root=workspace)
-        created = service.create_session(provider_name="openai", model="qwen3-4b")
+        created = service.create_session(
+            provider_name="openai",
+            model="qwen3-4b",
+            auto_approve=False,
+            auto_skill="aircraft-design-skill",
+            rag_settings={"top_k": 3, "auto_retrieve": False},
+        )
         session_id = created["session"]["session_id"]
 
         service.send_message(session_id, "Keep this after restart")
 
         session_file = self.home / ".clawd" / "sessions" / f"{session_id}.json"
+        preferences_file = self.home / ".clawd" / "web_sessions" / f"{session_id}.json"
         self.assertTrue(session_file.exists())
+        self.assertTrue(preferences_file.exists())
 
         restarted = ClawdWebService(workspace_root=workspace)
         listed = restarted.list_sessions_payload()
@@ -263,7 +375,103 @@ class TestClawdWebService(unittest.TestCase):
 
         self.assertEqual([item["session_id"] for item in listed["sessions"]], [session_id])
         self.assertEqual(loaded["session"]["messages"][0]["text"], "Keep this after restart")
-        self.assertEqual(loaded["session"]["messages"][1]["text"], "Echo: Keep this after restart")
+        self.assertIn("Keep this after restart", loaded["session"]["messages"][1]["text"])
+        self.assertFalse(loaded["session"]["auto_approve"])
+        self.assertEqual(loaded["session"]["auto_skill"], "aircraft-design-skill")
+        restored_state = restarted._require_session(session_id)
+        self.assertEqual(restored_state.rag_settings.top_k, 3)
+        self.assertFalse(restored_state.rag_settings.auto_retrieve)
+
+    @patch("src.agent.session.Path.home")
+    @patch("src.web.app.build_default_registry", side_effect=lambda **_kwargs: ToolRegistry())
+    @patch("src.web.app.get_provider_class", return_value=ArtifactProducingProvider)
+    def test_aircraft_skill_results_are_packaged_for_download(
+        self,
+        _mock_provider_class,
+        _mock_build_registry,
+        mock_session_home,
+    ) -> None:
+        mock_session_home.return_value = self.home
+        workspace = self.home / "workspace"
+        skill_dir = workspace / ".clawd" / "skills" / "aircraft-design-skill"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text(
+            "---\nname: aircraft-design-skill\ndescription: Latest aircraft design skill\n---\nUse latest skill.",
+            encoding="utf-8",
+        )
+
+        with patch("src.config.Path.home", return_value=self.home):
+            service = ClawdWebService(workspace_root=workspace)
+            created = service.create_session(
+                provider_name="openai",
+                model="qwen3-4b",
+                auto_skill="aircraft-design-skill",
+                rag_settings={"auto_retrieve": False},
+            )
+            reply = service.send_message(created["session"]["session_id"], "生成总体设计结果")
+
+        artifacts = reply["reply"]["artifacts"]
+        self.assertEqual(len(artifacts), 1)
+        artifact = artifacts[0]
+        self.assertEqual(artifact["kind"], "aircraft_design_result_zip")
+        self.assertEqual(artifact["name"], "飞行器总体设计结果包")
+        self.assertEqual(artifact["file_count"], 3)
+        self.assertTrue(artifact["source_dir"].endswith("/case_alpha"))
+        self.assertIn(".clawd/generated/aircraft_design_runs/", artifact["source_dir"])
+        self.assertIn("/api/artifacts/", artifact["download_url"])
+        self.assertEqual(reply["session"]["messages"][1]["artifacts"][0]["id"], artifact["id"])
+
+        download = service.resolve_artifact_download(artifact["id"])
+        self.assertTrue(download["path"].exists())
+        self.assertEqual(download["filename"], artifact["filename"])
+        with zipfile.ZipFile(download["path"]) as zf:
+            names = set(zf.namelist())
+        self.assertIn("case_alpha/design_report.md", names)
+        self.assertIn("case_alpha/design_data.json", names)
+        self.assertIn("case_alpha/geometry.obj", names)
+        self.assertIn("case_alpha/download_manifest.json", names)
+        self.assertNotIn("case_alpha/helper.py", names)
+
+        restarted = ClawdWebService(workspace_root=workspace)
+        restored = restarted.get_session_payload(created["session"]["session_id"])
+        restored_artifacts = restored["session"]["messages"][1]["artifacts"]
+        self.assertEqual(restored_artifacts[0]["id"], artifact["id"])
+        self.assertTrue(restarted.resolve_artifact_download(artifact["id"])["path"].exists())
+
+    @patch("src.agent.session.Path.home")
+    @patch("src.web.app.build_default_registry", side_effect=lambda **_kwargs: ToolRegistry())
+    @patch("src.web.app.get_provider_class", return_value=FakeProvider)
+    def test_aircraft_skill_does_not_package_stale_results(
+        self,
+        _mock_provider_class,
+        _mock_build_registry,
+        mock_session_home,
+    ) -> None:
+        mock_session_home.return_value = self.home
+        workspace = self.home / "workspace"
+        skill_dir = workspace / ".clawd" / "skills" / "aircraft-design-skill"
+        stale_dir = skill_dir / "output" / "old_case"
+        stale_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text(
+            "---\nname: aircraft-design-skill\ndescription: Latest aircraft design skill\n---\nUse latest skill.",
+            encoding="utf-8",
+        )
+        (stale_dir / "design_report.md").write_text("# stale", encoding="utf-8")
+
+        with patch("src.config.Path.home", return_value=self.home):
+            service = ClawdWebService(workspace_root=workspace)
+            created = service.create_session(
+                provider_name="openai",
+                model="qwen3-4b",
+                auto_skill="aircraft-design-skill",
+                rag_settings={"auto_retrieve": False},
+            )
+            reply = service.send_message(created["session"]["session_id"], "生成总体设计结果")
+
+        self.assertEqual(reply["reply"]["artifacts"], [])
+        artifact_events = [event for event in reply["reply"]["events"] if event["kind"] == "artifact"]
+        self.assertTrue(artifact_events[0]["is_error"])
+        self.assertIn("未检测到新的设计结果", artifact_events[0]["summary"])
 
     @patch("src.web.app.build_default_registry", side_effect=lambda **_kwargs: ToolRegistry())
     @patch("src.web.app.get_provider_class", return_value=FakeProvider)
@@ -467,6 +675,12 @@ class TestClawdWebService(unittest.TestCase):
     ) -> None:
         mock_session_home.return_value = self.home
         workspace = self.home / "workspace"
+        latest_skill_dir = workspace / ".clawd" / "skills" / "aircraft-design-skill"
+        latest_skill_dir.mkdir(parents=True)
+        (latest_skill_dir / "SKILL.md").write_text(
+            "---\nname: aircraft-design-skill\ndescription: Latest aircraft design skill\n---\nUse latest skill.",
+            encoding="utf-8",
+        )
         skill_dir = workspace / ".clawd" / "skills" / "aircraft-design-rag"
         script_dir = skill_dir / "scripts"
         script_dir.mkdir(parents=True)
@@ -500,22 +714,34 @@ class TestClawdWebService(unittest.TestCase):
             created = service.create_session(
                 provider_name="openai",
                 model="qwen3-4b",
-                auto_skill="aircraft-design",
+                auto_skill="aircraft-design-skill",
             )
             reply = service.send_message(created["session"]["session_id"], "What is RD-170?")
 
         events = reply["reply"]["events"]
-        self.assertEqual(events[0]["kind"], "rag_retrieval")
-        self.assertEqual(events[0]["tool_name"], "aircraft-design")
-        self.assertEqual(events[0]["rag"]["hits"][0]["file"], "RAG-data/engine.md")
+        self.assertEqual(events[0]["kind"], "tool_use")
+        self.assertEqual(events[0]["tool_name"], "Skill")
+        agent_events = [event for event in events if event["kind"] == "agent_step"]
+        self.assertEqual(agent_events[0]["agent_name"], "Supervisor")
+        self.assertTrue(any(event.get("agent_name") == "总体设计管理员" for event in events))
+        self.assertTrue(any(event.get("agent_name") == "资料检索Agent" for event in events))
+        rag_events = [event for event in events if event["kind"] == "rag_retrieval"]
+        self.assertEqual(rag_events[0]["tool_name"], "aircraft-design-skill")
+        self.assertEqual(rag_events[0]["rag"]["hits"][0]["file"], "RAG-data/engine.md")
+        self.assertIn("M1 multi-agent aircraft-design orchestration context", reply["reply"]["text"])
         self.assertIn("Browser-attached local aircraft-design evidence", reply["reply"]["text"])
-        self.assertEqual(reply["session"]["auto_skill"], "aircraft-design")
-        self.assertEqual(reply["session"]["messages"][1]["events"][0]["kind"], "rag_retrieval")
-        self.assertEqual(reply["session"]["messages"][1]["events"][0]["rag"]["hits"][0]["file"], "RAG-data/engine.md")
+        self.assertEqual(reply["session"]["auto_skill"], "aircraft-design-skill")
+        saved_events = reply["session"]["messages"][1]["events"]
+        self.assertEqual(saved_events[0]["kind"], "tool_use")
+        self.assertEqual(saved_events[0]["tool_name"], "Skill")
+        saved_rag_events = [event for event in saved_events if event["kind"] == "rag_retrieval"]
+        self.assertEqual(saved_rag_events[0]["rag"]["hits"][0]["file"], "RAG-data/engine.md")
 
         restarted = ClawdWebService(workspace_root=workspace)
         restored = restarted.get_session_payload(created["session"]["session_id"])
-        self.assertEqual(restored["session"]["messages"][1]["events"][0]["rag"]["hits"][0]["file"], "RAG-data/engine.md")
+        restored_events = restored["session"]["messages"][1]["events"]
+        restored_rag_events = [event for event in restored_events if event["kind"] == "rag_retrieval"]
+        self.assertEqual(restored_rag_events[0]["rag"]["hits"][0]["file"], "RAG-data/engine.md")
 
     @patch("src.agent.session.Path.home")
     @patch("src.web.app.RagIndexService.search")
@@ -536,6 +762,12 @@ class TestClawdWebService(unittest.TestCase):
     ) -> None:
         mock_session_home.return_value = self.home
         workspace = self.home / "workspace"
+        latest_skill_dir = workspace / ".clawd" / "skills" / "aircraft-design-skill"
+        latest_skill_dir.mkdir(parents=True)
+        (latest_skill_dir / "SKILL.md").write_text(
+            "---\nname: aircraft-design-skill\ndescription: Latest aircraft design skill\n---\nUse latest skill.",
+            encoding="utf-8",
+        )
         skill_dir = workspace / ".clawd" / "skills" / "aircraft-design-rag"
         script_dir = skill_dir / "scripts"
         script_dir.mkdir(parents=True)
@@ -560,15 +792,19 @@ class TestClawdWebService(unittest.TestCase):
             created = service.create_session(
                 provider_name="openai",
                 model="qwen3-4b",
-                auto_skill="aircraft-design",
+                auto_skill="aircraft-design-skill",
             )
             reply = service.send_message(created["session"]["session_id"], "What is RD-170?")
 
         events = reply["reply"]["events"]
-        self.assertEqual(events[0]["kind"], "rag_retrieval")
-        self.assertEqual(events[0]["tool_name"], "aircraft-design")
-        self.assertTrue(events[0]["rag"]["cache"]["build_in_progress"])
-        self.assertEqual(reply["session"]["auto_skill"], "aircraft-design")
+        self.assertEqual(events[0]["kind"], "tool_use")
+        self.assertEqual(events[0]["tool_name"], "Skill")
+        agent_events = [event for event in events if event["kind"] == "agent_step"]
+        self.assertEqual(agent_events[0]["agent_name"], "Supervisor")
+        rag_events = [event for event in events if event["kind"] == "rag_retrieval"]
+        self.assertEqual(rag_events[0]["tool_name"], "aircraft-design-skill")
+        self.assertTrue(rag_events[0]["rag"]["cache"]["build_in_progress"])
+        self.assertEqual(reply["session"]["auto_skill"], "aircraft-design-skill")
         mock_rebuild.assert_called_once()
         mock_search.assert_not_called()
 
@@ -595,3 +831,11 @@ class TestClawdWebService(unittest.TestCase):
 
         self.assertEqual(serialized["rag"]["query"], "RD-170")
         self.assertEqual(serialized["rag"]["hits"][0]["file"], "a.md")
+
+    def test_invalid_tilde_path_hint_does_not_break_artifact_discovery(self) -> None:
+        service = ClawdWebService(workspace_root=self.home / "workspace")
+
+        with patch("src.web.app.Path.expanduser", side_effect=RuntimeError("Could not determine home directory.")):
+            candidates = service._hinted_aircraft_output_candidates("output may be at ~/unknown", [])
+
+        self.assertEqual(candidates, [])

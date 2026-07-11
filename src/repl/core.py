@@ -87,7 +87,13 @@ from src.skill_memory import (
 from src.tool_system.context import ToolContext
 from src.tool_system.defaults import build_default_registry
 from src.tool_system.protocol import ToolCall
-from src.tool_system.agent_loop import ToolEvent, run_agent_loop, summarize_tool_result, summarize_tool_use
+from src.tool_system.agent_loop import (
+    DEFAULT_AGENT_MAX_TURNS,
+    ToolEvent,
+    run_agent_loop,
+    summarize_tool_result,
+    summarize_tool_use,
+)
 
 # New command system imports
 from src.command_system import (
@@ -484,7 +490,7 @@ class ClawdREPL:
                     stream_override = True
                 self.chat(
                     prompt_text,
-                    max_turns=max(1, int(result.max_turns or 20)),
+                    max_turns=max(1, int(result.max_turns or DEFAULT_AGENT_MAX_TURNS)),
                     stream_override=stream_override,
                     allowed_tools=result.allowed_tools,
                 )
@@ -1273,7 +1279,7 @@ class ClawdREPL:
     def chat(
         self,
         user_input: str,
-        max_turns: int = 20,
+        max_turns: int = DEFAULT_AGENT_MAX_TURNS,
         stream_override: bool | None = None,
         allowed_tools: list[str] | None = None,
     ):
@@ -1281,7 +1287,7 @@ class ClawdREPL:
 
         Args:
             user_input: The user message to send.
-            max_turns: Maximum number of tool call turns (default 20, higher for complex commands).
+            max_turns: Maximum number of tool call turns.
             stream_override: Override REPL stream mode for this request only.
         """
         # Add user message

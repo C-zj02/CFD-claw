@@ -7,7 +7,7 @@ allowed-tools:
   - Read
   - Glob
 arguments: [design_brief]
-max-turns: 12
+max-turns: 100
 ---
 
 # 飞行器总体设计

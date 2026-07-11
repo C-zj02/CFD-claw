@@ -28,7 +28,7 @@ def test_aircraft_conceptual_design_skill_is_discoverable_and_invocable() -> Non
     skill = skills["aircraft-conceptual-design"]
     assert skill.loaded_from == "project"
     assert skill.skill_root == str(SKILL_DIR)
-    assert skill.max_turns == 12
+    assert skill.max_turns == 100
     assert "--top-docs" not in skill.markdown_content
     assert "--max-hits-per-file" not in skill.markdown_content
     assert "--format json" in skill.markdown_content
@@ -68,7 +68,7 @@ def test_aircraft_conceptual_design_registers_as_slash_command() -> None:
     command = commands["aircraft-conceptual-design"]
     assert command.loaded_from == "project"
     assert command.skill_root == str(SKILL_DIR)
-    assert command.max_turns == 12
+    assert command.max_turns == 100
 
     context = CommandContext(
         workspace_root=PROJECT_ROOT,
