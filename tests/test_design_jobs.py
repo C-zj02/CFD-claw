@@ -37,6 +37,19 @@ def _request_payload() -> dict:
             "cruise_altitude_m": 6_000.0,
             "service_ceiling_m": 8_000.0,
         },
+        "initial_guess": {
+            "mtow_kg": 2_500.0,
+            "wing_loading_pa": 3_000.0,
+            "thrust_to_weight": 0.6,
+            "aspect_ratio": 15.0,
+            "sweep_deg": 5.0,
+            "taper_ratio": 0.5,
+            "thickness_ratio": 0.12,
+            "prop_bsfc_kg_per_j": 8.45e-8,
+            "prop_efficiency": 0.8,
+            "cd0": 0.025,
+            "oswald_e": 0.82,
+        },
     }
 
 

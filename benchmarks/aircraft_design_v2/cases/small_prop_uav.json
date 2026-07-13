@@ -38,13 +38,14 @@
     "max_iterations": 50
   },
   "acceptance": {
-    "mtow_kg": {"minimum": 8.0, "maximum": 15.0},
-    "empty_weight_kg": {"minimum": 4.0, "maximum": 8.0},
-    "fuel_weight_kg": {"minimum": 0.0001, "maximum": 0.01},
-    "wing_area_m2": {"minimum": 0.2, "maximum": 0.4},
-    "thrust_sl_n": {"minimum": 20.0, "maximum": 50.0},
-    "empty_fraction": {"minimum": 0.4, "maximum": 0.7},
-    "iterations": {"minimum": 5, "maximum": 35},
+    "mtow_kg": {"minimum": 19.0, "maximum": 26.0},
+    "empty_weight_kg": {"minimum": 13.0, "maximum": 18.0},
+    "fuel_weight_kg": {"minimum": 1.5, "maximum": 2.5},
+    "wing_area_m2": {"minimum": 0.5, "maximum": 0.75},
+    "thrust_sl_n": {"minimum": 65.0, "maximum": 90.0},
+    "empty_fraction": {"minimum": 0.63, "maximum": 0.74},
+    "fuel_fraction": {"minimum": 0.07, "maximum": 0.11},
+    "iterations": {"minimum": 15, "maximum": 30},
     "weight_closure_relative_error_max": 0.002
   },
   "monotonic_check": {

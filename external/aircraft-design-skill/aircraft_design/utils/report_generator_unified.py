@@ -316,12 +316,27 @@ class UnifiedReportGenerator:
                 ("翼展 span_m", geometry.get("span_m"), "m"),
                 ("展弦比 aspect_ratio", geometry.get("aspect_ratio"), "-"),
                 ("后掠角 sweep_deg", geometry.get("sweep_deg"), "deg"),
+                ("翼型厚度比 thickness_ratio", geometry.get("thickness_ratio"), "-"),
                 ("机身长度 fuselage_length_m", geometry.get("fuselage_length_m"), "m"),
                 ("机身直径 fuselage_diameter_m", geometry.get("fuselage_diameter_m"), "m"),
                 ("平尾面积 s_ht_m2", geometry.get("s_ht_m2"), "m²"),
                 ("垂尾面积 s_vt_m2", geometry.get("s_vt_m2"), "m²"),
             ]
         )
+        adjustment_lines = []
+        adjustments = outputs.get("design_adjustments", [])
+        if isinstance(adjustments, list):
+            for adjustment in adjustments:
+                if not isinstance(adjustment, dict):
+                    continue
+                for action in adjustment.get("actions", []):
+                    if not isinstance(action, dict):
+                        continue
+                    adjustment_lines.append(
+                        f"| {self._fmt_val(adjustment.get('iteration'))} | "
+                        f"{action.get('parameter') or '-'} | {self._fmt_val(action.get('from'))} | "
+                        f"{self._fmt_val(action.get('to'))} | {action.get('reason') or '-'} |"
+                    )
         return "\n".join(
             [
                 "## 3. 一阶段设计结果",
@@ -335,6 +350,17 @@ class UnifiedReportGenerator:
                 "| 参数 | 数值 | 单位 |",
                 "|:---|:---:|:---:|",
                 *geo_rows,
+                "",
+                "### 3.3 有界自动修复记录",
+                *(
+                    [
+                        "| 迭代 | 参数 | 原值 | 修复值 | 触发原因 |",
+                        "|---:|:---|---:|---:|:---|",
+                        *adjustment_lines,
+                    ]
+                    if adjustment_lines
+                    else ["本方案未触发自动参数修复。"]
+                ),
                 "",
                 "---",
             ]

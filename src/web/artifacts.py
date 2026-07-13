@@ -162,9 +162,17 @@ class AircraftArtifactStore:
         )
         return artifact
 
-    def list_result_files(self, owner_id: str, source_dir: Path) -> list[dict[str, Any]]:
+    def list_result_files(
+        self,
+        owner_id: str,
+        source_dir: Path,
+        *,
+        url_base: str | None = None,
+    ) -> list[dict[str, Any]]:
         """List safe, browser-previewable files from one deterministic design run."""
         source_dir = self._validated_source_dir(source_dir)
+        encoded_owner = quote(owner_id, safe="")
+        base = url_base.rstrip("/") if url_base else f"/api/design-jobs/{encoded_owner}"
         files: list[dict[str, Any]] = []
         for path in sorted(source_dir.rglob("*")):
             suffix = path.suffix.lower()
@@ -179,9 +187,8 @@ class AircraftArtifactStore:
             except ValueError:
                 continue
             relative = path.relative_to(source_dir).as_posix()
-            encoded_owner = quote(owner_id, safe="")
             encoded_path = quote(relative, safe="/")
-            file_url = f"/api/design-jobs/{encoded_owner}/files/{encoded_path}"
+            file_url = f"{base}/files/{encoded_path}"
             files.append(
                 {
                     "name": path.name,

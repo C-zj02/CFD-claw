@@ -51,7 +51,7 @@ def static_app_url():
         thread.join(timeout=2)
 
 
-def _session_payload() -> dict:
+def _session_payload(design_results: list[dict] | None = None) -> dict:
     return {
         "session_id": "e2e-session",
         "provider": "openai",
@@ -59,6 +59,7 @@ def _session_payload() -> dict:
         "auto_skill": None,
         "auto_approve": True,
         "messages": [],
+        "design_results": design_results or [],
     }
 
 
@@ -181,6 +182,8 @@ def _job(
     }
     return {
         "job_id": job_id,
+        "session_id": "e2e-session",
+        "source": "conversation",
         "status": status,
         "stage": status,
         "progress": 100 if terminal else 35,
@@ -222,7 +225,34 @@ def _job(
                 "size_bytes": 128,
                 "preview_url": f"/api/design-jobs/{job_id}/files/design_report_v2.md",
                 "download_url": f"/api/design-jobs/{job_id}/files/design_report_v2.md?download=1",
-            }
+            },
+            {
+                "name": "geometry.obj",
+                "path": "geometry.obj",
+                "kind": "model",
+                "format": "obj",
+                "size_bytes": 256,
+                "preview_url": f"/api/design-jobs/{job_id}/files/geometry.obj",
+                "download_url": f"/api/design-jobs/{job_id}/files/geometry.obj?download=1",
+            },
+            {
+                "name": "view_top_static.png",
+                "path": "view_top_static.png",
+                "kind": "image",
+                "format": "png",
+                "size_bytes": 128,
+                "preview_url": f"/api/design-jobs/{job_id}/files/view_top_static.png",
+                "download_url": f"/api/design-jobs/{job_id}/files/view_top_static.png?download=1",
+            },
+            {
+                "name": "view_side_static.png",
+                "path": "view_side_static.png",
+                "kind": "image",
+                "format": "png",
+                "size_bytes": 128,
+                "preview_url": f"/api/design-jobs/{job_id}/files/view_side_static.png",
+                "download_url": f"/api/design-jobs/{job_id}/files/view_side_static.png?download=1",
+            },
         ],
         "artifacts": [],
     }
@@ -243,6 +273,7 @@ def _install_api_mock(
         "stream_failures": 0,
         "preflight_calls": 0,
         "preflight_requests": [],
+        "session_requests": [],
     }
 
     config = {
@@ -258,7 +289,15 @@ def _install_api_mock(
                 "available_models": ["deepseek-v4-pro"],
             }
         ],
-        "skills": [],
+        "skills": [
+            {
+                "name": "aircraft-design-skill",
+                "display_name": "飞行器总体设计",
+                "description": "固定翼总体设计与分析工具包。",
+                "when_to_use": "用于固定翼总体设计任务。",
+                "status_note": "可用",
+            }
+        ],
         "default_auto_skill": None,
         "design_jobs": {
             "available": True,
@@ -285,10 +324,25 @@ def _install_api_mock(
             fulfill_json(route, config)
             return
         if path == "/api/sessions" and method == "POST":
-            fulfill_json(route, {"session": _session_payload()}, status=201)
+            request = route.request.post_data_json or {}
+            state["session_requests"].append(request)
+            session = _session_payload(jobs)
+            session["auto_skill"] = request.get("auto_skill")
+            fulfill_json(route, {"session": session}, status=201)
             return
         if path == "/api/sessions" and method == "GET":
             fulfill_json(route, {"sessions": sessions})
+            return
+        if path.startswith("/api/sessions/") and method == "GET":
+            session_id = path.removeprefix("/api/sessions/").strip("/")
+            summary = next((item for item in sessions if item.get("session_id") == session_id), None)
+            if summary is None:
+                fulfill_json(route, {"error": "unknown session"}, status=404)
+                return
+            session = _session_payload(summary.get("design_results", []))
+            session["session_id"] = session_id
+            session["auto_skill"] = summary.get("auto_skill")
+            fulfill_json(route, {"session": session})
             return
         if path == "/api/design-jobs/preflight" and method == "POST":
             state["preflight_calls"] += 1
@@ -324,6 +378,31 @@ def _install_api_mock(
                 body="# Engineering diagnostic\n\nClimb thrust margin failed.",
             )
             return
+        if path.endswith("/files/geometry.obj"):
+            route.fulfill(
+                status=200,
+                content_type="text/plain; charset=utf-8",
+                body=(
+                    "o aircraft\n"
+                    "v -2 -1 0\nv 2 -1 0\nv 2 1 0\nv -2 1 0\n"
+                    "v 0 0 0.8\n"
+                    "f 1 2 5\nf 2 3 5\nf 3 4 5\nf 4 1 5\nf 1 4 3 2\n"
+                ),
+            )
+            return
+        if path.endswith("/files/view_top_static.png") or path.endswith("/files/view_side_static.png"):
+            route.fulfill(
+                status=200,
+                content_type="image/svg+xml",
+                body=(
+                    '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="420">'
+                    '<rect width="640" height="420" fill="#f3f5f3"/>'
+                    '<path d="M90 230 L320 90 L550 230 L350 205 L320 340 L290 205 Z" '
+                    'fill="#607d78" stroke="#263d39" stroke-width="8"/>'
+                    "</svg>"
+                ),
+            )
+            return
         if path.startswith("/api/design-jobs/") and method == "GET":
             job_id = path.removeprefix("/api/design-jobs/").strip("/")
             job = detail_by_id.get(job_id)
@@ -349,6 +428,143 @@ def _install_api_mock(
 
     page.route("**/api/**", handler)
     return state
+
+
+def test_chat_header_owns_aircraft_skill_toggle(
+    e2e_browser,
+    static_app_url: str,
+) -> None:
+    context = e2e_browser.new_context(viewport={"width": 1280, "height": 800})
+    page = context.new_page()
+    mock_state = _install_api_mock(page)
+    try:
+        page.goto(static_app_url)
+        toggle = page.locator("#aircraftSkillToggle")
+        playwright_api.expect(toggle).to_be_visible()
+        playwright_api.expect(toggle).to_be_enabled()
+        playwright_api.expect(toggle).not_to_be_checked()
+        assert page.locator(".topbar-design-tools #aircraftSkillToggle").count() == 1
+        assert page.locator("#composerForm #aircraftSkillToggle").count() == 0
+        assert page.locator(".prompt-chip").count() == 0
+        assert page.locator("#skillsPageBtn, #skillsView, #skillSelect").count() == 0
+        playwright_api.expect(page.locator("#designWorkspaceBtn")).to_be_hidden()
+        playwright_api.expect(page.locator("#designWorkspace")).to_be_hidden()
+        assert page.locator("#designRunForm, #designPanelRun").count() == 0
+
+        toggle.check()
+        playwright_api.expect(toggle).to_be_checked()
+        playwright_api.expect(page.locator("#skillMeta")).to_contain_text("下次发送生效")
+
+        page.locator("#promptInput").fill("检查当前方案的总体设计约束。")
+        with page.expect_response(re.compile(r"/messages/stream$")) as response_info:
+            page.locator("#sendBtn").click()
+        assert response_info.value.status == 503
+        assert mock_state["session_requests"][-1]["auto_skill"] == "aircraft-design-skill"
+    finally:
+        context.close()
+
+
+def test_chat_and_design_workspace_switch_without_creating_session(
+    e2e_browser,
+    static_app_url: str,
+) -> None:
+    context = e2e_browser.new_context(viewport={"width": 1280, "height": 800})
+    page = context.new_page()
+    result = _job(
+        "conversation-result-current",
+        "current_conversation_design",
+        status="completed",
+        mtow_kg=2_300.0,
+        engineering_feasible=True,
+    )
+    mock_state = _install_api_mock(page, jobs=[result])
+    try:
+        page.goto(static_app_url)
+        page.wait_for_function(
+            "() => document.querySelector('#sessionMeta')?.textContent.includes('e2e-session')"
+        )
+        initial_session_requests = len(mock_state["session_requests"])
+        assert page.locator(".sidebar-nav > #chatViewBtn").count() == 1
+        assert page.locator(".sidebar-nav #designWorkspaceBtn").count() == 0
+        assert page.locator(".topbar-design-tools #designWorkspaceBtn").count() == 1
+        assert page.locator("#composerForm #designWorkspaceBtn").count() == 0
+        assert page.locator(".window-strip, .traffic-lights, .window-actions").count() == 0
+        playwright_api.expect(page.locator("#designWorkspaceBtn")).to_be_visible()
+
+        page.locator("#designWorkspaceBtn").click()
+        playwright_api.expect(page.locator("#designWorkspace")).to_be_visible()
+        playwright_api.expect(page.locator("#chatLog")).to_be_hidden()
+        playwright_api.expect(page.locator("#designPanelResults")).to_be_visible()
+        playwright_api.expect(page.locator("#designResultsContent")).to_contain_text("工程可行")
+        assert page.locator("#designRunForm, #designPanelRun, #designTabRequirements, #designTabRun").count() == 0
+        playwright_api.expect(page.locator("#designTabCompare")).to_be_hidden()
+
+        page.locator("#chatViewBtn").click()
+        playwright_api.expect(page.locator("#chatLog")).to_be_visible()
+        playwright_api.expect(page.locator("#composerForm")).to_be_visible()
+        playwright_api.expect(page.locator("#designWorkspace")).to_be_hidden()
+        assert len(mock_state["session_requests"]) == initial_session_requests
+
+        page.locator("#designWorkspaceBtn").click()
+        page.locator("#designBackChatBtn").click()
+        playwright_api.expect(page.locator("#chatLog")).to_be_visible()
+        assert len(mock_state["session_requests"]) == initial_session_requests
+    finally:
+        context.close()
+
+
+def test_design_result_entry_tracks_the_selected_conversation(
+    e2e_browser,
+    static_app_url: str,
+) -> None:
+    result = _job(
+        "conversation-result-history",
+        "history_design",
+        status="completed",
+        mtow_kg=1_900.0,
+        engineering_feasible=True,
+    )
+    sessions = [
+        {
+            "session_id": "plain-conversation",
+            "provider": "openai",
+            "model": "deepseek-v4-pro",
+            "last_message": "普通问答",
+            "message_count": 2,
+            "updated_at": "2026-07-13T10:00:00",
+            "design_results": [],
+        },
+        {
+            "session_id": "design-conversation",
+            "provider": "openai",
+            "model": "deepseek-v4-pro",
+            "last_message": "已完成总体设计",
+            "message_count": 4,
+            "updated_at": "2026-07-13T11:00:00",
+            "design_results": [result],
+        },
+    ]
+    context = e2e_browser.new_context(viewport={"width": 1280, "height": 800})
+    page = context.new_page()
+    mock_state = _install_api_mock(page, jobs=[result], sessions=sessions)
+    try:
+        page.goto(static_app_url)
+        playwright_api.expect(page.locator("#designWorkspaceBtn")).to_be_visible()
+        initial_session_requests = len(mock_state["session_requests"])
+
+        page.get_by_text(re.compile(r"^普通问答 · 2 条消息$")).click()
+        playwright_api.expect(page.locator("#sessionMeta")).to_contain_text("plain-conversation")
+        playwright_api.expect(page.locator("#designWorkspaceBtn")).to_be_hidden()
+        playwright_api.expect(page.locator("#designWorkspace")).to_be_hidden()
+
+        page.get_by_text(re.compile(r"^已完成总体设计 · 4 条消息$")).click()
+        playwright_api.expect(page.locator("#sessionMeta")).to_contain_text("design-conversation")
+        playwright_api.expect(page.locator("#designWorkspaceBtn")).to_be_visible()
+        page.locator("#designWorkspaceBtn").click()
+        playwright_api.expect(page.locator("#designResultsContent")).to_contain_text("工程可行")
+        assert len(mock_state["session_requests"]) == initial_session_requests
+    finally:
+        context.close()
 
 
 @pytest.mark.parametrize(
@@ -378,19 +594,61 @@ def test_workspace_tabs_keyboard_focus_and_responsive_layout(
         }
         for index in range(24)
     ]
-    _install_api_mock(page, sessions=long_session_history)
+    responsive_result = _job(
+        "conversation-result-responsive",
+        "responsive_design",
+        status="completed",
+        mtow_kg=2_100.0,
+        engineering_feasible=True,
+    )
+    _install_api_mock(page, jobs=[responsive_result], sessions=long_session_history)
     try:
         page.goto(static_app_url)
+        playwright_api.expect(page.locator(".topbar-design-tools")).to_be_visible()
+        assert page.locator("#composerForm #aircraftSkillToggle, #composerForm #designWorkspaceBtn").count() == 0
+        header_geometry = page.evaluate(
+            """() => {
+                const topbar = document.querySelector('.topbar').getBoundingClientRect();
+                const tools = document.querySelector('.topbar-design-tools').getBoundingClientRect();
+                const utilities = document.querySelector('.topbar-utility-actions').getBoundingClientRect();
+                const overlaps = !(
+                    tools.right <= utilities.left ||
+                    utilities.right <= tools.left ||
+                    tools.bottom <= utilities.top ||
+                    utilities.bottom <= tools.top
+                );
+                return {
+                    scrollWidth: document.documentElement.scrollWidth,
+                    innerWidth: window.innerWidth,
+                    toolsLeft: tools.left,
+                    toolsRight: tools.right,
+                    toolsTop: tools.top,
+                    toolsBottom: tools.bottom,
+                    topbarLeft: topbar.left,
+                    topbarRight: topbar.right,
+                    topbarTop: topbar.top,
+                    topbarBottom: topbar.bottom,
+                    overlaps,
+                };
+            }"""
+        )
+        assert header_geometry["scrollWidth"] <= header_geometry["innerWidth"] + 2
+        assert header_geometry["toolsLeft"] >= header_geometry["topbarLeft"] - 1
+        assert header_geometry["toolsRight"] <= header_geometry["topbarRight"] + 1
+        assert header_geometry["toolsTop"] >= header_geometry["topbarTop"] - 1
+        assert header_geometry["toolsBottom"] <= header_geometry["topbarBottom"] + 1
+        assert header_geometry["overlaps"] is False
+
         page.locator("#designWorkspaceBtn").click()
         playwright_api.expect(page.locator("#designWorkspace")).to_be_visible()
-        playwright_api.expect(page.locator("#designPanelRequirements")).to_be_visible()
+        playwright_api.expect(page.locator("#designPanelResults")).to_be_visible()
 
-        page.locator("#designTabRequirements").focus()
+        page.locator("#designTabResults").focus()
         page.keyboard.press("End")
         playwright_api.expect(page.locator("#designTabReports")).to_be_focused()
         playwright_api.expect(page.locator("#designPanelReports")).to_be_visible()
         page.keyboard.press("Home")
-        playwright_api.expect(page.locator("#designTabRequirements")).to_be_focused()
+        playwright_api.expect(page.locator("#designTabResults")).to_be_focused()
 
         geometry = page.evaluate(
             """() => ({
@@ -407,7 +665,7 @@ def test_workspace_tabs_keyboard_focus_and_responsive_layout(
                 projectDisplay: getComputedStyle(document.querySelector('.sidebar-project')).display,
                 sessionGroupDisplay: getComputedStyle(document.querySelector('.sidebar-group')).display,
                 compactActionsVisible: Array.from(document.querySelectorAll(
-                    '#newSessionBtn, #designWorkspaceBtn, #skillsPageBtn, #settingsToggleBtn'
+                    '#chatViewBtn, #settingsToggleBtn'
                 )).every((element) => {
                     const rect = element.getBoundingClientRect();
                     return rect.width > 0 && rect.height >= 40;
@@ -430,7 +688,7 @@ def test_workspace_tabs_keyboard_focus_and_responsive_layout(
         context.close()
 
 
-def test_preflight_requires_explicit_reconfirmation_after_input_change(
+def test_result_viewer_does_not_expose_standalone_preflight_or_submit_controls(
     e2e_browser,
     static_app_url: str,
 ) -> None:
@@ -439,27 +697,16 @@ def test_preflight_requires_explicit_reconfirmation_after_input_change(
     api_state = _install_api_mock(page)
     try:
         page.goto(static_app_url)
-        page.locator("#designWorkspaceBtn").click()
-        page.locator("#designPreflightBtn").click()
-        playwright_api.expect(page.locator("#designPreflightState")).to_have_text("服务端已校验")
-        playwright_api.expect(page.locator("#designPreflightConfirm")).not_to_be_checked()
-        playwright_api.expect(page.locator("#designRunBtn")).to_be_disabled()
-
-        page.locator("#designPreflightConfirm").check()
-        playwright_api.expect(page.locator("#designRunBtn")).to_be_enabled()
-        page.locator("#designRangeKm").fill("1300")
-        playwright_api.expect(page.locator("#designPreflightConfirm")).not_to_be_checked()
-        playwright_api.expect(page.locator("#designRunBtn")).to_be_disabled()
-        page.locator("#designPreflightBtn").click()
-        playwright_api.expect(page.locator("#designPreflightState")).to_have_text("服务端已校验")
-        page.locator("#designPreflightConfirm").check()
-        playwright_api.expect(page.locator("#designRunBtn")).to_be_enabled()
-        assert api_state["preflight_calls"] >= 2
+        playwright_api.expect(page.locator("#designWorkspaceBtn")).to_be_hidden()
+        assert page.locator(
+            "#designRunForm, #designPreflightBtn, #designRunBtn, #designCancelBtn, #designRetryBtn"
+        ).count() == 0
+        assert api_state["preflight_calls"] == 0
     finally:
         context.close()
 
 
-def test_propulsion_energy_modes_keep_values_and_submit_only_current_contract(
+def _legacy_propulsion_energy_editor_contract(
     e2e_browser,
     static_app_url: str,
 ) -> None:
@@ -544,7 +791,7 @@ def test_propulsion_energy_modes_keep_values_and_submit_only_current_contract(
         ("jet", "jet_tsfc_kg_per_n_s", "喷气 TSFC（kg/(N·s)）"),
     ],
 )
-def test_legacy_sfc_history_migrates_and_preflight_uses_canonical_contract(
+def _legacy_sfc_editor_migration_contract(
     e2e_browser,
     static_app_url: str,
     propulsion_type: str,
@@ -674,14 +921,64 @@ def test_history_recovery_infeasible_result_report_preview_and_comparison(
     try:
         page.goto(static_app_url)
         page.locator("#designWorkspaceBtn").click()
-        playwright_api.expect(
-            page.locator(".design-job-history-row[data-job-id='job-infeasible']")
-        ).to_have_class(re.compile("is-active"))
+        version_select = page.locator("#designResultVersionSelect")
+        playwright_api.expect(version_select).to_have_value("job-infeasible")
+        assert version_select.locator("option").count() == 2
+        playwright_api.expect(page.locator("#designTabCompare")).to_be_visible()
+        assert page.locator("#designRunForm, #designPanelRun").count() == 0
 
-        page.locator("#designTabResults").click()
         playwright_api.expect(page.locator("#designResultsContent")).to_contain_text("工程不可行")
         playwright_api.expect(page.locator("#designResultsContent")).to_contain_text("数值已收敛")
         playwright_api.expect(page.locator("#designResultsContent")).to_contain_text("Climb thrust margin")
+        playwright_api.expect(page.locator("[data-testid='design-visualization']")).to_be_visible()
+        playwright_api.expect(page.locator(".design-model-viewport canvas")).to_be_visible()
+        playwright_api.expect(page.locator(".design-gallery-primary")).to_have_attribute(
+            "alt", "外形俯视图"
+        )
+        side_view_button = page.get_by_role("button", name="查看外形侧视图")
+        assert side_view_button.count() == 1
+        side_view_button.click()
+        playwright_api.expect(page.locator(".design-gallery-primary")).to_have_attribute(
+            "alt", "外形侧视图"
+        )
+
+        canvas = page.locator(".design-model-viewport canvas")
+        first_frame = canvas.evaluate(
+            """canvas => {
+                const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
+                const pixels = new Uint8Array(canvas.width * canvas.height * 4);
+                gl.readPixels(0, 0, canvas.width, canvas.height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+                let min = 255;
+                let max = 0;
+                let checksum = 0;
+                for (let index = 0; index < pixels.length; index += 97) {
+                    min = Math.min(min, pixels[index]);
+                    max = Math.max(max, pixels[index]);
+                    checksum = (checksum + pixels[index] * (index + 1)) % 2147483647;
+                }
+                return {min, max, checksum};
+            }"""
+        )
+        assert first_frame["max"] - first_frame["min"] > 20
+        page.wait_for_timeout(400)
+        second_checksum = canvas.evaluate(
+            """canvas => {
+                const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
+                const pixels = new Uint8Array(canvas.width * canvas.height * 4);
+                gl.readPixels(0, 0, canvas.width, canvas.height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+                let checksum = 0;
+                for (let index = 0; index < pixels.length; index += 97) {
+                    checksum = (checksum + pixels[index] * (index + 1)) % 2147483647;
+                }
+                return checksum;
+            }"""
+        )
+        assert second_checksum != first_frame["checksum"]
+
+        version_select.select_option("job-feasible")
+        playwright_api.expect(page.locator("#designResultsContent")).to_contain_text("工程可行")
+        version_select.select_option("job-infeasible")
+        playwright_api.expect(page.locator("#designResultsContent")).to_contain_text("工程不可行")
 
         page.locator("#designTabReports").click()
         playwright_api.expect(page.locator("#designReportList")).to_contain_text("design_report_v2.md")
@@ -698,7 +995,7 @@ def test_history_recovery_infeasible_result_report_preview_and_comparison(
         context.close()
 
 
-def test_sse_failure_falls_back_to_job_polling(e2e_browser, static_app_url: str) -> None:
+def test_running_task_is_not_exposed_as_a_conversation_result(e2e_browser, static_app_url: str) -> None:
     running = _job(
         "job-running",
         "Recovered running UAV",
@@ -712,16 +1009,9 @@ def test_sse_failure_falls_back_to_job_polling(e2e_browser, static_app_url: str)
     api_state = _install_api_mock(page, jobs=[running], running_fallback=True)
     try:
         page.goto(static_app_url)
-        page.locator("#designWorkspaceBtn").click()
-        playwright_api.expect(page.locator("#designRunStatus")).to_contain_text(
-            "任务已收敛",
-            timeout=12_000,
-        )
-        playwright_api.expect(page.locator("#designResultsContent")).to_contain_text(
-            "工程不可行",
-            timeout=12_000,
-        )
-        assert api_state["stream_failures"] == 4
-        assert api_state["detail_reads"] >= 2
+        playwright_api.expect(page.locator("#designWorkspaceBtn")).to_be_hidden()
+        playwright_api.expect(page.locator("#designWorkspace")).to_be_hidden()
+        assert api_state["stream_failures"] == 0
+        assert api_state["detail_reads"] == 0
     finally:
         context.close()

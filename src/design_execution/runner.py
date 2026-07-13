@@ -24,6 +24,7 @@ from src.design_execution.models import (
     DesignRunStatus,
     DesignValidationIssue,
 )
+from src.design_execution.repair import propose_aircraft_design_repair
 
 
 ProgressCallback = Callable[[DesignRunEvent], None]
@@ -659,6 +660,11 @@ class AircraftDesignRunResult:
         outputs = self.design_data.get("outputs", {}) if isinstance(self.design_data, dict) else {}
         performance = outputs.get("performance", {}) if isinstance(outputs, dict) else {}
         geometry = outputs.get("geometry", {}) if isinstance(outputs, dict) else {}
+        auto_repair = (
+            outputs.get("auto_repair", {})
+            if isinstance(outputs, dict) and isinstance(outputs.get("auto_repair"), dict)
+            else {}
+        )
         mtow_kg = outputs.get("mtow_kg") if isinstance(outputs, dict) else None
         wing_area_m2 = outputs.get("wing_area_m2") if isinstance(outputs, dict) else None
         thrust_sl_n = outputs.get("thrust_sl_n") if isinstance(outputs, dict) else None
@@ -717,6 +723,8 @@ class AircraftDesignRunResult:
                 "engineering_feasible": engineering.engineering_feasible,
                 "engineering_status": engineering.overall_status,
                 "blocking_failed_count": engineering.blocking_failed_count,
+                "auto_repair_attempts": auto_repair.get("attempts_executed", 0),
+                "auto_repair_succeeded": auto_repair.get("succeeded_after_repair", False),
             },
             "artifacts": [str(path) for path in self.artifacts],
             "issues": [issue.to_dict() for issue in self.issues],
@@ -873,14 +881,135 @@ class AircraftDesignRunner:
         normalized_run_id = self._normalize_run_id(run_id)
         task_dir = self.generated_root / normalized_run_id
         task_dir.mkdir(parents=True, exist_ok=False)
-        input_path = task_dir / "sizing_input.json"
-        output_base = task_dir / "output"
+        started_wall = datetime.now().isoformat(timespec="seconds")
+        started_clock = time.monotonic()
+        deadline = started_clock + timeout_seconds
+        original_request = request
+        effective_request = request
+        repair_history: list[dict[str, Any]] = []
+        final_result: AircraftDesignRunResult | None = None
+        attempts_allowed = request.max_repair_attempts if request.auto_repair_enabled else 0
+        total_attempt_slots = attempts_allowed + 1
+
+        for attempt_index in range(attempts_allowed + 1):
+            remaining_seconds = deadline - time.monotonic()
+            if remaining_seconds <= 0.0:
+                break
+            final_result = self._run_solver_attempt(
+                request=effective_request,
+                task_dir=task_dir,
+                attempt_index=attempt_index,
+                timeout_seconds=remaining_seconds,
+                cancel_event=cancel_event,
+                on_progress=on_progress,
+                run_id=normalized_run_id,
+                progress_start=10 + round(70 * attempt_index / total_attempt_slots),
+                progress_end=10 + round(70 * (attempt_index + 1) / total_attempt_slots),
+            )
+            if repair_history:
+                repair_history[-1]["result_status"] = final_result.status.value
+                repair_history[-1]["result_output_dir"] = (
+                    str(final_result.output_dir) if final_result.output_dir else None
+                )
+            if final_result.status is DesignRunStatus.COMPLETED:
+                break
+            if final_result.status in {
+                DesignRunStatus.CANCELLED,
+                DesignRunStatus.TIMED_OUT,
+                DesignRunStatus.FAILED,
+            }:
+                break
+            if attempt_index >= attempts_allowed:
+                break
+            proposal = propose_aircraft_design_repair(
+                effective_request,
+                final_result.engineering,
+                final_result.design_data,
+                repair_attempt=attempt_index + 1,
+            )
+            if proposal is None:
+                break
+            repair_history.append(proposal.record)
+            effective_request = proposal.request
+            self._emit(
+                on_progress,
+                DesignRunStage.PREPARING,
+                f"第 {attempt_index + 1} 轮未通过，正在应用有界自动修正",
+                10 + round(70 * (attempt_index + 1) / total_attempt_slots),
+                {
+                    "repair_attempt": attempt_index + 1,
+                    "requirements_changed": False,
+                    "actions": proposal.record["actions"],
+                },
+            )
+
+        if final_result is None:
+            raise TimeoutError("aircraft design timeout expired before the first solver attempt")
+
+        final_result.request = original_request
+        final_result.started_at = started_wall
+        finished_clock = time.monotonic()
+        final_result.finished_at = datetime.now().isoformat(timespec="seconds")
+        final_result.duration_seconds = round(finished_clock - started_clock, 3)
+        self._attach_auto_repair_metadata(
+            final_result,
+            enabled=original_request.auto_repair_enabled,
+            max_repair_attempts=original_request.max_repair_attempts,
+            repair_history=repair_history,
+        )
+        (task_dir / "run_result.json").write_text(
+            json.dumps(final_result.to_dict(), ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        final_stage = {
+            DesignRunStatus.COMPLETED: DesignRunStage.COMPLETED,
+            DesignRunStatus.NONCONVERGED: DesignRunStage.NONCONVERGED,
+            DesignRunStatus.ENGINEERING_INFEASIBLE: DesignRunStage.ENGINEERING_INFEASIBLE,
+            DesignRunStatus.CANCELLED: DesignRunStage.CANCELLED,
+            DesignRunStatus.TIMED_OUT: DesignRunStage.TIMED_OUT,
+        }.get(final_result.status, DesignRunStage.FAILED)
+        final_message = {
+            DesignRunStatus.COMPLETED: "总体设计计算完成并通过结果校验",
+            DesignRunStatus.NONCONVERGED: "总体设计计算完成，但结果未收敛",
+            DesignRunStatus.ENGINEERING_INFEASIBLE: "总体设计计算已收敛，但方案未通过工程约束",
+            DesignRunStatus.CANCELLED: "总体设计任务已取消",
+            DesignRunStatus.TIMED_OUT: "总体设计任务执行超时",
+        }.get(final_result.status, "总体设计任务执行失败")
+        self._emit(
+            on_progress,
+            final_stage,
+            final_message,
+            100,
+            {
+                "status": final_result.status.value,
+                "issue_count": len(final_result.issues),
+                "auto_repair_attempts": len(repair_history),
+            },
+        )
+        return final_result
+
+    def _run_solver_attempt(
+        self,
+        *,
+        request: AircraftDesignRequest,
+        task_dir: Path,
+        attempt_index: int,
+        timeout_seconds: float,
+        cancel_event: threading.Event | None,
+        on_progress: ProgressCallback | None,
+        run_id: str,
+        progress_start: int,
+        progress_end: int,
+    ) -> AircraftDesignRunResult:
+        attempt_dir = task_dir / f"attempt-{attempt_index:02d}"
+        attempt_dir.mkdir()
+        input_path = attempt_dir / "sizing_input.json"
+        output_base = attempt_dir / "output"
         output_base.mkdir()
         input_path.write_text(
             json.dumps(request.to_upstream_dict(), ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
-
         command = [
             str(self.python_executable),
             "-m",
@@ -894,8 +1023,13 @@ class AircraftDesignRunner:
         ]
         started_wall = datetime.now().isoformat(timespec="seconds")
         started_clock = time.monotonic()
-        self._emit(on_progress, DesignRunStage.PREPARING, "输入已校验，准备启动总体设计计算", 10)
-
+        self._emit(
+            on_progress,
+            DesignRunStage.PREPARING,
+            f"输入已校验，准备启动总体设计计算（第 {attempt_index + 1} 轮）",
+            progress_start,
+            {"attempt": attempt_index + 1},
+        )
         env = os.environ.copy()
         current_pythonpath = env.get("PYTHONPATH")
         env["PYTHONPATH"] = (
@@ -915,11 +1049,10 @@ class AircraftDesignRunner:
         self._emit(
             on_progress,
             DesignRunStage.RUNNING,
-            "上游总体设计求解器正在运行",
-            35,
-            {"pid": process.pid},
+            f"总体设计求解器正在运行（第 {attempt_index + 1} 轮）",
+            progress_start + max(1, (progress_end - progress_start) // 2),
+            {"pid": process.pid, "attempt": attempt_index + 1},
         )
-
         stdout = ""
         stderr = ""
         status_override: DesignRunStatus | None = None
@@ -941,16 +1074,28 @@ class AircraftDesignRunner:
                     break
 
         output_dir = self._latest_output_dir(output_base)
-        self._emit(on_progress, DesignRunStage.VALIDATING, "计算结束，正在校验工程结果", 80)
+        self._emit(
+            on_progress,
+            DesignRunStage.VALIDATING,
+            f"第 {attempt_index + 1} 轮计算结束，正在校验工程结果",
+            progress_end,
+            {"attempt": attempt_index + 1},
+        )
         issues, design_data, artifacts, converged = self.validate_output(
             request=request,
             output_dir=output_dir,
             exit_code=process.returncode,
         )
+        self._apply_declared_user_requirements(design_data, request)
         engineering = extract_engineering_result(
             design_data,
             output_dir=output_dir,
             request=request,
+        )
+        _append_engineering_issues(
+            issues,
+            engineering,
+            schema_v2=_is_v2_schema(design_data),
         )
         status = status_override or self._status_from_validation(
             process.returncode,
@@ -958,53 +1103,301 @@ class AircraftDesignRunner:
             issues,
             engineering=engineering,
         )
-        finished_clock = time.monotonic()
-        result = AircraftDesignRunResult(
-            run_id=normalized_run_id,
+        normalized_exit_code = process.returncode
+        if (
+            process.returncode == 0
+            and status is DesignRunStatus.ENGINEERING_INFEASIBLE
+            and isinstance(design_data, dict)
+        ):
+            normalized_exit_code = 2
+            provenance = design_data.get("provenance")
+            if not isinstance(provenance, dict):
+                provenance = {}
+                design_data["provenance"] = provenance
+            provenance["runner_validation"] = {
+                "solver_exit_code": process.returncode,
+                "normalized_exit_code": normalized_exit_code,
+                "reason": "supplemental blocking requirement failed after solver completion",
+            }
+        return AircraftDesignRunResult(
+            run_id=run_id,
             status=status,
             request=request,
             task_dir=task_dir,
             input_path=input_path,
             output_dir=output_dir,
             command=command,
-            exit_code=process.returncode,
+            exit_code=normalized_exit_code,
             stdout=stdout,
             stderr=stderr,
             started_at=started_wall,
             finished_at=datetime.now().isoformat(timespec="seconds"),
-            duration_seconds=round(finished_clock - started_clock, 3),
+            duration_seconds=round(time.monotonic() - started_clock, 3),
             converged=converged,
             design_data=design_data,
             artifacts=artifacts,
             issues=issues,
             engineering=engineering,
         )
-        (task_dir / "run_result.json").write_text(
-            json.dumps(result.to_dict(), ensure_ascii=False, indent=2),
-            encoding="utf-8",
+
+    @staticmethod
+    def _apply_declared_user_requirements(
+        design_data: dict[str, Any] | None,
+        request: AircraftDesignRequest,
+    ) -> None:
+        if not isinstance(design_data, dict):
+            return
+        provenance = request.provenance
+        declared = provenance.get("user_requirements")
+        if not isinstance(declared, dict):
+            nested = provenance.get("user_provenance")
+            declared = nested.get("user_requirements") if isinstance(nested, dict) else None
+        if not isinstance(declared, dict) or not declared:
+            return
+
+        outputs = design_data.get("outputs")
+        if not isinstance(outputs, dict):
+            outputs = {}
+        constraints = design_data.get("constraints")
+        if not isinstance(constraints, list):
+            constraints = []
+            design_data["constraints"] = constraints
+        existing_ids = {
+            str(item.get("id")) for item in constraints if isinstance(item, dict)
+        }
+        declared_constraints: list[dict[str, Any]] = []
+
+        def add_constraint(
+            constraint_id: str,
+            label: str,
+            direction: str,
+            required: float,
+            actual: float | None,
+            unit: str,
+            model: str,
+            recommendation: str,
+        ) -> None:
+            margin = None
+            if actual is not None:
+                margin = actual - required if direction == "minimum" else required - actual
+            declared_constraints.append(
+                {
+                    "id": constraint_id,
+                    "label": label,
+                    "category": "declared_requirement",
+                    "direction": direction,
+                    "required": required,
+                    "actual": actual,
+                    "unit": unit,
+                    "margin": margin,
+                    "margin_ratio": (
+                        margin / abs(required) if margin is not None and required != 0.0 else None
+                    ),
+                    "tolerance": 0.0,
+                    "passed": margin is not None and margin >= 0.0,
+                    "severity": "error",
+                    "blocking": True,
+                    "evidence": {"model": model, "prediction": actual is not None},
+                    "recommendation": recommendation,
+                }
+            )
+
+        max_mtow = _finite_number(declared.get("max_mtow_kg"))
+        if max_mtow is not None:
+            add_constraint(
+                "declared.max_mtow_kg",
+                "Maximum takeoff weight",
+                "maximum",
+                max_mtow,
+                _finite_number(outputs.get("mtow_kg")),
+                "kg",
+                "Closed Class I/II takeoff mass",
+                "Reduce payload or mission demand, improve technology assumptions, or relax the MTOW cap.",
+            )
+
+        max_ar = _finite_number(declared.get("max_aspect_ratio"))
+        if max_ar is not None:
+            inputs = design_data.get("inputs")
+            initial = inputs.get("initial_guess") if isinstance(inputs, dict) else None
+            actual_ar = _finite_number(initial.get("aspect_ratio")) if isinstance(initial, dict) else None
+            add_constraint(
+                "declared.max_aspect_ratio",
+                "Maximum aspect ratio",
+                "maximum",
+                max_ar,
+                actual_ar,
+                "ratio",
+                "Final revalidated initial-geometry contract",
+                "Reduce aspect ratio without relaxing the declared limit.",
+            )
+
+        min_endurance = _finite_number(declared.get("min_cruise_endurance_s"))
+        if min_endurance is not None:
+            advanced = design_data.get("advanced_results")
+            mission = advanced.get("stage4_mission") if isinstance(advanced, dict) else None
+            segments = mission.get("segment_breakdown") if isinstance(mission, dict) else None
+            cruise_time = None
+            if isinstance(segments, list):
+                for segment in segments:
+                    if not isinstance(segment, dict) or segment.get("name") != "cruise":
+                        continue
+                    details = segment.get("details")
+                    cruise_time = _finite_number(details.get("time_s")) if isinstance(details, dict) else None
+                    break
+            add_constraint(
+                "declared.min_cruise_endurance_s",
+                "Minimum cruise endurance",
+                "minimum",
+                min_endurance,
+                cruise_time,
+                "s",
+                "Segment mission cruise duration",
+                "Increase mission cruise distance or reduce cruise speed; do not relabel total mission time as cruise endurance.",
+            )
+
+        unsupported_fields = sorted(
+            field
+            for field in (
+                "max_flight_mach",
+                "launch_mode",
+                "launch_field_altitude_m",
+                "booster_end_mach",
+                "booster_end_relative_altitude_m",
+                "recovery_mode",
+                "parachute_open_mach",
+                "parachute_open_relative_altitude_m",
+                "engine_count",
+                "configuration_reference",
+            )
+            if field in declared
         )
-        final_stage = {
-            DesignRunStatus.COMPLETED: DesignRunStage.COMPLETED,
-            DesignRunStatus.NONCONVERGED: DesignRunStage.NONCONVERGED,
-            DesignRunStatus.ENGINEERING_INFEASIBLE: DesignRunStage.ENGINEERING_INFEASIBLE,
-            DesignRunStatus.CANCELLED: DesignRunStage.CANCELLED,
-            DesignRunStatus.TIMED_OUT: DesignRunStage.TIMED_OUT,
-        }.get(status, DesignRunStage.FAILED)
-        final_message = {
-            DesignRunStatus.COMPLETED: "总体设计计算完成并通过结果校验",
-            DesignRunStatus.NONCONVERGED: "总体设计计算完成，但结果未收敛",
-            DesignRunStatus.ENGINEERING_INFEASIBLE: "总体设计计算已收敛，但方案未通过工程约束",
-            DesignRunStatus.CANCELLED: "总体设计任务已取消",
-            DesignRunStatus.TIMED_OUT: "总体设计任务执行超时",
-        }.get(status, "总体设计任务执行失败")
-        self._emit(
-            on_progress,
-            final_stage,
-            final_message,
-            100,
-            {"status": status.value, "issue_count": len(issues)},
+        if unsupported_fields:
+            add_constraint(
+                "declared.special_mission_model_coverage",
+                "Special mission model coverage",
+                "minimum",
+                1.0,
+                0.0,
+                "boolean",
+                "Current Class I/II model does not validate: " + ", ".join(unsupported_fields),
+                "Add dedicated launch, recovery, installation, maximum-speed, and configuration models before delivery.",
+            )
+
+        for item in declared_constraints:
+            if item["id"] not in existing_ids:
+                constraints.append(item)
+        all_declared_pass = bool(declared_constraints) and all(
+            item["passed"] is True for item in declared_constraints
         )
-        return result
+        stages = design_data.get("stage_status")
+        if not isinstance(stages, dict):
+            stages = {}
+            design_data["stage_status"] = stages
+        if declared_constraints:
+            stages["declared_requirements"] = {
+                "status": "completed" if all_declared_pass else "failed",
+                "blocking": True,
+                "message": (
+                    "All declared supplemental requirements were revalidated."
+                    if all_declared_pass
+                    else "One or more declared supplemental requirements failed or lack a model."
+                ),
+            }
+        existing_feasible = design_data.get("engineering_feasible") is True
+        combined_feasible = existing_feasible and (
+            all_declared_pass if declared_constraints else True
+        )
+        design_data["engineering_feasible"] = combined_feasible
+        outputs["engineering_feasible"] = combined_feasible
+        status = design_data.get("status")
+        if isinstance(status, dict):
+            status["engineering_feasible"] = combined_feasible
+            status["overall"] = "feasible" if combined_feasible else "infeasible"
+
+    def _attach_auto_repair_metadata(
+        self,
+        result: AircraftDesignRunResult,
+        *,
+        enabled: bool,
+        max_repair_attempts: int,
+        repair_history: list[dict[str, Any]],
+    ) -> None:
+        payload = {
+            "enabled": enabled,
+            "strategy": "bounded_design_variables_only",
+            "max_repair_attempts": max_repair_attempts,
+            "attempts_executed": len(repair_history),
+            "requirements_changed": False,
+            "succeeded_after_repair": bool(repair_history)
+            and result.status is DesignRunStatus.COMPLETED,
+            "search_exhausted": bool(repair_history)
+            and result.status is not DesignRunStatus.COMPLETED
+            and len(repair_history) >= max_repair_attempts,
+            "history": repair_history,
+        }
+        if not isinstance(result.design_data, dict):
+            return
+        result.design_data["auto_repair"] = payload
+        provenance = result.design_data.get("provenance")
+        if not isinstance(provenance, dict):
+            provenance = {}
+            result.design_data["provenance"] = provenance
+        provenance["auto_repair"] = payload
+        outputs = result.design_data.get("outputs")
+        if isinstance(outputs, dict):
+            outputs["auto_repair"] = payload
+        if result.output_dir is not None:
+            (result.output_dir / "design_data.json").write_text(
+                json.dumps(result.design_data, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            if repair_history:
+                self._append_repair_report(result.output_dir, payload)
+        result.engineering = extract_engineering_result(
+            result.design_data,
+            output_dir=result.output_dir,
+            request=result.request,
+        )
+
+    @staticmethod
+    def _append_repair_report(output_dir: Path, payload: dict[str, Any]) -> None:
+        marker = "## 有界自动修正审计"
+        lines = [
+            "",
+            marker,
+            "",
+            "自动修正只改变设计变量，未修改用户任务需求。每轮修正后均重新执行完整 Class I/II 阶段门。",
+            "",
+            "| 轮次 | 参数 | 原值 | 新值 | 触发约束 |",
+            "|---:|---|---:|---:|---|",
+        ]
+        for record in payload.get("history", []):
+            if not isinstance(record, dict):
+                continue
+            attempt = record.get("repair_attempt", "-")
+            for action in record.get("actions", []):
+                if not isinstance(action, dict):
+                    continue
+                triggers = ", ".join(action.get("trigger_constraint_ids", []))
+                lines.append(
+                    f"| {attempt} | `{action.get('path', '-')}` | {action.get('from', '-')} | "
+                    f"{action.get('to', '-')} | {triggers or '-'} |"
+                )
+        lines.extend(
+            [
+                "",
+                f"最终状态：`{'可行' if payload.get('succeeded_after_repair') else '未找到可行解'}`。",
+                "",
+            ]
+        )
+        appendix = "\n".join(lines)
+        for name in ("design_report_unified.md", "design_report_v2.md", "design_report.md"):
+            path = output_dir / name
+            if not path.is_file():
+                continue
+            content = path.read_text(encoding="utf-8")
+            if marker not in content:
+                path.write_text(content.rstrip() + "\n" + appendix, encoding="utf-8")
 
     def validate_output(
         self,
@@ -1224,7 +1617,7 @@ class AircraftDesignRunner:
     ) -> DesignRunStatus:
         if exit_code not in (0, 2, None):
             return DesignRunStatus.FAILED
-        if exit_code == 2 or converged is False:
+        if converged is False:
             return DesignRunStatus.NONCONVERGED
         if converged is None:
             return DesignRunStatus.FAILED
@@ -1242,6 +1635,8 @@ class AircraftDesignRunner:
             return DesignRunStatus.FAILED
         if engineering is not None and engineering.engineering_feasible is False:
             return DesignRunStatus.ENGINEERING_INFEASIBLE
+        if exit_code == 2:
+            return DesignRunStatus.FAILED
         if any(issue.severity == "error" for issue in issues):
             return DesignRunStatus.FAILED
         return DesignRunStatus.COMPLETED

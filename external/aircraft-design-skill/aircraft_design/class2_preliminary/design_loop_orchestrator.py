@@ -35,18 +35,28 @@ from .weights_system import (
 from .propulsion import (
     PropulsionModel,
     build_propulsion_model,
-    cruise_fuel_fraction,
     cruise_range_from_fuel_fraction_m,
     propulsion_energy_metadata,
 )
+from .mission import mission_fuel_breakdown
 from .stability_control import (
     tail_areas_from_volume_coefficients,
 )
 from ..common.atmosphere import isa_tropopause
 from ..common.units import CONST
 from .visualization_realtime import RealTimeVisualizer
-from ..class3_detailed.geometry_detailed import ParametricGeometry, DetailedWing, DetailedFuselage, DetailedTail
+from ..class3_detailed.geometry_detailed import (
+    DetailedFuselage,
+    DetailedTail,
+    DetailedWing,
+    ParametricGeometry,
+)
 from ..class3_detailed.geometry_shape import geometry_shape_from_inputs
+from ..class3_detailed.structures_loads import (
+    estimate_structural_weight_feedback,
+    estimate_wing_root_loads,
+)
+from .geometry_constraints import estimate_usable_fuel_volume
 
 
 @dataclass
@@ -104,6 +114,8 @@ class InitialGuess:
     jet_tsfc_kg_per_n_s: float | None = None
     prop_bsfc_kg_per_j: float | None = None
     prop_efficiency: float = 0.8
+    cg_fraction_cbar: float = 0.30
+    horizontal_tail_volume_coefficient: float = 0.40
 
 
 @dataclass
@@ -134,6 +146,7 @@ class SizedAircraft:
     constraints: list[dict] = field(default_factory=list)
     stage_status: dict = field(default_factory=dict)
     propulsion_energy: dict = field(default_factory=dict)
+    design_adjustments: list[dict] = field(default_factory=list)
 
     @property
     def numerical_converged(self) -> bool:
@@ -148,8 +161,20 @@ def _predicted_range_from_fuel_m(
     cruise_speed_m_s: float,
     lift_to_drag: float,
     propulsion_model: PropulsionModel,
+    mission_breakdown: dict | None = None,
 ) -> float | None:
-    """Invert the same Class I Breguet model using the computed fuel load."""
+    """Predict total mission range using the closed segment fuel state."""
+
+    if isinstance(mission_breakdown, dict):
+        segments = mission_breakdown.get("segments", [])
+        if isinstance(segments, list):
+            segment_distance = sum(
+                float(segment.get("details", {}).get("distance_m", 0.0))
+                for segment in segments
+                if isinstance(segment, dict)
+            )
+            if segment_distance > 0.0:
+                return segment_distance
 
     reserve_multiplier = 1.0 + max(0.0, reserve_fraction)
     if mtow_kg <= 0.0 or cruise_speed_m_s <= 0.0 or lift_to_drag <= 0.0:
@@ -180,6 +205,7 @@ def _evaluate_class1_constraints(
     numerical_error_ratio: float,
     tolerance: float,
     obstacle_height_m: float,
+    mission_breakdown: dict | None = None,
 ) -> tuple[dict[str, float | None], list[dict]]:
     """Independently predict Class I performance and normalize its constraints."""
 
@@ -210,6 +236,7 @@ def _evaluate_class1_constraints(
         cruise_speed_m_s=cruise_speed_m_s,
         lift_to_drag=lift_to_drag,
         propulsion_model=propulsion_model,
+        mission_breakdown=mission_breakdown,
     )
 
     constraints = [
@@ -221,9 +248,24 @@ def _evaluate_class1_constraints(
             required=requirements.range_m,
             actual=range_prediction,
             unit="m",
-            evidence={"model": "Breguet range inversion", "prediction": True, "reserve_fraction": requirements.reserve_fraction},
+            evidence={
+                "model": "Segment mission integration" if mission_breakdown else "Breguet range inversion",
+                "prediction": True,
+                "reserve_fraction": requirements.reserve_fraction,
+            },
             recommendation="Reduce range or payload, improve L/D, or reduce cruise SFC.",
             tolerance=max(1.0, requirements.range_m * 1e-9),
+        ),
+        normalized_constraint(
+            constraint_id="class1.fuel_fraction",
+            label="Mission fuel mass fraction",
+            category="weight",
+            direction="maximum",
+            required=0.60,
+            actual=fuel_weight_kg / mtow_kg if mtow_kg > 0.0 else None,
+            unit="ratio",
+            evidence={"model": "Segment mission mass closure", "prediction": True},
+            recommendation="Reduce mission demand or improve aerodynamic and propulsion efficiency.",
         ),
         normalized_constraint(
             constraint_id="class1.takeoff_distance",
@@ -442,6 +484,10 @@ def sizing_loop(
         mtow = guess.mtow_kg
         history = []
         last_state: dict | None = None
+        relaxation = 0.60
+        current_thickness_ratio = guess.thickness_ratio
+        max_thickness_ratio = 0.14 if requirements.cruise_mach >= 0.70 else 0.18
+        design_adjustments: list[dict] = []
 
         # polar was created above
 
@@ -464,6 +510,8 @@ def sizing_loop(
 
         for i in range(max_iter):
             mtow_old = mtow
+            iteration_ws = current_ws
+            iteration_thickness_ratio = current_thickness_ratio
 
             # Safety check for divergence
             if mtow > 1e7 or math.isnan(mtow):  # 10,000 tons is absurd
@@ -504,7 +552,7 @@ def sizing_loop(
                             aspect_ratio=guess.aspect_ratio,
                             taper_ratio=guess.taper_ratio,
                             sweep_qc=guess.sweep_deg,
-                            thickness_to_chord_root=guess.thickness_ratio,
+                            thickness_to_chord_root=iteration_thickness_ratio,
                             dihedral=2.0,
                             incidence=0.5,
                         ),
@@ -529,7 +577,7 @@ def sizing_loop(
                             aspect_ratio=guess.aspect_ratio,
                             taper_ratio=guess.taper_ratio,
                             sweep_qc=guess.sweep_deg,
-                            thickness_to_chord_root=guess.thickness_ratio,
+                            thickness_to_chord_root=iteration_thickness_ratio,
                             dihedral=3.0,
                             incidence=1.0,
                             twist=0.5,
@@ -645,7 +693,7 @@ def sizing_loop(
                 sweep_quarter_chord_deg=guess.sweep_deg,
                 taper_ratio=guess.taper_ratio,
                 max_takeoff_weight_kg=mtow,
-                t_c=guess.thickness_ratio,
+                t_c=iteration_thickness_ratio,
                 n_limit=requirements.max_load_factor * 1.5 / 1.5,  # Limit load
             )
 
@@ -684,6 +732,27 @@ def sizing_loop(
             )
 
             w_struct_total = w_wing.w_struct_kg + w_fus.w_struct_kg + w_lg.w_struct_kg + w_tails.w_struct_kg
+
+            # Use the same analytical wingbox model as the advanced structures
+            # stage and close its weight before declaring MTOW convergence.
+            wing_root_loads = estimate_wing_root_loads(
+                w0_kg=mtow,
+                b_m=b_wing,
+                n_limit=requirements.max_load_factor,
+                lift_distribution="elliptic",
+            )
+            detailed_wing_structure = estimate_structural_weight_feedback(
+                loads=wing_root_loads,
+                s_m2=s_wing,
+                t_c=iteration_thickness_ratio,
+            )
+            w_struct_total = max(
+                w_struct_total,
+                detailed_wing_structure.w_struct_kg
+                + w_fus.w_struct_kg
+                + w_lg.w_struct_kg
+                + w_tails.w_struct_kg,
+            )
 
             # Propulsion & Systems
             # Detect UAV scale: use electric/prop assumptions for small aircraft
@@ -772,8 +841,8 @@ def sizing_loop(
             # Empty Weight
             we_calc = w_struct_total + w_systems_total
 
-            # 3. Fuel Fraction / Mission Fuel. The propulsion model owns the
-            # jet TSFC versus propeller BSFC branch and its canonical units.
+            # 3. Segment mission fuel. Class I and Class II intentionally use
+            # the same taxi/climb/cruise/descent/reserve model.
 
             # Cruise L/D
             # q = 0.5 * rho * V^2
@@ -786,13 +855,87 @@ def sizing_loop(
             cd_cruise = polar.cd(cl_cruise)
             ld_cruise = cl_cruise / cd_cruise
 
-            fuel_fraction = cruise_fuel_fraction(
-                propulsion_model,
-                range_m=requirements.range_m,
-                cruise_speed_m_s=v_cruise,
-                lift_to_drag=ld_cruise,
+            v_stall_m_s = math.sqrt(
+                2.0 * current_ws / max(rho_sl * requirements.cl_max_landing, 1e-9)
             )
-            w_fuel_mission = mtow * fuel_fraction * (1.0 + requirements.reserve_fraction)
+            mission_breakdown = mission_fuel_breakdown(
+                w0_kg=mtow,
+                s_m2=s_wing,
+                polar=polar,
+                propulsion=propulsion_model,
+                mission={
+                    "range_m": requirements.range_m,
+                    "cruise_altitude_m": requirements.cruise_altitude_m,
+                    "cruise_speed_m_s": v_cruise,
+                    "v_stall_m_s": v_stall_m_s,
+                    "assumed_climb_rate_m_s": requirements.assumed_climb_rate_m_s,
+                    "reserve_fraction": requirements.reserve_fraction,
+                },
+                isa_delta_c=requirements.isa_delta_c,
+            )
+            fuel_fraction = float(mission_breakdown["fuel_fraction_total"])
+            w_fuel_mission = mtow * fuel_fraction
+
+            fuel_volume = estimate_usable_fuel_volume(
+                wing_area_m2=s_wing,
+                wing_span_m=b_wing,
+                thickness_ratio=iteration_thickness_ratio,
+                taper_ratio=guess.taper_ratio,
+                fuselage_length_m=l_fus,
+                fuselage_diameter_m=l_fus / 9.0,
+                aircraft_role=requirements.aircraft_role,
+            )
+            available_fuel_volume_m3 = fuel_volume["total_m3"]
+            required_fuel_volume_m3 = 1.05 * w_fuel_mission / 800.0
+            repair_actions: list[dict] = []
+            if available_fuel_volume_m3 + 1e-12 < required_fuel_volume_m3:
+                target_thickness_ratio = min(
+                    max_thickness_ratio,
+                    iteration_thickness_ratio
+                    * required_fuel_volume_m3
+                    / max(available_fuel_volume_m3, 1e-12),
+                )
+                if target_thickness_ratio > iteration_thickness_ratio * 1.001:
+                    repair_actions.append(
+                        {
+                            "parameter": "thickness_ratio",
+                            "from": iteration_thickness_ratio,
+                            "to": target_thickness_ratio,
+                            "reason": "wing_fuel_volume",
+                        }
+                    )
+                    current_thickness_ratio = target_thickness_ratio
+
+                adjusted_volume_m3 = fuel_volume["fuselage_or_center_tank_m3"] + fuel_volume[
+                    "wing_m3"
+                ] * (current_thickness_ratio / max(iteration_thickness_ratio, 1e-12))
+                if adjusted_volume_m3 + 1e-12 < required_fuel_volume_m3:
+                    area_scale = (required_fuel_volume_m3 / max(adjusted_volume_m3, 1e-12)) ** (2.0 / 3.0)
+                    target_wing_loading_pa = max(
+                        minimum_wing_loading_pa,
+                        iteration_ws * 0.85,
+                        iteration_ws / (1.02 * area_scale),
+                    )
+                    if target_wing_loading_pa < iteration_ws * 0.999:
+                        repair_actions.append(
+                            {
+                                "parameter": "wing_loading_pa",
+                                "from": iteration_ws,
+                                "to": target_wing_loading_pa,
+                                "reason": "wing_fuel_volume",
+                            }
+                        )
+                        current_ws = target_wing_loading_pa
+
+                design_adjustments.append(
+                    {
+                        "iteration": i,
+                        "failed_check_id": "advanced.geometry.fuel_volume",
+                        "required_volume_m3": required_fuel_volume_m3,
+                        "available_volume_m3": available_fuel_volume_m3,
+                        "actions": repair_actions,
+                    }
+                )
 
             # 4. Convergence Check
             w_calc = we_calc + w_fuel_mission + requirements.payload_kg
@@ -808,6 +951,9 @@ def sizing_loop(
                     "payload_weight": requirements.payload_kg,
                     "error": abs(w_calc - mtow),
                     "relative_error": relative_error,
+                    "wing_loading_pa": iteration_ws,
+                    "thickness_ratio": iteration_thickness_ratio,
+                    "design_adjustments": repair_actions,
                 }
             )
 
@@ -819,6 +965,7 @@ def sizing_loop(
                 "mtow_kg": mtow,
                 "empty_weight_kg": we_calc,
                 "fuel_weight_kg": w_fuel_mission,
+                "mission_breakdown": mission_breakdown,
                 "wing_area_m2": s_wing,
                 "thrust_sl_n": thrust_req,
                 "weight_breakdown": {
@@ -835,6 +982,7 @@ def sizing_loop(
                     "root_chord_m": c_root_iter,
                     "taper_ratio": guess.taper_ratio,
                     "sweep_deg": guess.sweep_deg,
+                    "thickness_ratio": iteration_thickness_ratio,
                     "fuselage_length_m": l_fus,
                     "fuselage_diameter_m": l_fus / 9.0,
                     "s_ht_m2": tail_geo["s_ht_m2"],
@@ -844,6 +992,11 @@ def sizing_loop(
                 "cruise_speed_m_s": v_cruise,
                 "lift_to_drag": ld_cruise,
                 "relative_error": relative_error,
+                "fuel_volume": {
+                    "available_m3": available_fuel_volume_m3,
+                    "required_m3_with_reserve": required_fuel_volume_m3,
+                    **fuel_volume,
+                },
             }
 
             print(
@@ -853,7 +1006,7 @@ def sizing_loop(
                 f"DEBUG: Breakdown: Struct={w_struct_total:.1f}, Sys={w_systems_total:.1f}, Fus={w_fus.w_struct_kg:.1f}, Wing={w_wing.w_struct_kg:.1f}, Prop={w_prop_sys.w_system_kg:.1f}"
             )
 
-            if relative_error < tolerance:
+            if relative_error < tolerance and not repair_actions:
                 # Converged
                 if viz:
                     # Update Payload-Range Diagram (Schematic)
@@ -883,6 +1036,7 @@ def sizing_loop(
                     numerical_error_ratio=relative_error,
                     tolerance=tolerance,
                     obstacle_height_m=obstacle_height_m,
+                    mission_breakdown=last_state.get("mission_breakdown"),
                 )
                 engineering_feasible = all(c["passed"] for c in constraints if c["blocking"])
                 return SizedAircraft(
@@ -901,6 +1055,7 @@ def sizing_loop(
                     design_point={
                         "thrust_to_weight": current_tw,
                         "wing_loading_pa": current_ws,
+                        "thickness_ratio": current_thickness_ratio,
                     },
                     drag_params={
                         "cd0": guess.cd0,
@@ -923,10 +1078,11 @@ def sizing_loop(
                         },
                     },
                     propulsion_energy=propulsion_energy,
+                    design_adjustments=design_adjustments,
                 )
 
             # Update MTOW with relaxation
-            mtow = 0.5 * mtow + 0.5 * w_calc
+            mtow = (1.0 - relaxation) * mtow + relaxation * w_calc
 
         if last_state is None:
             s_wing = mtow * CONST.g0_m_s2 / current_ws

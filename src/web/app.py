@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import sys
@@ -13,7 +14,7 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qs, quote, urlparse
+from urllib.parse import parse_qs, quote, unquote, urlparse
 from uuid import uuid4
 
 from src.agent import Session
@@ -24,6 +25,7 @@ from src.design_execution import (
     AircraftDesignRequest,
     AircraftDesignRunner,
     DesignJobQueueFullError,
+    extract_engineering_result,
 )
 from src.providers import PROVIDER_INFO, get_provider_class
 from src.tool_system import ToolContext
@@ -74,9 +76,12 @@ DEFAULT_BROWSER_CAPABILITY_POLICY = BROWSER_CAPABILITY_PROFILES[WEB_AIRCRAFT_SKI
 
 
 WEB_STATIC_ROOT = Path(__file__).with_name("static")
+AIRCRAFT_WEB_ASSET_ROOT = Path(__file__).parents[2] / "external" / "aircraft-design-skill" / "assets"
 INDEX_HTML = (WEB_STATIC_ROOT / "index.html").read_text(encoding="utf-8")
 STYLES_CSS = (WEB_STATIC_ROOT / "styles.css").read_text(encoding="utf-8")
 APP_JS = (WEB_STATIC_ROOT / "app.js").read_text(encoding="utf-8")
+THREE_JS = (AIRCRAFT_WEB_ASSET_ROOT / "three.min.js").read_bytes()
+ORBIT_CONTROLS_JS = (AIRCRAFT_WEB_ASSET_ROOT / "OrbitControls.js").read_bytes()
 
 
 @dataclass
@@ -232,6 +237,37 @@ class ClawdWebService:
                 if source != "user":
                     assumptions.append({"path": path, "value": value, "source": source})
 
+        provided_solver = {
+            name: request_payload[name]
+            for name in (
+                "tolerance",
+                "max_iterations",
+                "auto_repair_enabled",
+                "max_repair_attempts",
+            )
+            if name in request_payload
+        }
+        solver_values = {
+            "tolerance": request.tolerance,
+            "max_iterations": request.max_iterations,
+            "auto_repair_enabled": request.auto_repair_enabled,
+            "max_repair_attempts": request.max_repair_attempts,
+        }
+        solver_provenance = provenance_fields.get("solver", {})
+        if not isinstance(solver_provenance, dict):
+            solver_provenance = {}
+        for name, value in solver_values.items():
+            path = f"solver.{name}"
+            declared = solver_provenance.get(name)
+            declared_source = declared.get("source") if isinstance(declared, dict) else None
+            if declared_source in {"user", "default", "derived"}:
+                source = declared_source
+            else:
+                source = "user" if name in provided_solver else "default"
+            field_sources[path] = source
+            if source != "user":
+                assumptions.append({"path": path, "value": value, "source": source})
+
         warnings: list[str] = []
         requirements = normalized.get("requirements", {})
         initial = normalized.get("initial_guess", {})
@@ -344,6 +380,277 @@ class ClawdWebService:
         if not self._is_under_workspace(path) or not path.is_dir():
             return None
         return path
+
+    def list_session_design_results(self, session_id: str) -> dict[str, Any]:
+        """Return view-only overall-design results produced by one conversation."""
+        state = self._require_session(session_id)
+        with state.lock:
+            results = [item[0] for item in self._session_design_result_entries(state)]
+        return {"session_id": session_id, "results": results}
+
+    def resolve_session_design_result_file(
+        self,
+        session_id: str,
+        result_id: str,
+        relative_path: str,
+    ) -> dict[str, Any]:
+        """Resolve a preview file only when it belongs to the requested session result."""
+        state = self._require_session(session_id)
+        with state.lock:
+            entries = self._session_design_result_entries(state)
+        for result, source_dir in entries:
+            if result.get("job_id") == result_id:
+                return self._artifact_store.resolve_result_file(source_dir, relative_path)
+        raise KeyError(f"Unknown session design result: {result_id}")
+
+    def _session_design_result_entries(
+        self,
+        state: WebSessionState,
+    ) -> list[tuple[dict[str, Any], Path]]:
+        session_id = state.session.session_id
+        session_root = self._aircraft_session_output_root(session_id).resolve()
+        result_sources: dict[Path, dict[str, Any]] = {}
+
+        for source_dir, artifact in self._session_design_artifact_sources(state):
+            candidates = sorted(source_dir.rglob("design_data.json"))
+            if not candidates:
+                continue
+            try:
+                source_dir.relative_to(session_root)
+                session_scoped = True
+            except ValueError:
+                session_scoped = False
+            if not session_scoped and len(candidates) > 1:
+                candidates = [max(candidates, key=lambda item: item.stat().st_mtime_ns)]
+            for data_path in candidates:
+                try:
+                    resolved_data = data_path.resolve()
+                    resolved_data.relative_to(source_dir)
+                    result_dir = resolved_data.parent
+                except (OSError, ValueError):
+                    continue
+                result_sources[result_dir] = artifact
+
+        entries: list[tuple[dict[str, Any], Path]] = []
+        for result_dir, artifact in result_sources.items():
+            data_path = result_dir / "design_data.json"
+            try:
+                design_data = json.loads(data_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            if not isinstance(design_data, dict):
+                continue
+            relative_source = result_dir.relative_to(self.workspace_root).as_posix()
+            digest = hashlib.sha256(
+                f"{session_id}\0{relative_source}".encode("utf-8")
+            ).hexdigest()[:16]
+            result_id = f"conversation-result-{digest}"
+            entries.append(
+                (
+                    self._serialize_session_design_result(
+                        state,
+                        result_id=result_id,
+                        result_dir=result_dir,
+                        design_data=design_data,
+                        artifact=artifact,
+                    ),
+                    result_dir,
+                )
+            )
+
+        entries.sort(
+            key=lambda item: (
+                str(item[0].get("finished_at") or ""),
+                item[1].stat().st_mtime_ns,
+            ),
+            reverse=True,
+        )
+        return entries
+
+    def _session_design_artifact_sources(
+        self,
+        state: WebSessionState,
+    ) -> list[tuple[Path, dict[str, Any]]]:
+        sources: dict[Path, dict[str, Any]] = {}
+        generated_root = (
+            self.workspace_root / ".clawd" / "generated" / "aircraft_design_runs"
+        ).resolve()
+        session_root = (generated_root / state.session.session_id).resolve()
+        for message in state.session.conversation.messages:
+            artifacts = getattr(message, "artifacts", []) or []
+            if not isinstance(artifacts, list):
+                continue
+            for artifact in artifacts:
+                if not isinstance(artifact, dict):
+                    continue
+                if artifact.get("kind") != "aircraft_design_result_zip":
+                    continue
+                source_value = artifact.get("source_dir")
+                if not isinstance(source_value, str) or not source_value.strip():
+                    continue
+                source_dir = Path(source_value).expanduser()
+                if not source_dir.is_absolute():
+                    source_dir = self.workspace_root / source_dir
+                try:
+                    source_dir = source_dir.resolve()
+                    source_dir.relative_to(self.workspace_root)
+                except (OSError, ValueError):
+                    continue
+                try:
+                    source_dir.relative_to(generated_root)
+                    generated_output = True
+                except ValueError:
+                    generated_output = False
+                if generated_output:
+                    try:
+                        source_dir.relative_to(session_root)
+                    except ValueError:
+                        continue
+                if source_dir.is_dir():
+                    sources[source_dir] = dict(artifact)
+        return list(sources.items())
+
+    def _serialize_session_design_result(
+        self,
+        state: WebSessionState,
+        *,
+        result_id: str,
+        result_dir: Path,
+        design_data: dict[str, Any],
+        artifact: dict[str, Any],
+    ) -> dict[str, Any]:
+        inputs = design_data.get("inputs")
+        inputs = inputs if isinstance(inputs, dict) else {}
+        requirements = inputs.get("requirements")
+        requirements = dict(requirements) if isinstance(requirements, dict) else {}
+        initial_guess = inputs.get("initial_guess")
+        initial_guess = dict(initial_guess) if isinstance(initial_guess, dict) else {}
+        solver_options = inputs.get("solver_options")
+        solver_options = solver_options if isinstance(solver_options, dict) else {}
+        project_name = str(design_data.get("project_name") or result_dir.name)
+        request: dict[str, Any] = {
+            "project_name": project_name,
+            "requirements": requirements,
+            "initial_guess": initial_guess,
+        }
+        for key in (
+            "tolerance",
+            "max_iterations",
+            "auto_repair_enabled",
+            "max_repair_attempts",
+        ):
+            if key in solver_options:
+                request[key] = solver_options[key]
+        if isinstance(design_data.get("provenance"), dict):
+            request["provenance"] = dict(design_data["provenance"])
+
+        engineering = extract_engineering_result(
+            design_data,
+            output_dir=result_dir,
+        ).to_dict()
+        outputs = design_data.get("outputs")
+        outputs = outputs if isinstance(outputs, dict) else {}
+        geometry = outputs.get("geometry")
+        geometry = geometry if isinstance(geometry, dict) else {}
+        performance = outputs.get("performance")
+        performance = performance if isinstance(performance, dict) else {}
+        design_point = engineering.get("design_point")
+        design_point = design_point if isinstance(design_point, dict) else {}
+        constraints = engineering.get("constraints")
+        constraints = constraints if isinstance(constraints, list) else []
+        issues = [
+            {
+                "code": "blocking_constraint_failed" if item.get("blocking") else "constraint_failed",
+                "message": f"{item.get('label') or item.get('id') or 'constraint'} did not pass",
+                "severity": "error" if item.get("blocking") else "warning",
+            }
+            for item in constraints
+            if isinstance(item, dict) and item.get("passed") is False
+        ]
+
+        numerical = engineering.get("numerical_converged")
+        feasible = engineering.get("engineering_feasible")
+        if numerical is False:
+            status = "nonconverged"
+            message = "总体设计计算未收敛"
+        elif feasible is False:
+            status = "engineering_infeasible"
+            message = "总体设计已完成，但方案未通过工程约束"
+        else:
+            status = "completed"
+            message = "总体设计结果已生成"
+
+        encoded_session = quote(state.session.session_id, safe="")
+        encoded_result = quote(result_id, safe="")
+        url_base = f"/api/sessions/{encoded_session}/design-results/{encoded_result}"
+        result_files = self._artifact_store.list_result_files(
+            result_id,
+            result_dir,
+            url_base=url_base,
+        )
+        timestamp = design_data.get("timestamp")
+        finished_at = (
+            str(timestamp)
+            if timestamp not in (None, "")
+            else str(artifact.get("created_at") or datetime.fromtimestamp(result_dir.stat().st_mtime).isoformat(timespec="seconds"))
+        )
+        auto_repair = outputs.get("auto_repair")
+        auto_repair = auto_repair if isinstance(auto_repair, dict) else {}
+        summary = {
+            "mtow_kg": outputs.get("mtow_kg"),
+            "empty_weight_kg": outputs.get("empty_weight_kg"),
+            "fuel_weight_kg": outputs.get("fuel_weight_kg"),
+            "payload_kg": requirements.get("payload_kg"),
+            "wing_area_m2": outputs.get("wing_area_m2"),
+            "thrust_sl_n": outputs.get("thrust_sl_n"),
+            "wing_loading_pa": design_point.get("wing_loading_pa"),
+            "thrust_to_weight": design_point.get("thrust_to_weight"),
+            "span_m": geometry.get("span_m"),
+            "mean_chord_m": geometry.get("mean_chord_m"),
+            "fuselage_length_m": geometry.get("fuselage_length_m"),
+            "iterations": outputs.get("iterations"),
+            "actual_range_m": performance.get("actual_range_m"),
+            "takeoff_distance_m": performance.get("takeoff_distance_m"),
+            "landing_distance_m": performance.get("landing_distance_m"),
+            "artifact_count": artifact.get("file_count", len(result_files)),
+            "issue_count": len(issues),
+            "engineering_feasible": feasible,
+            "engineering_status": engineering.get("overall_status"),
+            "blocking_failed_count": engineering.get("blocking_failed_count", 0),
+            "auto_repair_attempts": auto_repair.get("attempts_executed", 0),
+            "auto_repair_succeeded": auto_repair.get("succeeded_after_repair", False),
+        }
+        relative_source = result_dir.relative_to(self.workspace_root).as_posix()
+        artifact_copy = dict(artifact)
+        return {
+            "job_id": result_id,
+            "session_id": state.session.session_id,
+            "source": "conversation",
+            "status": status,
+            "stage": status,
+            "progress": 100,
+            "message": message,
+            "request": request,
+            "created_at": finished_at,
+            "started_at": None,
+            "finished_at": finished_at,
+            "terminal": True,
+            "last_sequence": 0,
+            "events": [],
+            "result": {
+                "run_id": result_id,
+                "status": status,
+                "output_dir": relative_source,
+                "duration_seconds": 0.0,
+                "converged": numerical,
+                "engineering": engineering,
+                "summary": summary,
+                "artifacts": [item.get("path") for item in result_files],
+                "issues": issues,
+            },
+            "result_files": result_files,
+            "artifacts": [artifact_copy],
+        }
 
     def create_session(
         self,
@@ -1061,6 +1368,9 @@ class ClawdWebService:
             "auto_approve": state.auto_approve,
             "auto_skill": self._to_browser_skill_name(state.auto_skill),
             "messages": self._serialize_messages(state.session),
+            "design_results": [
+                item[0] for item in self._session_design_result_entries(state)
+            ],
             "created_at": state.session.created_at,
             "updated_at": state.session.updated_at,
         }
@@ -1588,6 +1898,12 @@ class ClawdWebRequestHandler(BaseHTTPRequestHandler):
                 "text/javascript; charset=utf-8",
             )
             return
+        if parsed.path == "/static/vendor/three.min.js":
+            self._send_bytes(HTTPStatus.OK, THREE_JS, "text/javascript; charset=utf-8")
+            return
+        if parsed.path == "/static/vendor/OrbitControls.js":
+            self._send_bytes(HTTPStatus.OK, ORBIT_CONTROLS_JS, "text/javascript; charset=utf-8")
+            return
         if parsed.path == "/api/config":
             self._send_json(HTTPStatus.OK, self.server.service.get_bootstrap_payload())
             return
@@ -1599,6 +1915,59 @@ class ClawdWebRequestHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/api/sessions":
             self._send_json(HTTPStatus.OK, self.server.service.list_sessions_payload())
+            return
+        if parsed.path.startswith("/api/sessions/") and "/design-results/" in parsed.path and "/files/" in parsed.path:
+            session_and_result = parsed.path.removeprefix("/api/sessions/")
+            session_id, marker, result_and_path = session_and_result.partition("/design-results/")
+            result_id, file_marker, relative_path = result_and_path.partition("/files/")
+            if (
+                not marker
+                or not file_marker
+                or not session_id
+                or "/" in session_id
+                or not result_id
+                or "/" in result_id
+                or not relative_path
+            ):
+                self._send_error_json(HTTPStatus.NOT_FOUND, "未知会话设计结果文件")
+                return
+            query = parse_qs(parsed.query)
+            try:
+                result_file = self.server.service.resolve_session_design_result_file(
+                    unquote(session_id),
+                    unquote(result_id),
+                    relative_path,
+                )
+            except (KeyError, ValueError) as exc:
+                self._send_error_json(HTTPStatus.NOT_FOUND, str(exc))
+                return
+            download = (query.get("download") or ["0"])[0] in {"1", "true", "yes"}
+            if download:
+                self._send_download_file(
+                    HTTPStatus.OK,
+                    result_file["path"],
+                    result_file["content_type"],
+                    result_file["filename"],
+                )
+            else:
+                self._send_inline_file(
+                    HTTPStatus.OK,
+                    result_file["path"],
+                    result_file["content_type"],
+                    result_file["filename"],
+                )
+            return
+        if parsed.path.startswith("/api/sessions/") and parsed.path.endswith("/design-results"):
+            session_id = parsed.path.removeprefix("/api/sessions/").removesuffix("/design-results").strip("/")
+            if not session_id or "/" in session_id:
+                self._send_error_json(HTTPStatus.NOT_FOUND, "未知会话")
+                return
+            try:
+                payload = self.server.service.list_session_design_results(unquote(session_id))
+            except KeyError as exc:
+                self._send_error_json(HTTPStatus.NOT_FOUND, str(exc))
+                return
+            self._send_json(HTTPStatus.OK, payload)
             return
         if parsed.path == "/api/design-jobs":
             self._send_json(HTTPStatus.OK, self.server.service.list_design_jobs())

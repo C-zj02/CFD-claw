@@ -110,6 +110,27 @@ class ReportGeneratorV2:
 
     def _chapter_3_overall_scheme(self, ac: SizedAircraft) -> str:
         geo = ac.geometry
+        adjustment_rows = []
+        for adjustment in ac.design_adjustments:
+            for action in adjustment.get("actions", []):
+                adjustment_rows.append(
+                    f"| {adjustment.get('iteration', '-')} | {action.get('parameter', '-')} | "
+                    f"{action.get('from', 0):.6g} | {action.get('to', 0):.6g} | "
+                    f"{action.get('reason', '-')} |"
+                )
+        adjustment_section = (
+            "\n".join(
+                [
+                    "### 3.4 有界自动修复记录",
+                    "",
+                    "| 迭代 | 参数 | 原值 | 修复值 | 触发原因 |",
+                    "|:---:|:---|---:|---:|:---|",
+                    *adjustment_rows,
+                ]
+            )
+            if adjustment_rows
+            else "### 3.4 有界自动修复记录\n\n本方案未触发自动参数修复。"
+        )
         return f"""## 3. 总体方案设计
 
 ### 3.1 布局形式
@@ -124,9 +145,12 @@ class ReportGeneratorV2:
 | 翼展 | $b$ | {geo.get("span_m", 0):.2f} | m |
 | 展弦比 | $A$ | {geo.get("aspect_ratio", 0):.2f} | - |
 | 1/4弦线后掠角 | $\Lambda_{{1/4}}$ | {geo.get("sweep_deg", 0):.1f} | ° |
+| 翼型厚度比 | $t/c$ | {geo.get("thickness_ratio", 0):.3f} | - |
 | 机身长度 | $L_f$ | {geo.get("fuselage_length_m", 0):.2f} | m |
 | 平尾面积 | $S_{{ht}}$ | {geo.get("s_ht_m2", 0):.2f} | m² |
 | 垂尾面积 | $S_{{vt}}$ | {geo.get("s_vt_m2", 0):.2f} | m² |
+
+{adjustment_section}
 
 ---
 """

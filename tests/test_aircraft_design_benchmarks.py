@@ -12,7 +12,11 @@ from pathlib import Path
 
 import pytest
 
-from src.design_execution import AircraftDesignRequest
+from src.design_execution import (
+    AircraftDesignRequest,
+    AircraftDesignRunner,
+    DesignRunStatus,
+)
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -56,6 +60,8 @@ def _run_class1(request_payload: dict):
 def _metric(result, name: str) -> float:
     if name == "empty_fraction":
         return result.empty_weight_kg / result.mtow_kg
+    if name == "fuel_fraction":
+        return result.fuel_weight_kg / result.mtow_kg
     return float(getattr(result, name))
 
 
@@ -86,6 +92,55 @@ def test_aircraft_class1_cases_stay_inside_engineering_acceptance_envelopes(
     assert result.landing_distance_m <= request.requirements.landing_distance_m
     assert result.wing_area_m2 > 0.0
     assert result.thrust_sl_n > 0.0
+
+
+@pytest.mark.parametrize("case_path", CASE_PATHS, ids=lambda path: path.stem)
+def test_aircraft_cases_pass_complete_class2_delivery_gates(
+    case_path: Path,
+    tmp_path: Path,
+) -> None:
+    case = _load_case(case_path)
+    request = AircraftDesignRequest.from_dict(case["request"])
+    runner = AircraftDesignRunner(
+        PROJECT_ROOT,
+        generated_root=tmp_path / case["case_id"],
+    )
+
+    result = runner.run(
+        request,
+        timeout_seconds=30.0,
+        run_id=f"benchmark-{case['case_id']}",
+    )
+
+    assert result.status is DesignRunStatus.COMPLETED
+    assert result.exit_code == 0
+    assert result.engineering is not None
+    assert result.engineering.engineering_feasible is True
+    assert result.engineering.blocking_failed_count == 0
+    assert all(
+        stage.get("status") == "completed"
+        for stage in result.engineering.stage_status.values()
+        if stage.get("blocking") is True
+    )
+
+    if case["case_id"] in {"business_jet", "medium_uav"}:
+        adjustments = result.design_data.get("design_adjustments", [])
+        assert adjustments
+        assert adjustments[0]["failed_check_id"] == "advanced.geometry.fuel_volume"
+        report = (result.output_dir / "design_report_unified.md").read_text(encoding="utf-8")
+        assert "有界自动修复记录" in report
+        assert any(action["parameter"] in report for action in adjustments[0]["actions"])
+
+    fuel_volume = next(
+        constraint
+        for constraint in result.engineering.constraints
+        if constraint["id"] == "advanced.geometry.fuel_volume"
+    )
+    volume = fuel_volume["evidence"]["volume_breakdown"]
+    assert volume["total_m3"] == pytest.approx(
+        volume["wing_m3"] + volume["fuselage_or_center_tank_m3"]
+    )
+    assert volume["aircraft_role"] == request.requirements.aircraft_role
 
 
 @pytest.mark.parametrize("case_path", CASE_PATHS, ids=lambda path: path.stem)

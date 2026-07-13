@@ -17,7 +17,13 @@ from src.tool_system.agent_loop import ToolEvent
 from src.tool_system.defaults import build_default_registry
 from src.tool_system.registry import ToolRegistry
 from src.web import ClawdWebService
-from src.web.app import APP_JS, INDEX_HTML as STATIC_INDEX_HTML, STYLES_CSS
+from src.web.app import (
+    APP_JS,
+    INDEX_HTML as STATIC_INDEX_HTML,
+    ORBIT_CONTROLS_JS,
+    STYLES_CSS,
+    THREE_JS,
+)
 
 
 INDEX_HTML = "\n".join((STATIC_INDEX_HTML, STYLES_CSS, APP_JS))
@@ -58,7 +64,38 @@ class ArtifactProducingProvider(FakeProvider):
             output_dir = Path(match.group(1).strip()) / "case_alpha"
             output_dir.mkdir(parents=True, exist_ok=True)
             (output_dir / "design_report.md").write_text("# report", encoding="utf-8")
-            (output_dir / "design_data.json").write_text('{"mtow": 260}', encoding="utf-8")
+            (output_dir / "design_data.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": 2,
+                        "project_name": "case_alpha",
+                        "timestamp": "2026-07-13T12:00:00",
+                        "inputs": {
+                            "requirements": {"range_m": 120_000.0, "payload_kg": 12.0},
+                            "initial_guess": {"aspect_ratio": 8.0},
+                            "solver_options": {},
+                        },
+                        "numerical_converged": True,
+                        "engineering_feasible": True,
+                        "constraints": [],
+                        "stage_status": {
+                            "requirements": {"status": "completed", "blocking": True},
+                            "class1_sizing": {"status": "completed", "blocking": True},
+                        },
+                        "outputs": {
+                            "mtow_kg": 260.0,
+                            "empty_weight_kg": 170.0,
+                            "fuel_weight_kg": 78.0,
+                            "wing_area_m2": 4.2,
+                            "thrust_sl_n": 1_020.0,
+                            "iterations": 8,
+                            "geometry": {"span_m": 5.8},
+                            "performance": {"actual_range_m": 120_000.0},
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
             (output_dir / "geometry.obj").write_text("o aircraft", encoding="utf-8")
             (output_dir / "helper.py").write_text("print('not an artifact')", encoding="utf-8")
         return super().chat(messages, tools=tools, **kwargs)
@@ -81,24 +118,39 @@ class TestBrowserMarkup(unittest.TestCase):
         self.assertIn('class="hero-copy"', INDEX_HTML)
         self.assertIn('class="hero-stack"', INDEX_HTML)
         self.assertIn('process-panel', INDEX_HTML)
-        self.assertIn('prompt-chip', INDEX_HTML)
+        self.assertNotIn('prompt-chip', INDEX_HTML)
+        self.assertIn('id="aircraftSkillToggle"', INDEX_HTML)
+        self.assertIn('class="topbar-skill-toggle"', INDEX_HTML)
         self.assertIn('deepseek-v4-pro', INDEX_HTML)
 
     def test_index_html_loads_external_static_assets(self) -> None:
         self.assertIn('href="/static/styles.css"', STATIC_INDEX_HTML)
+        self.assertIn('src="/static/vendor/three.min.js"', STATIC_INDEX_HTML)
+        self.assertIn('src="/static/vendor/OrbitControls.js"', STATIC_INDEX_HTML)
         self.assertIn('src="/static/app.js"', STATIC_INDEX_HTML)
         self.assertNotIn("<style>", STATIC_INDEX_HTML)
         self.assertNotIn("<script>", STATIC_INDEX_HTML)
+        self.assertGreater(len(THREE_JS), 500_000)
+        self.assertGreater(len(ORBIT_CONTROLS_JS), 20_000)
 
     def test_index_html_keeps_codex_style_agent_layout(self) -> None:
         self.assertIn("grid-template-columns: 400px minmax(0, 1fr);", INDEX_HTML)
         self.assertIn(".settings-overlay", INDEX_HTML)
         self.assertIn('id="settingsToggleBtn"', INDEX_HTML)
-        self.assertIn('id="skillsPageBtn"', INDEX_HTML)
-        self.assertIn('id="skillsView"', INDEX_HTML)
-        self.assertIn('id="skillDisableBtn"', INDEX_HTML)
-        self.assertIn("技能展示", INDEX_HTML)
-        self.assertIn("关闭工程模式", INDEX_HTML)
+        self.assertIn('id="chatViewBtn"', INDEX_HTML)
+        self.assertIn('id="newSessionBtn"', INDEX_HTML)
+        self.assertNotIn('class="window-strip"', INDEX_HTML)
+        self.assertNotIn('class="traffic-lights"', INDEX_HTML)
+        self.assertNotIn('class="window-actions"', INDEX_HTML)
+        self.assertIn('class="topbar-design-tools" aria-label="总体设计工具"', INDEX_HTML)
+        self.assertIn('id="designWorkspaceBtn" class="secondary topbar-design-button"', INDEX_HTML)
+        self.assertNotIn('id="designWorkspaceBtn" class="nav-item"', INDEX_HTML)
+        self.assertNotIn('class="composer-toolbar"', INDEX_HTML)
+        self.assertNotIn("在输入框中启用飞行器总体设计技能", INDEX_HTML)
+        self.assertNotIn('id="skillsPageBtn"', INDEX_HTML)
+        self.assertNotIn('id="skillsView"', INDEX_HTML)
+        self.assertNotIn("技能展示", INDEX_HTML)
+        self.assertNotIn('id="skillSelect"', INDEX_HTML)
         self.assertIn(".topbar-actions", INDEX_HTML)
         self.assertIn(".message.assistant {\n      align-self: center;", INDEX_HTML)
         self.assertIn("details.open = true;", INDEX_HTML)
@@ -115,40 +167,26 @@ class TestBrowserMarkup(unittest.TestCase):
         self.assertNotIn(">自动化<", INDEX_HTML)
         self.assertNotRegex(INDEX_HTML, r"letter-spacing:\s*-")
 
-    def test_index_html_exposes_deterministic_design_workflow(self) -> None:
-        self.assertIn('id="designRunForm"', INDEX_HTML)
-        self.assertIn('id="designRangeKm" type="number" value="1200" min="1" max="30000" step="1"', INDEX_HTML)
-        self.assertIn('id="designProgress"', INDEX_HTML)
-        self.assertIn('id="designCancelBtn"', INDEX_HTML)
-        self.assertIn('id="designRetryBtn"', INDEX_HTML)
-        self.assertIn('id="designJobHistoryList"', INDEX_HTML)
-        self.assertIn('id="designHistoryRefreshBtn"', INDEX_HTML)
-        self.assertIn('id="designMaxLoadFactor"', INDEX_HTML)
-        self.assertIn('id="designSustainedTurnG"', INDEX_HTML)
-        self.assertIn('id="designUseAdvanced"', INDEX_HTML)
-        self.assertIn('id="designMtowGuess"', INDEX_HTML)
-        self.assertIn('id="designMaxIterations"', INDEX_HTML)
-        self.assertIn('id="designSfcLabel" for="designSfc">螺旋桨 BSFC（kg/J）</label>', INDEX_HTML)
-        self.assertIn('id="designSfc" data-design-advanced data-energy-mode="prop" type="number" value="8.45e-8"', INDEX_HTML)
-        self.assertIn('id="designPropEfficiencyField"', INDEX_HTML)
-        self.assertIn('id="designPropEfficiency" data-design-advanced type="number" value="0.8"', INDEX_HTML)
-        self.assertIn('field: "prop_bsfc_kg_per_j"', INDEX_HTML)
-        self.assertIn('field: "jet_tsfc_kg_per_n_s"', INDEX_HTML)
-        self.assertIn("function syncDesignEnergyMode", INDEX_HTML)
-        self.assertIn("sfc_cruise_1_s", INDEX_HTML)
+    def test_index_html_exposes_conversation_scoped_result_viewer(self) -> None:
+        self.assertIn('hidden>设计结果</button>', INDEX_HTML)
+        self.assertIn('aria-label="总体设计结果视图"', INDEX_HTML)
+        self.assertIn('id="designResultVersionSelect"', INDEX_HTML)
+        self.assertIn('data-design-tab="results"', INDEX_HTML)
+        self.assertIn('data-design-tab="compare"', INDEX_HTML)
+        self.assertIn('data-design-tab="reports"', INDEX_HTML)
+        self.assertIn('>历史对比</button>', INDEX_HTML)
+        self.assertIn('id="legacyDesignWorkbench"', INDEX_HTML)
+        self.assertIn("function syncSessionDesignResults", INDEX_HTML)
+        self.assertIn("session.design_results", INDEX_HTML)
+        self.assertIn('const allowed = ["results", "compare", "reports"]', INDEX_HTML)
+        self.assertNotIn('designRunForm.addEventListener("submit", submitDesignJob);', INDEX_HTML)
+        self.assertNotIn('designCancelBtn.addEventListener("click", cancelDesignJob);', INDEX_HTML)
+        self.assertNotIn('designRetryBtn.addEventListener("click", retryDesignJob);', INDEX_HTML)
+        self.assertNotIn('designLoadAdjustBtn.addEventListener', INDEX_HTML)
+        self.assertNotIn('restoreLatest: true', INDEX_HTML)
         self.assertIn("createDesignResultPanel", INDEX_HTML)
         self.assertIn("design-result-metrics", INDEX_HTML)
         self.assertIn("design-weight-bar", INDEX_HTML)
-        self.assertIn('api("/api/design-jobs"', INDEX_HTML)
-        self.assertIn('designRunForm.addEventListener("submit", submitDesignJob);', INDEX_HTML)
-        self.assertIn('designCancelBtn.addEventListener("click", cancelDesignJob);', INDEX_HTML)
-        self.assertIn('designRetryBtn.addEventListener("click", retryDesignJob);', INDEX_HTML)
-        self.assertIn('designHistoryRefreshBtn.addEventListener("click", () => refreshDesignJobs());', INDEX_HTML)
-        self.assertIn('designUseAdvanced.addEventListener("change", syncAdvancedInputs);', INDEX_HTML)
-        self.assertIn('"/stream?after=" + afterSequence', INDEX_HTML)
-        self.assertIn('await refreshDesignJobs({', INDEX_HTML)
-        self.assertIn('const pendingSkill = toUiSkillName(local.autoSkill || "");', INDEX_HTML)
-        self.assertIn('buffer.split("\\n\\n")', INDEX_HTML)
 
 
 class TestClawdWebService(unittest.TestCase):
@@ -408,6 +446,7 @@ class TestClawdWebService(unittest.TestCase):
                 auto_skill="aircraft-design-skill",
                 rag_settings={"auto_retrieve": False},
             )
+            self.assertEqual(created["session"]["design_results"], [])
             reply = service.send_message(created["session"]["session_id"], "生成总体设计结果")
 
         artifacts = reply["reply"]["artifacts"]
@@ -420,6 +459,28 @@ class TestClawdWebService(unittest.TestCase):
         self.assertIn(".clawd/generated/aircraft_design_runs/", artifact["source_dir"])
         self.assertIn("/api/artifacts/", artifact["download_url"])
         self.assertEqual(reply["session"]["messages"][1]["artifacts"][0]["id"], artifact["id"])
+
+        design_results = reply["session"]["design_results"]
+        self.assertEqual(len(design_results), 1)
+        result = design_results[0]
+        self.assertEqual(result["source"], "conversation")
+        self.assertEqual(result["session_id"], created["session"]["session_id"])
+        self.assertEqual(result["request"]["project_name"], "case_alpha")
+        self.assertEqual(result["status"], "completed")
+        self.assertEqual(result["result"]["summary"]["mtow_kg"], 260.0)
+        self.assertTrue(result["result"]["engineering"]["engineering_feasible"])
+        result_files = {item["name"]: item for item in result["result_files"]}
+        self.assertEqual(set(result_files), {"design_data.json", "design_report.md", "geometry.obj"})
+        self.assertIn(
+            f"/api/sessions/{created['session']['session_id']}/design-results/",
+            result_files["geometry.obj"]["preview_url"],
+        )
+        resolved_report = service.resolve_session_design_result_file(
+            created["session"]["session_id"],
+            result["job_id"],
+            "design_report.md",
+        )
+        self.assertEqual(resolved_report["path"].read_text(encoding="utf-8"), "# report")
 
         download = service.resolve_artifact_download(artifact["id"])
         self.assertTrue(download["path"].exists())
@@ -436,7 +497,10 @@ class TestClawdWebService(unittest.TestCase):
         restored = restarted.get_session_payload(created["session"]["session_id"])
         restored_artifacts = restored["session"]["messages"][1]["artifacts"]
         self.assertEqual(restored_artifacts[0]["id"], artifact["id"])
+        self.assertEqual(len(restored["session"]["design_results"]), 1)
         self.assertTrue(restarted.resolve_artifact_download(artifact["id"])["path"].exists())
+        reset = restarted.reset_session(created["session"]["session_id"])
+        self.assertEqual(reset["session"]["design_results"], [])
 
     @patch("src.agent.session.Path.home")
     @patch("src.web.app.build_default_registry", side_effect=lambda **_kwargs: ToolRegistry())
@@ -469,6 +533,7 @@ class TestClawdWebService(unittest.TestCase):
             reply = service.send_message(created["session"]["session_id"], "生成总体设计结果")
 
         self.assertEqual(reply["reply"]["artifacts"], [])
+        self.assertEqual(reply["session"]["design_results"], [])
         artifact_events = [event for event in reply["reply"]["events"] if event["kind"] == "artifact"]
         self.assertTrue(artifact_events[0]["is_error"])
         self.assertIn("未检测到新的设计结果", artifact_events[0]["summary"])

@@ -37,11 +37,12 @@
       designJobs: [],
       renderedDesignJobId: null,
       designStreamController: null,
-      designTab: "requirements",
+      designTab: "results",
       activeDesignJob: null,
       designJobDetails: {},
       compareJobIds: [],
       selectedResultFile: null,
+      designModelViewer: null,
       preflightRequestFingerprint: null,
       preflightFingerprint: null,
       confirmedPreflightFingerprint: null,
@@ -56,9 +57,10 @@
     const providerSelect = document.getElementById("providerSelect");
     const modelInput = document.getElementById("modelInput");
     const modelDatalist = document.getElementById("modelDatalist");
-    const skillSelect = document.getElementById("skillSelect");
+    const aircraftSkillToggle = document.getElementById("aircraftSkillToggle");
     const autoApproveToggle = document.getElementById("autoApproveToggle");
     const newSessionBtn = document.getElementById("newSessionBtn");
+    const chatViewBtn = document.getElementById("chatViewBtn");
     const resetSessionBtn = document.getElementById("resetSessionBtn");
     const sessionList = document.getElementById("sessionList");
     const chatLog = document.getElementById("chatLog");
@@ -75,24 +77,16 @@
     const skillMeta = document.getElementById("skillMeta");
     const sessionMeta = document.getElementById("sessionMeta");
     const workspaceRoot = document.getElementById("workspaceRoot");
-    const skillStatus = document.getElementById("skillStatus");
-    const capabilityStrip = document.getElementById("capabilityStrip");
     const evidenceMode = document.getElementById("evidenceMode");
     const toolMode = document.getElementById("toolMode");
-    const skillsPageBtn = document.getElementById("skillsPageBtn");
     const designWorkspaceBtn = document.getElementById("designWorkspaceBtn");
     const designBackChatBtn = document.getElementById("designBackChatBtn");
     const designWorkspace = document.getElementById("designWorkspace");
     const designActiveJobLabel = document.getElementById("designActiveJobLabel");
-    const skillsBackBtn = document.getElementById("skillsBackBtn");
-    const skillDisableBtn = document.getElementById("skillDisableBtn");
-    const skillsView = document.getElementById("skillsView");
-    const skillsShowcase = document.getElementById("skillsShowcase");
     const settingsOverlay = document.getElementById("settingsOverlay");
     const settingsToggleBtn = document.getElementById("settingsToggleBtn");
     const settingsTopBtn = document.getElementById("settingsTopBtn");
     const settingsCloseBtn = document.getElementById("settingsCloseBtn");
-    const settingsOpenDesignBtn = document.getElementById("settingsOpenDesignBtn");
     const composer = document.querySelector(".composer");
     const designRunForm = document.getElementById("designRunForm");
     const designProjectName = document.getElementById("designProjectName");
@@ -113,6 +107,8 @@
     const designClmaxLanding = document.getElementById("designClmaxLanding");
     const designAssumedClimbRate = document.getElementById("designAssumedClimbRate");
     const designUncertaintyEnabled = document.getElementById("designUncertaintyEnabled");
+    const designAutoRepairEnabled = document.getElementById("designAutoRepairEnabled");
+    const designMaxRepairAttempts = document.getElementById("designMaxRepairAttempts");
     const designUseAdvanced = document.getElementById("designUseAdvanced");
     const designAdvancedPanel = document.getElementById("designAdvancedPanel");
     const designMtowGuess = document.getElementById("designMtowGuess");
@@ -128,6 +124,8 @@
     const designPropEfficiency = document.getElementById("designPropEfficiency");
     const designCd0 = document.getElementById("designCd0");
     const designOswald = document.getElementById("designOswald");
+    const designCgFraction = document.getElementById("designCgFraction");
+    const designTailVolume = document.getElementById("designTailVolume");
     const designTolerance = document.getElementById("designTolerance");
     const designMaxIterations = document.getElementById("designMaxIterations");
     const designRunBtn = document.getElementById("designRunBtn");
@@ -140,6 +138,8 @@
     const designRunTimeline = document.getElementById("designRunTimeline");
     const designResultsContent = document.getElementById("designResultsContent");
     const designLoadAdjustBtn = document.getElementById("designLoadAdjustBtn");
+    const designResultVersionSelect = document.getElementById("designResultVersionSelect");
+    const designTabCompare = document.getElementById("designTabCompare");
     const designCompareSelector = document.getElementById("designCompareSelector");
     const designCompareContent = document.getElementById("designCompareContent");
     const designReportList = document.getElementById("designReportList");
@@ -169,6 +169,8 @@
       [designClmaxLanding, "requirements.cl_max_landing"],
       [designAssumedClimbRate, "requirements.assumed_climb_rate_m_s"],
       [designUncertaintyEnabled, "requirements.uncertainty_enabled"],
+      [designAutoRepairEnabled, "solver.auto_repair_enabled"],
+      [designMaxRepairAttempts, "solver.max_repair_attempts"],
       [designMtowGuess, "initial_guess.mtow_kg"],
       [designWingLoading, "initial_guess.wing_loading_pa"],
       [designThrustWeight, "initial_guess.thrust_to_weight"],
@@ -179,6 +181,8 @@
       [designPropEfficiency, "initial_guess.prop_efficiency"],
       [designCd0, "initial_guess.cd0"],
       [designOswald, "initial_guess.oswald_e"],
+      [designCgFraction, "initial_guess.cg_fraction_cbar"],
+      [designTailVolume, "initial_guess.horizontal_tail_volume_coefficient"],
       [designTolerance, "solver.tolerance"],
       [designMaxIterations, "solver.max_iterations"],
     ]);
@@ -190,8 +194,8 @@
       resetSessionBtn.disabled = isBusy;
       providerSelect.disabled = isBusy;
       modelInput.disabled = isBusy;
-      skillSelect.disabled = isBusy;
-      skillDisableBtn.disabled = isBusy || !skillSelect.value;
+      designWorkspaceBtn.disabled = isBusy || !state.designJobs.length;
+      aircraftSkillToggle.disabled = isBusy || !skillByName(WEB_AIRCRAFT_SKILL);
       autoApproveToggle.disabled = isBusy;
       stopBtn.disabled = !isBusy;
       statusBadge.textContent = isBusy ? label : "待命";
@@ -217,6 +221,7 @@
         input.disabled = isBusy || (input.hasAttribute("data-design-advanced") && !designUseAdvanced.checked);
       }
       syncDesignEnergyMode();
+      syncAutoRepairInputs();
       designPreflightConfirm.disabled = isBusy || !state.preflightFingerprint;
       if (message) designRunStatus.textContent = message;
       if (isBusy) {
@@ -230,21 +235,20 @@
     }
 
     function setActiveView(view) {
+      if (view === "design" && !state.designJobs.length) {
+        view = "chat";
+        setStatus("当前对话尚未生成总体设计结果。请先在对话中启用技能并提交总体设计需求。", true);
+      }
+      if (view !== "design") disposeDesignModelViewer();
       state.view = view;
       chatLog.hidden = view !== "chat";
-      skillsView.hidden = view !== "skills";
       designWorkspace.hidden = view !== "design";
       composer.hidden = view !== "chat";
-      skillsPageBtn.classList.toggle("active", view === "skills");
       designWorkspaceBtn.classList.toggle("active", view === "design");
-      newSessionBtn.classList.toggle("active", view === "chat");
-      mainPanel.classList.toggle("is-skills-mode", view === "skills");
+      chatViewBtn.classList.toggle("active", view === "chat");
       mainPanel.classList.toggle("is-design-mode", view === "design");
-      if (view === "skills") {
-        renderSkillShowcase();
-      } else if (view === "design") {
+      if (view === "design") {
         renderDesignWorkspace();
-        scheduleDesignPreflight();
       } else {
         refreshHeroIfEmpty();
       }
@@ -264,8 +268,9 @@
     }
 
     function setDesignTab(tab, options = {}) {
-      const allowed = ["requirements", "run", "results", "compare", "reports"];
-      const selected = allowed.includes(tab) ? tab : "requirements";
+      const allowed = ["results", "compare", "reports"];
+      const requested = allowed.includes(tab) ? tab : "results";
+      const selected = requested === "compare" && state.designJobs.length < 2 ? "results" : requested;
       state.designTab = selected;
       for (const button of document.querySelectorAll("[data-design-tab]")) {
         const active = button.dataset.designTab === selected;
@@ -277,7 +282,8 @@
       for (const panel of document.querySelectorAll("[data-design-panel]")) {
         panel.hidden = panel.dataset.designPanel !== selected;
       }
-      if (selected === "requirements") scheduleDesignPreflight();
+      if (selected !== "results") disposeDesignModelViewer();
+      if (selected === "results") requestAnimationFrame(activateDesignModelPreview);
       if (selected === "compare") renderDesignComparison();
       if (selected === "reports") renderDesignReports();
     }
@@ -287,19 +293,12 @@
       promptInput.style.height = Math.min(promptInput.scrollHeight, 220) + "px";
     }
 
-    function setPromptDraft(text) {
-      promptInput.value = text || "";
-      autosizePrompt();
-      promptInput.focus();
-      setStatus("已填入常用设计任务，可继续补充约束后发送。");
-    }
-
     function saveLocalState() {
       const payload = {
         sessionId: state.sessionId,
         provider: providerSelect.value || state.provider,
         model: WEB_MODEL,
-        autoSkill: skillSelect.value || null,
+        autoSkill: selectedSkillName() || null,
         autoApprove: autoApproveToggle.checked,
         designJobId: state.designJobId,
       };
@@ -380,96 +379,10 @@
     }
 
     function populateSkills() {
-      skillSelect.innerHTML = "";
-      capabilityStrip.innerHTML = "";
-      const noneOption = document.createElement("option");
-      noneOption.value = "";
-      noneOption.textContent = "不自动使用";
-      skillSelect.appendChild(noneOption);
-
-      for (const skill of state.config.skills || []) {
-        const option = document.createElement("option");
-        option.value = skill.name;
-        option.textContent = skillDisplayName(skill.name);
-        if (skill.description) option.title = skill.description;
-        skillSelect.appendChild(option);
-
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = "capability-button";
-        button.dataset.skill = skill.name;
-        button.textContent = skill.short_label || skillDisplayName(skill.name);
-        button.title = skill.description || skill.when_to_use || skillDisplayName(skill.name);
-        button.addEventListener("click", () => {
-          skillSelect.value = skill.name;
-          updateSkillStatus();
-          saveLocalState();
-        });
-        capabilityStrip.appendChild(button);
-      }
-      renderSkillShowcase();
-    }
-
-    function renderSkillShowcase() {
-      if (!skillsShowcase) return;
-      skillsShowcase.innerHTML = "";
-      const skills = state.config?.skills || [];
-      if (!skills.length) {
-        const empty = document.createElement("div");
-        empty.className = "skill-showcase-card";
-        empty.innerHTML = "<h3>暂无技能</h3><p>当前工作区没有可展示的工程技能。</p>";
-        skillsShowcase.appendChild(empty);
-        return;
-      }
-      for (const skill of skills) {
-        const card = document.createElement("article");
-        card.className = "skill-showcase-card" + (skillSelect.value === skill.name ? " is-active" : "");
-        const header = document.createElement("header");
-        const titleWrap = document.createElement("div");
-        const title = document.createElement("h3");
-        title.textContent = skill.display_name || skillDisplayName(skill.name);
-        const summary = document.createElement("p");
-        summary.textContent = skill.description || skill.when_to_use || "工程能力说明尚未提供。";
-        titleWrap.appendChild(title);
-        header.appendChild(titleWrap);
-
-        const pill = document.createElement("span");
-        pill.className = "skill-pill";
-        pill.textContent = skill.short_label || "技能";
-        header.appendChild(pill);
-        card.appendChild(header);
-        card.appendChild(summary);
-
-        const meta = document.createElement("div");
-        meta.className = "skill-showcase-meta";
-        const useLine = document.createElement("div");
-        useLine.textContent = "适用场景：" + (skill.when_to_use || "通用工程任务");
-        const stateLine = document.createElement("div");
-        stateLine.textContent = "状态：" + (skill.status_note || "可用");
-        meta.appendChild(useLine);
-        meta.appendChild(stateLine);
-        card.appendChild(meta);
-
-        const actions = document.createElement("div");
-        actions.className = "skill-showcase-actions";
-        const action = document.createElement("button");
-        action.type = "button";
-        action.dataset.skill = skill.name;
-        action.className = "skill-action" + (skillSelect.value === skill.name ? " active" : "");
-        action.textContent = skillSelect.value === skill.name ? "当前技能" : "切换到此技能";
-        action.disabled = state.busy;
-        action.setAttribute("aria-pressed", skillSelect.value === skill.name ? "true" : "false");
-        action.addEventListener("click", () => {
-          skillSelect.value = skill.name;
-          updateSkillStatus();
-          saveLocalState();
-          setActiveView("chat");
-          setStatus("已切换到：" + skillDisplayName(skill.name));
-        });
-        actions.appendChild(action);
-        card.appendChild(actions);
-        skillsShowcase.appendChild(card);
-      }
+      const skill = skillByName(WEB_AIRCRAFT_SKILL);
+      aircraftSkillToggle.disabled = state.busy || !skill;
+      aircraftSkillToggle.title = skill?.description || "当前工作区未提供飞行器总体设计技能";
+      if (!skill) aircraftSkillToggle.checked = false;
     }
 
     function skillByName(name) {
@@ -484,51 +397,28 @@
       return "/" + name;
     }
 
+    function selectedSkillName() {
+      return aircraftSkillToggle.checked ? WEB_AIRCRAFT_SKILL : "";
+    }
+
+    function setSelectedSkill(name) {
+      aircraftSkillToggle.checked = toUiSkillName(name) === WEB_AIRCRAFT_SKILL;
+    }
+
     function updateSkillMetaFromSelection() {
-      const selected = skillSelect.value || "";
+      const selected = selectedSkillName();
       const sessionSkill = state.autoSkill || "";
       const pending = selected !== sessionSkill;
       skillMeta.textContent = "工程模式：" + skillDisplayName(selected) + (pending ? "（下次发送生效）" : "");
     }
 
     function updateSkillStatus() {
-      const selected = skillSelect.value;
+      const selected = selectedSkillName();
       const ragSelected = selected === WEB_AIRCRAFT_SKILL;
-      if (!selected) {
-        skillStatus.textContent = "未启用工程模式";
-        skillStatus.title = "";
-        evidenceMode.textContent = "未启用";
-        updateCapabilityButtons();
-        updateSkillMetaFromSelection();
-        return;
-      }
-      const skill = skillByName(selected);
-      const modeNote = skill?.status_note ? " · " + skill.status_note : "";
-      skillStatus.textContent = "已启用：" + skillDisplayName(selected) + modeNote;
-      skillStatus.title = skill?.description || "";
-      evidenceMode.textContent = ragSelected ? "自动检索" : "按需检索";
-      updateCapabilityButtons();
-      updateSkillMetaFromSelection();
-    }
-
-    function updateCapabilityButtons() {
-      const selected = skillSelect.value || "";
-      for (const button of capabilityStrip.querySelectorAll(".capability-button")) {
-        button.classList.toggle("active", button.dataset.skill === selected);
-      }
-      skillDisableBtn.disabled = state.busy || !selected;
-      skillDisableBtn.textContent = selected ? "关闭工程模式" : "未启用工程模式";
+      evidenceMode.textContent = selected ? (ragSelected ? "自动检索" : "按需检索") : "未启用";
       if (toolMode) toolMode.textContent = autoApproveToggle.checked ? "自动批准" : "手动确认";
-      if (!skillsView.hidden) renderSkillShowcase();
+      updateSkillMetaFromSelection();
       refreshHeroIfEmpty();
-    }
-
-    function clearSkillSelection() {
-      skillSelect.value = "";
-      updateSkillStatus();
-      saveLocalState();
-      setActiveView("chat");
-      setStatus("已关闭工程模式，后续对话按通用模式执行。");
     }
 
     function applyConfigDefaults(preferred) {
@@ -537,11 +427,33 @@
       modelInput.value = WEB_MODEL;
       updateModelSuggestions();
       const preferredSkill = toUiSkillName(preferred?.autoSkill || "");
-      const skillExists = preferredSkill && Array.from(skillSelect.options).some((item) => item.value === preferredSkill);
-      skillSelect.value = skillExists ? preferredSkill : "";
-      updateSkillStatus();
+      const skillExists = preferredSkill === WEB_AIRCRAFT_SKILL && Boolean(skillByName(preferredSkill));
+      setSelectedSkill(skillExists ? preferredSkill : "");
       autoApproveToggle.checked = preferred?.autoApprove ?? true;
-      updateCapabilityButtons();
+      updateSkillStatus();
+    }
+
+    function syncSessionDesignResults(results) {
+      const nextResults = Array.isArray(results)
+        ? results.filter((item) => item?.source === "conversation" && item?.terminal === true && item?.result)
+        : [];
+      const previousId = state.activeDesignJob?.job_id;
+      state.designJobs = nextResults;
+      state.designJobDetails = Object.fromEntries(nextResults.map((item) => [item.job_id, item]));
+      state.activeDesignJob = nextResults.find((item) => item.job_id === previousId) || nextResults[0] || null;
+      state.designJobId = state.activeDesignJob?.job_id || null;
+      state.compareJobIds = state.compareJobIds.filter((jobId) => nextResults.some((item) => item.job_id === jobId));
+      state.selectedResultFile = null;
+
+      const hasResults = nextResults.length > 0;
+      designWorkspaceBtn.hidden = !hasResults;
+      designWorkspaceBtn.disabled = state.busy || !hasResults;
+      designWorkspaceBtn.setAttribute("aria-hidden", hasResults ? "false" : "true");
+      designTabCompare.hidden = nextResults.length < 2;
+      designTabCompare.setAttribute("aria-hidden", nextResults.length < 2 ? "true" : "false");
+      if (state.designTab === "compare" && nextResults.length < 2) state.designTab = "results";
+      if (!hasResults && state.view === "design") setActiveView("chat");
+      if (hasResults && state.view === "design") renderDesignWorkspace();
     }
 
     function updateMeta(session) {
@@ -556,7 +468,8 @@
       state.autoSkill = toUiSkillName(session.auto_skill);
       providerSelect.value = session.provider;
       modelInput.value = WEB_MODEL;
-      skillSelect.value = state.autoSkill;
+      setSelectedSkill(state.autoSkill);
+      syncSessionDesignResults(session.design_results);
       updateSkillStatus();
       saveLocalState();
     }
@@ -1495,6 +1408,7 @@
       footer.className = "design-result-footer";
       const footerItems = [
         "耗时 " + Number(job.result.duration_seconds || 0).toFixed(1) + " s",
+        "自动修正 " + Number(summary.auto_repair_attempts || 0) + " 轮",
         "产物 " + (summary.artifact_count ?? job.result.artifacts?.length ?? 0),
         "校验问题 " + (summary.issue_count ?? job.result.issues?.length ?? 0),
         "任务 " + job.job_id,
@@ -1558,15 +1472,16 @@
     function renderHero() {
       const hero = document.createElement("div");
       hero.className = "hero";
-      const selectedSkill = skillSelect.value ? skillDisplayName(skillSelect.value) : "未启用工程模式";
-      const evidenceLabel = skillSelect.value
-        ? (skillSelect.value === WEB_AIRCRAFT_SKILL ? "自动检索" : "按需检索")
+      const activeSkill = selectedSkillName();
+      const selectedSkill = activeSkill ? skillDisplayName(activeSkill) : "未启用工程模式";
+      const evidenceLabel = activeSkill
+        ? (activeSkill === WEB_AIRCRAFT_SKILL ? "自动检索" : "按需检索")
         : "未启用";
       const toolLabel = autoApproveToggle.checked ? "自动批准" : "手动确认";
       hero.innerHTML =
         '<div class="hero-copy">' +
           "<strong>工程设计流程</strong>" +
-          "<span>围绕任务需求、总体参数、约束边界、动力、气动和飞行性能开展对话；工程模式和运行参数统一放在设置中管理。</span>" +
+          "<span>在右上角启用总体设计技能后，直接在对话中提交任务与约束；生成结果后，右上角会出现“设计结果”入口。</span>" +
         "</div>" +
         '<div class="hero-stack" aria-label="当前工作台状态">' +
           '<div class="hero-stat"><span>默认模型</span><strong>' + WEB_MODEL + "</strong></div>" +
@@ -1670,6 +1585,7 @@
     }
 
     async function createSession(options = {}) {
+      syncSessionDesignResults([]);
       setBusy(true, "正在启动...");
       try {
         const payload = await api("/api/sessions", {
@@ -1677,7 +1593,7 @@
           body: JSON.stringify({
             provider: providerSelect.value,
             model: WEB_MODEL,
-            auto_skill: toInternalSkillName(skillSelect.value),
+            auto_skill: toInternalSkillName(selectedSkillName()),
             auto_approve: autoApproveToggle.checked,
           }),
         });
@@ -1732,7 +1648,7 @@
           method: "POST",
           body: JSON.stringify({
             auto_approve: autoApproveToggle.checked,
-            auto_skill: toInternalSkillName(skillSelect.value),
+            auto_skill: toInternalSkillName(selectedSkillName()),
           }),
         });
         updateMeta(payload.session);
@@ -1755,7 +1671,7 @@
         await createSession({ keepBusy: true });
         return;
       }
-      if ((skillSelect.value || "") !== (state.autoSkill || "")) {
+      if (selectedSkillName() !== (state.autoSkill || "")) {
         await createSession({ keepBusy: true });
       }
     }
@@ -1921,7 +1837,12 @@
           };
         }
       }
-      if (request.tolerance !== undefined || request.max_iterations !== undefined) {
+      if (
+        request.tolerance !== undefined
+        || request.max_iterations !== undefined
+        || request.auto_repair_enabled !== undefined
+        || request.max_repair_attempts !== undefined
+      ) {
         inputFields.solver = {};
         if (request.tolerance !== undefined) {
           inputFields.solver.tolerance = {
@@ -1933,6 +1854,18 @@
           inputFields.solver.max_iterations = {
             source: state.designFieldSources["solver.max_iterations"] || "default",
             value: request.max_iterations,
+          };
+        }
+        if (request.auto_repair_enabled !== undefined) {
+          inputFields.solver.auto_repair_enabled = {
+            source: state.designFieldSources["solver.auto_repair_enabled"] || "default",
+            value: request.auto_repair_enabled,
+          };
+        }
+        if (request.max_repair_attempts !== undefined) {
+          inputFields.solver.max_repair_attempts = {
+            source: state.designFieldSources["solver.max_repair_attempts"] || "default",
+            value: request.max_repair_attempts,
           };
         }
       }
@@ -1967,6 +1900,8 @@
     function buildDesignJobRequest() {
       const request = {
         project_name: designProjectName.value.trim(),
+        auto_repair_enabled: designAutoRepairEnabled.checked,
+        max_repair_attempts: Math.trunc(designInputNumber(designMaxRepairAttempts, "最大修正轮次")),
         requirements: {
           range_m: designInputNumber(designRangeKm, "航程") * 1000,
           payload_kg: designInputNumber(designPayloadKg, "有效载荷"),
@@ -2002,6 +1937,8 @@
           thickness_ratio: designInputNumber(designThicknessRatio, "厚度比"),
           cd0: designInputNumber(designCd0, "零升阻力系数"),
           oswald_e: designInputNumber(designOswald, "Oswald 效率因子"),
+          cg_fraction_cbar: designInputNumber(designCgFraction, "重心位置"),
+          horizontal_tail_volume_coefficient: designInputNumber(designTailVolume, "平尾容积系数"),
         };
         request.initial_guess[energyConfig.field] = designInputNumber(designSfc, energyConfig.inputLabel);
         if (request.requirements.propulsion_type === "prop") {
@@ -2093,6 +2030,14 @@
       if (typeof value === "boolean") return value ? "是" : "否";
       if (typeof value === "object") return JSON.stringify(value);
       return String(value) + (unit ? " " + unit : "");
+    }
+
+    function formatRepairValue(value) {
+      const numeric = finiteDesignNumber(value);
+      if (numeric === null) return "--";
+      const magnitude = Math.abs(numeric);
+      if (magnitude > 0 && magnitude < 0.001) return numeric.toExponential(5);
+      return numeric.toLocaleString("zh-CN", { maximumSignificantDigits: 6 });
     }
 
     function designEngineering(job) {
@@ -2346,16 +2291,42 @@
       return payload;
     }
 
+    function renderDesignVersionSelector() {
+      designResultVersionSelect.innerHTML = "";
+      for (const job of state.designJobs) {
+        const option = document.createElement("option");
+        option.value = job.job_id;
+        option.textContent = [
+          job.request?.project_name || "未命名设计",
+          designJobTimestamp(job.finished_at || job.created_at),
+          designOutcome(job).label,
+        ].join(" · ");
+        option.selected = job.job_id === state.designJobId;
+        designResultVersionSelect.appendChild(option);
+      }
+      designResultVersionSelect.disabled = state.designJobs.length <= 1;
+    }
+
+    function selectSessionDesignResult(jobId) {
+      const job = state.designJobs.find((item) => item.job_id === jobId);
+      if (!job) return;
+      state.designJobId = job.job_id;
+      state.activeDesignJob = job;
+      state.selectedResultFile = null;
+      saveLocalState();
+      renderDesignWorkspace();
+    }
+
     function renderDesignWorkspace() {
       const job = state.activeDesignJob;
       if (job) {
         const outcome = designOutcome(job);
-        designActiveJobLabel.textContent = (job.request?.project_name || "未命名设计") + " · " + outcome.label + " · " + job.job_id;
+        designActiveJobLabel.textContent = (job.request?.project_name || "未命名设计") + " · " + outcome.label + " · " + designJobTimestamp(job.finished_at || job.created_at);
       } else {
-        designActiveJobLabel.textContent = "填写并确认需求后开始计算。";
+        designActiveJobLabel.textContent = "当前对话尚无可查看的总体设计结果。";
       }
+      renderDesignVersionSelector();
       setDesignTab(state.designTab);
-      renderDesignRunTimeline();
       renderDesignResults();
       renderDesignCompareSelector();
       renderDesignComparison();
@@ -2484,10 +2455,318 @@
       return svg;
     }
 
+    function disposeDesignModelViewer() {
+      const viewer = state.designModelViewer;
+      if (!viewer) return;
+      cancelAnimationFrame(viewer.frameId);
+      viewer.resizeObserver?.disconnect();
+      viewer.controls?.dispose();
+      if (viewer.resetButton && viewer.resetHandler) {
+        viewer.resetButton.removeEventListener("click", viewer.resetHandler);
+        viewer.resetButton.disabled = true;
+      }
+      const geometries = new Set();
+      const materials = new Set();
+      viewer.scene?.traverse((object) => {
+        if (object.geometry) geometries.add(object.geometry);
+        const entries = Array.isArray(object.material) ? object.material : object.material ? [object.material] : [];
+        for (const material of entries) materials.add(material);
+      });
+      for (const geometry of geometries) geometry.dispose();
+      for (const material of materials) material.dispose();
+      viewer.renderer?.dispose();
+      if (viewer.viewport?.isConnected) {
+        viewer.renderer?.domElement?.remove();
+        delete viewer.viewport.dataset.modelMounted;
+      }
+      state.designModelViewer = null;
+    }
+
+    function parseDesignObjGeometry(source) {
+      const vertices = [];
+      const positions = [];
+      for (const rawLine of String(source || "").split(/\r?\n/)) {
+        const line = rawLine.trim();
+        if (!line || line.startsWith("#")) continue;
+        const parts = line.split(/\s+/);
+        if (parts[0] === "v" && parts.length >= 4) {
+          const vertex = parts.slice(1, 4).map(Number);
+          if (vertex.every(Number.isFinite)) vertices.push(vertex);
+          continue;
+        }
+        if (parts[0] !== "f" || parts.length < 4) continue;
+        const indices = parts.slice(1).map((token) => {
+          const rawIndex = Number.parseInt(token.split("/")[0], 10);
+          if (!Number.isInteger(rawIndex) || rawIndex === 0) return null;
+          return rawIndex > 0 ? rawIndex - 1 : vertices.length + rawIndex;
+        });
+        if (indices.some((index) => index === null || index < 0 || index >= vertices.length)) continue;
+        for (let index = 1; index < indices.length - 1; index += 1) {
+          for (const vertexIndex of [indices[0], indices[index], indices[index + 1]]) {
+            positions.push(...vertices[vertexIndex]);
+          }
+        }
+      }
+      if (!positions.length) throw new Error("OBJ 文件没有可渲染的面片。");
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+      geometry.computeVertexNormals();
+      geometry.rotateX(-Math.PI / 2);
+      geometry.center();
+      geometry.computeBoundingSphere();
+      if (!geometry.boundingSphere || !Number.isFinite(geometry.boundingSphere.radius) || geometry.boundingSphere.radius <= 0) {
+        geometry.dispose();
+        throw new Error("OBJ 模型尺寸无效。");
+      }
+      return geometry;
+    }
+
+    async function mountDesignObjViewer(viewport, file) {
+      const requestKey = resultFileKey(file);
+      viewport.dataset.modelMounted = requestKey;
+      try {
+        if (!window.THREE || typeof THREE.WebGLRenderer !== "function" || typeof THREE.OrbitControls !== "function") {
+          throw new Error("本地三维渲染组件未加载。");
+        }
+        const response = await fetch(file.preview_url);
+        if (!response.ok) throw new Error("无法加载 OBJ 模型。");
+        const geometry = parseDesignObjGeometry(await response.text());
+        if (!viewport.isConnected || viewport.dataset.modelMounted !== requestKey) {
+          geometry.dispose();
+          return;
+        }
+
+        viewport.innerHTML = "";
+        const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+        renderer.setClearColor(0xf1f4f2, 1);
+        if ("outputEncoding" in renderer) renderer.outputEncoding = THREE.sRGBEncoding;
+        renderer.domElement.setAttribute("role", "img");
+        renderer.domElement.setAttribute("aria-label", `${file.name || "飞行器"} 三维模型`);
+        viewport.appendChild(renderer.domElement);
+
+        const scene = new THREE.Scene();
+        const radius = geometry.boundingSphere.radius;
+        const camera = new THREE.PerspectiveCamera(36, 1, Math.max(radius / 100, 0.001), radius * 100);
+        camera.position.set(radius * 1.7, radius * 1.1, radius * 1.9);
+
+        const material = new THREE.MeshStandardMaterial({
+          color: 0x657a78,
+          metalness: 0.12,
+          roughness: 0.72,
+          side: THREE.DoubleSide,
+        });
+        const mesh = new THREE.Mesh(geometry, material);
+        scene.add(mesh);
+        const edges = new THREE.LineSegments(
+          new THREE.EdgesGeometry(geometry, 28),
+          new THREE.LineBasicMaterial({ color: 0x33413f, transparent: true, opacity: 0.34 }),
+        );
+        scene.add(edges);
+        scene.add(new THREE.HemisphereLight(0xffffff, 0x63706b, 1.45));
+        const keyLight = new THREE.DirectionalLight(0xffffff, 1.2);
+        keyLight.position.set(radius * 2, radius * 3, radius * 2);
+        scene.add(keyLight);
+        const fillLight = new THREE.DirectionalLight(0xb7d8d2, 0.55);
+        fillLight.position.set(-radius * 2, radius, -radius);
+        scene.add(fillLight);
+
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.07;
+        controls.autoRotate = true;
+        controls.autoRotateSpeed = 0.75;
+        controls.minDistance = radius * 0.45;
+        controls.maxDistance = radius * 12;
+        controls.target.set(0, 0, 0);
+        controls.update();
+        controls.saveState();
+
+        const resetButton = viewport.closest(".design-model-pane")?.querySelector("[data-model-reset]");
+        const resetHandler = () => {
+          controls.reset();
+          controls.autoRotate = true;
+        };
+        if (resetButton) {
+          resetButton.disabled = false;
+          resetButton.addEventListener("click", resetHandler);
+        }
+
+        const resize = () => {
+          const width = Math.max(viewport.clientWidth, 1);
+          const height = Math.max(viewport.clientHeight, 1);
+          renderer.setSize(width, height, false);
+          camera.aspect = width / height;
+          camera.updateProjectionMatrix();
+        };
+        const resizeObserver = new ResizeObserver(resize);
+        resizeObserver.observe(viewport);
+        resize();
+
+        const viewer = {
+          viewport,
+          renderer,
+          scene,
+          camera,
+          controls,
+          resizeObserver,
+          resetButton,
+          resetHandler,
+          frameId: 0,
+        };
+        state.designModelViewer = viewer;
+        const animate = () => {
+          if (state.designModelViewer !== viewer || !viewport.isConnected) return;
+          controls.update();
+          renderer.render(scene, camera);
+          viewer.frameId = requestAnimationFrame(animate);
+        };
+        animate();
+      } catch (error) {
+        if (!viewport.isConnected || viewport.dataset.modelMounted !== requestKey) return;
+        viewport.innerHTML = "";
+        const failure = designNode("div", "design-empty-state is-error", error.message || "无法显示 OBJ 模型。");
+        failure.setAttribute("role", "alert");
+        viewport.appendChild(failure);
+      }
+    }
+
+    function designImageLabel(file) {
+      const name = String(file.path || file.name || file.filename || "").toLowerCase();
+      const labels = [
+        ["view_top", "外形俯视图"],
+        ["threeview_top", "外形俯视图"],
+        ["view_side", "外形侧视图"],
+        ["threeview_side", "外形侧视图"],
+        ["aero_cl_alpha", "升力曲线"],
+        ["lift_curve", "升力曲线"],
+        ["aero_drag_polar", "阻力极曲线"],
+        ["drag_polar", "阻力极曲线"],
+        ["perf_thrust", "推力曲线"],
+        ["thrust_curve", "推力曲线"],
+        ["perf_flight_envelope", "飞行包线"],
+        ["flight_envelope", "飞行包线"],
+        ["struct_vn", "V-n 图"],
+        ["vn_diagram", "V-n 图"],
+        ["weight_iteration", "重量收敛"],
+        ["constraint", "约束边界"],
+      ];
+      return labels.find(([key]) => name.includes(key))?.[1] || file.name || file.filename || "工程结果图";
+    }
+
+    function sortDesignImages(files) {
+      const priority = ["view_top", "view_side", "aero_cl", "aero_drag", "perf_thrust", "perf_flight", "struct_vn"];
+      return [...files].sort((left, right) => {
+        const leftName = String(left.path || left.name || "").toLowerCase();
+        const rightName = String(right.path || right.name || "").toLowerCase();
+        const rank = (name) => {
+          const found = priority.findIndex((key) => name.includes(key));
+          return found < 0 ? priority.length : found;
+        };
+        return rank(leftName) - rank(rightName) || leftName.localeCompare(rightName);
+      });
+    }
+
+    function createDesignVisualizationSection(job) {
+      const files = designResultFiles(job);
+      const modelFile = files.find((file) => resultFileKind(file) === "model");
+      const imageFiles = sortDesignImages(files.filter((file) => resultFileKind(file) === "image"));
+      const section = createDesignSection("几何与工程图", "本轮计算生成的三维外形与配套分析图。" );
+      section.dataset.testid = "design-visualization";
+      const layout = designNode("div", "design-visualization-layout");
+
+      const modelPane = designNode("div", "design-model-pane");
+      const modelHeader = designNode("div", "design-visual-pane-header");
+      modelHeader.appendChild(designNode("strong", "", modelFile ? modelFile.name || "geometry.obj" : "OBJ 三维模型"));
+      const modelActions = designNode("div", "design-visual-actions");
+      const resetButton = designNode("button", "icon-button design-model-reset", "↺");
+      resetButton.type = "button";
+      resetButton.title = "重置视角";
+      resetButton.setAttribute("aria-label", "重置三维模型视角");
+      resetButton.dataset.modelReset = "true";
+      resetButton.disabled = true;
+      modelActions.appendChild(resetButton);
+      if (modelFile?.download_url) {
+        const download = designNode("a", "secondary design-visual-download", "下载 OBJ");
+        download.href = modelFile.download_url;
+        download.download = modelFile.name || "geometry.obj";
+        modelActions.appendChild(download);
+      }
+      modelHeader.appendChild(modelActions);
+      modelPane.appendChild(modelHeader);
+      const viewport = designNode("div", "design-model-viewport");
+      if (modelFile?.preview_url) {
+        viewport.dataset.modelPreviewUrl = modelFile.preview_url;
+        viewport.dataset.modelName = modelFile.name || "geometry.obj";
+        viewport.appendChild(designNode("div", "design-model-loading", "正在加载三维模型..."));
+      } else {
+        viewport.appendChild(designNode("div", "design-empty-state compact", "本轮结果没有生成 OBJ 模型。"));
+      }
+      modelPane.appendChild(viewport);
+      layout.appendChild(modelPane);
+
+      const imagePane = designNode("div", "design-image-pane");
+      const imageHeader = designNode("div", "design-visual-pane-header");
+      imageHeader.appendChild(designNode("strong", "", `工程图片${imageFiles.length ? ` · ${imageFiles.length}` : ""}`));
+      imagePane.appendChild(imageHeader);
+      if (!imageFiles.length) {
+        imagePane.appendChild(designNode("div", "design-empty-state compact", "本轮结果没有生成可预览图片。"));
+      } else {
+        const stage = designNode("figure", "design-image-stage");
+        const primary = document.createElement("img");
+        primary.className = "design-gallery-primary";
+        primary.src = imageFiles[0].preview_url;
+        primary.alt = designImageLabel(imageFiles[0]);
+        const caption = designNode("figcaption", "", designImageLabel(imageFiles[0]));
+        stage.appendChild(primary);
+        stage.appendChild(caption);
+        imagePane.appendChild(stage);
+        const thumbnails = designNode("div", "design-image-thumbnails");
+        const selectImage = (file, button) => {
+          primary.src = file.preview_url;
+          primary.alt = designImageLabel(file);
+          caption.textContent = designImageLabel(file);
+          for (const candidate of thumbnails.querySelectorAll("button")) {
+            const selected = candidate === button;
+            candidate.classList.toggle("is-active", selected);
+            candidate.setAttribute("aria-pressed", selected ? "true" : "false");
+          }
+        };
+        imageFiles.forEach((file, index) => {
+          const button = designNode("button", "design-image-thumbnail" + (index === 0 ? " is-active" : ""));
+          button.type = "button";
+          button.title = designImageLabel(file);
+          button.setAttribute("aria-label", `查看${designImageLabel(file)}`);
+          button.setAttribute("aria-pressed", index === 0 ? "true" : "false");
+          const image = document.createElement("img");
+          image.src = file.preview_url;
+          image.alt = "";
+          image.loading = "lazy";
+          button.appendChild(image);
+          button.addEventListener("click", () => selectImage(file, button));
+          thumbnails.appendChild(button);
+        });
+        imagePane.appendChild(thumbnails);
+      }
+      layout.appendChild(imagePane);
+      section.appendChild(layout);
+      return section;
+    }
+
+    function activateDesignModelPreview() {
+      if (state.view !== "design" || state.designTab !== "results" || state.designModelViewer) return;
+      const viewport = designResultsContent.querySelector("[data-model-preview-url]");
+      if (!viewport || viewport.dataset.modelMounted) return;
+      void mountDesignObjViewer(viewport, {
+        name: viewport.dataset.modelName || "geometry.obj",
+        preview_url: viewport.dataset.modelPreviewUrl,
+      });
+    }
+
     function renderDesignResults() {
+      disposeDesignModelViewer();
       designResultsContent.innerHTML = "";
       const job = state.activeDesignJob;
-      designLoadAdjustBtn.disabled = !job?.request;
       if (!job) {
         designResultsContent.appendChild(designNode("div", "design-empty-state", "选择一个历史任务后查看工程结果。"));
         return;
@@ -2531,6 +2810,42 @@
       }
       metricSection.appendChild(metrics);
       designResultsContent.appendChild(metricSection);
+
+      designResultsContent.appendChild(createDesignVisualizationSection(job));
+
+      const autoRepair = engineering.provenance?.auto_repair;
+      if (autoRepair && typeof autoRepair === "object") {
+        const repairSection = createDesignSection("有界自动修正");
+        const repairState = designNode("div", "design-outcome-states");
+        const repairAttempts = Number(autoRepair.attempts_executed || 0);
+        const repairSucceeded = autoRepair.succeeded_after_repair === true;
+        repairState.appendChild(designStatusChip(
+          repairAttempts === 0 ? "未触发" : `已执行 ${repairAttempts} 轮`,
+          repairAttempts === 0 ? "warn" : repairSucceeded ? "pass" : "fail",
+        ));
+        repairState.appendChild(designStatusChip(
+          autoRepair.requirements_changed === false ? "用户需求未修改" : "需求发生变化",
+          autoRepair.requirements_changed === false ? "pass" : "fail",
+        ));
+        repairSection.appendChild(repairState);
+        const rows = [];
+        for (const record of autoRepair.history || []) {
+          for (const action of record.actions || []) {
+            rows.push({
+              className: record.result_status === "completed" ? "is-pass" : "is-warn",
+              cells: [
+                record.repair_attempt,
+                action.path || "--",
+                formatRepairValue(action.from),
+                formatRepairValue(action.to),
+                (action.trigger_constraint_ids || []).join(", ") || "--",
+              ],
+            });
+          }
+        }
+        if (rows.length) repairSection.appendChild(createDesignTable(["轮次", "参数", "原值", "新值", "触发约束"], rows));
+        designResultsContent.appendChild(repairSection);
+      }
 
       const constraints = normalizeDesignConstraints(engineering.constraints);
       const constraintSection = createDesignSection("约束裕度", constraints.length ? "正裕度表示满足当前约束；阻断项未通过时方案不可行。" : "");
@@ -2630,6 +2945,7 @@
         provenanceSection.appendChild(list);
         designResultsContent.appendChild(provenanceSection);
       }
+      requestAnimationFrame(activateDesignModelPreview);
     }
 
     function designJobById(jobId) {
@@ -2657,8 +2973,8 @@
 
     function renderDesignCompareSelector() {
       designCompareSelector.innerHTML = "";
-      if (!state.designJobs.length) {
-        designCompareSelector.appendChild(designNode("div", "design-empty-state compact", "暂无可对比任务。"));
+      if (state.designJobs.length < 2) {
+        designCompareSelector.appendChild(designNode("div", "design-empty-state compact", "当前对话只有一个结果版本，无需进行历史对比。"));
         return;
       }
       state.compareJobIds = state.compareJobIds.filter((jobId) => state.designJobs.some((job) => job.job_id === jobId));
@@ -2677,24 +2993,13 @@
         copy.appendChild(designNode("small", "", designJobTimestamp(job.finished_at || job.created_at) + " · " + designOutcome(job).label));
         label.appendChild(checkbox);
         label.appendChild(copy);
-        const adjust = designNode("button", "design-inline-action", "载入并调整");
-        adjust.type = "button";
-        adjust.addEventListener("click", async () => {
-          try {
-            const detail = await fetchDesignJobDetail(job.job_id);
-            loadDesignForAdjustment(detail || job);
-          } catch (error) {
-            setStatus(error.message, true);
-          }
-        });
-        checkbox.addEventListener("change", async () => {
+        checkbox.addEventListener("change", () => {
           if (checkbox.checked) {
             if (state.compareJobIds.length >= 4) {
               checkbox.checked = false;
               return;
             }
             state.compareJobIds.push(job.job_id);
-            try { await fetchDesignJobDetail(job.job_id); } catch (_error) { /* Compact result remains usable. */ }
           } else {
             state.compareJobIds = state.compareJobIds.filter((jobId) => jobId !== job.job_id);
           }
@@ -2702,7 +3007,6 @@
           renderDesignComparison();
         });
         row.appendChild(label);
-        row.appendChild(adjust);
         designCompareSelector.appendChild(row);
       }
     }
@@ -2801,6 +3105,7 @@
       const declared = String(file.kind || file.format || "").toLowerCase();
       const name = String(file.name || file.filename || "").toLowerCase();
       if (declared.includes("image") || /\.(png|jpe?g|webp|gif)$/.test(name)) return "image";
+      if (declared.includes("model") || declared === "obj" || name.endsWith(".obj")) return "model";
       if (declared.includes("markdown") || declared === "md" || name.endsWith(".md")) return "markdown";
       if (declared.includes("html") || name.endsWith(".html")) return "html";
       if (declared.includes("json") || name.endsWith(".json")) return "json";
@@ -2857,6 +3162,7 @@
     }
 
     async function previewDesignResultFile(file) {
+      disposeDesignModelViewer();
       const key = resultFileKey(file);
       designReportPreview.innerHTML = "";
       designReportPreview.dataset.fileKey = key;
@@ -2887,6 +3193,15 @@
             image.replaceWith(designNode("div", "design-empty-state is-error", "无法加载图片预览，可使用下载链接查看文件。"));
           }, { once: true });
           designReportPreview.appendChild(image);
+          return;
+        }
+        if (kind === "model") {
+          const viewport = designNode("div", "design-model-viewport design-report-model");
+          viewport.dataset.modelPreviewUrl = previewUrl;
+          viewport.dataset.modelName = file.name || file.filename || "geometry.obj";
+          viewport.appendChild(designNode("div", "design-model-loading", "正在加载三维模型..."));
+          designReportPreview.appendChild(viewport);
+          await mountDesignObjViewer(viewport, file);
           return;
         }
         if (kind === "html") {
@@ -3001,6 +3316,8 @@
       if (Number.isFinite(requirements.assumed_climb_rate_m_s)) designAssumedClimbRate.value = requirements.assumed_climb_rate_m_s;
       const uncertainty = requirements.uncertainty_enabled ?? requirements.allow_uncertainty;
       if (typeof uncertainty === "boolean") designUncertaintyEnabled.checked = uncertainty;
+      if (typeof request.auto_repair_enabled === "boolean") designAutoRepairEnabled.checked = request.auto_repair_enabled;
+      if (Number.isFinite(request.max_repair_attempts)) designMaxRepairAttempts.value = request.max_repair_attempts;
       const initial = request.initial_guess;
       if (initial) {
         const initialSources = request.provenance?.input_fields?.initial_guess || {};
@@ -3047,11 +3364,14 @@
         }
         if (Number.isFinite(initial.cd0)) designCd0.value = initial.cd0;
         if (Number.isFinite(initial.oswald_e)) designOswald.value = initial.oswald_e;
+        if (Number.isFinite(initial.cg_fraction_cbar)) designCgFraction.value = initial.cg_fraction_cbar;
+        if (Number.isFinite(initial.horizontal_tail_volume_coefficient)) designTailVolume.value = initial.horizontal_tail_volume_coefficient;
         if (Number.isFinite(request.tolerance)) designTolerance.value = request.tolerance;
         if (Number.isFinite(request.max_iterations)) designMaxIterations.value = request.max_iterations;
       }
       syncDesignEnergyMode({ captureCurrent: false });
       syncAdvancedInputs();
+      syncAutoRepairInputs();
       markDesignPreflightDirty();
     }
 
@@ -3061,6 +3381,10 @@
       }
       if (designUseAdvanced.checked) designAdvancedPanel.open = true;
       syncDesignEnergyMode();
+    }
+
+    function syncAutoRepairInputs() {
+      designMaxRepairAttempts.disabled = state.designJobRunning || !designAutoRepairEnabled.checked;
     }
 
     async function refreshDesignJobs(options = {}) {
@@ -3374,7 +3698,7 @@
       let hasDraftEvent = false;
       const liveEvents = [{
         kind: "planning",
-        tool_name: skillDisplayName(skillSelect.value) || "工程设计",
+        tool_name: skillDisplayName(selectedSkillName()) || "工程设计",
         summary: "我先拆解任务目标、约束条件和可能需要补充的资料，再开始组织回答。",
         is_error: false,
       }];
@@ -3416,7 +3740,7 @@
           {
             message,
             auto_approve: autoApproveToggle.checked,
-            auto_skill: toInternalSkillName(skillSelect.value),
+            auto_skill: toInternalSkillName(selectedSkillName()),
           },
           {
             onChunk: (chunk) => {
@@ -3424,7 +3748,7 @@
               if (!hasDraftEvent) {
               liveEvents.push({
                 kind: "drafting",
-                  tool_name: skillDisplayName(skillSelect.value) || "工程设计",
+                  tool_name: skillDisplayName(selectedSkillName()) || "工程设计",
                   summary: "我已经开始把当前可用信息整理成正式回答。",
                   is_error: false,
               });
@@ -3464,7 +3788,7 @@
         const artifactFailure = (payload.reply.events || []).find((item) => item.kind === "artifact" && item.is_error);
         if (resultArtifacts.length) {
           setStatus("本轮完成，设计结果包已生成。" + (tokenBits.length ? " " + tokenBits.join(" / ") : ""));
-        } else if (skillSelect.value === WEB_AIRCRAFT_SKILL && artifactFailure) {
+        } else if (selectedSkillName() === WEB_AIRCRAFT_SKILL && artifactFailure) {
           setStatus("计算未生成新的结果文件，请展开过程查看失败原因。", true);
         } else {
           setStatus(tokenBits.length ? "本轮完成：" + tokenBits.join(" / ") : "本轮完成。");
@@ -3503,13 +3827,18 @@
       saveLocalState();
     });
 
-    skillSelect.addEventListener("change", () => {
+    aircraftSkillToggle.addEventListener("change", () => {
       updateSkillStatus();
       saveLocalState();
+      setStatus(
+        aircraftSkillToggle.checked
+          ? "已启用飞行器总体设计技能，将在下一次发送时生效。"
+          : "已关闭飞行器总体设计技能，将在下一次发送时生效。",
+      );
     });
     modelInput.addEventListener("change", saveLocalState);
     autoApproveToggle.addEventListener("change", () => {
-      updateCapabilityButtons();
+      updateSkillStatus();
       saveLocalState();
     });
 
@@ -3517,18 +3846,15 @@
       setActiveView("chat");
       createSession();
     });
-    designWorkspaceBtn.addEventListener("click", () => setActiveView("design"));
+    chatViewBtn.addEventListener("click", () => setActiveView("chat"));
+    designWorkspaceBtn.addEventListener("click", () => {
+      setDesignTab("results");
+      setActiveView("design");
+    });
     designBackChatBtn.addEventListener("click", () => setActiveView("chat"));
-    skillsPageBtn.addEventListener("click", () => setActiveView("skills"));
-    skillsBackBtn.addEventListener("click", () => setActiveView("chat"));
-    skillDisableBtn.addEventListener("click", clearSkillSelection);
     settingsToggleBtn.addEventListener("click", () => setSettingsOpen(true));
     settingsTopBtn.addEventListener("click", () => setSettingsOpen(true));
     settingsCloseBtn.addEventListener("click", () => setSettingsOpen(false));
-    settingsOpenDesignBtn.addEventListener("click", () => {
-      setSettingsOpen(false);
-      setActiveView("design");
-    });
     settingsOverlay.addEventListener("click", (event) => {
       if (event.target === settingsOverlay) setSettingsOpen(false);
     });
@@ -3554,42 +3880,13 @@
       }
     });
     resetSessionBtn.addEventListener("click", resetSession);
-    designRunForm.addEventListener("submit", submitDesignJob);
-    designCancelBtn.addEventListener("click", cancelDesignJob);
-    designRetryBtn.addEventListener("click", retryDesignJob);
-    designHistoryRefreshBtn.addEventListener("click", () => refreshDesignJobs());
-    designUseAdvanced.addEventListener("change", syncAdvancedInputs);
-    designPropulsionType.addEventListener("change", () => syncDesignEnergyMode());
-    designPreflightBtn.addEventListener("click", () => void runDesignPreflight());
-    designPreflightConfirm.addEventListener("change", () => {
-      if (designPreflightConfirm.checked && state.preflightFingerprint) {
-        state.confirmedPreflightFingerprint = state.preflightFingerprint;
-      } else {
-        state.confirmedPreflightFingerprint = null;
-      }
-      designRunBtn.disabled = state.designJobRunning || state.confirmedPreflightFingerprint !== state.preflightFingerprint;
-    });
-    designRunForm.addEventListener("input", (event) => {
-      if (event.target === designPreflightConfirm) return;
-      if (event.target === designSfc) {
-        captureDesignEnergyValue();
-        const mode = currentDesignEnergyMode();
-        state.designLegacyEnergy[mode] = null;
-        state.designFieldSources[designEnergyPath(mode)] = "user";
-      } else {
-        const path = designFieldPaths.get(event.target);
-        if (path) state.designFieldSources[path] = "user";
-      }
-      markDesignPreflightDirty();
-      scheduleDesignPreflight();
-    });
-    designLoadAdjustBtn.addEventListener("click", () => loadDesignForAdjustment(state.activeDesignJob));
+    designResultVersionSelect.addEventListener("change", () => selectSessionDesignResult(designResultVersionSelect.value));
     document.querySelectorAll("[data-design-tab]").forEach((button) => {
       button.addEventListener("click", () => setDesignTab(button.dataset.designTab));
       button.addEventListener("keydown", (event) => {
         if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
         event.preventDefault();
-        const tabs = Array.from(document.querySelectorAll("[data-design-tab]"));
+        const tabs = Array.from(document.querySelectorAll("[data-design-tab]:not([hidden])"));
         const current = tabs.indexOf(button);
         const next = event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 : (current + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
         setDesignTab(tabs[next].dataset.designTab, { focus: true });
@@ -3604,9 +3901,6 @@
       autosizePrompt();
       promptInput.focus();
       setStatus("草稿已清空。");
-    });
-    document.querySelectorAll(".prompt-chip").forEach((button) => {
-      button.addEventListener("click", () => setPromptDraft(button.dataset.prompt || button.textContent || ""));
     });
     promptInput.addEventListener("input", autosizePrompt);
     promptInput.addEventListener("keydown", (event) => {
@@ -3626,16 +3920,12 @@
         populateSkills();
         const local = loadLocalState();
         applyConfigDefaults(local);
-        syncDesignEnergyMode({ captureCurrent: false });
-        restoreDesignFieldSources();
-        markDesignPreflightDirty();
-        scheduleDesignPreflight();
         if (local?.sessionId) {
           try {
             await loadSession(local.sessionId);
             const pendingSkill = toUiSkillName(local.autoSkill || "");
-            if (pendingSkill && Array.from(skillSelect.options).some((item) => item.value === pendingSkill)) {
-              skillSelect.value = pendingSkill;
+            if (pendingSkill === WEB_AIRCRAFT_SKILL && skillByName(pendingSkill)) {
+              setSelectedSkill(pendingSkill);
               updateSkillStatus();
               saveLocalState();
             }
@@ -3647,11 +3937,6 @@
         } else {
           await createSession();
         }
-        await refreshDesignJobs({
-          restoreLatest: true,
-          preferredJobId: local?.designJobId || null,
-          silent: true,
-        });
       } catch (error) {
         setStatus(error.message, true);
       } finally {

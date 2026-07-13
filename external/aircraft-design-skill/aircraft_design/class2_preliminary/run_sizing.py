@@ -326,6 +326,8 @@ def main():
             "prop_efficiency": 0.8,
             "cd0": 0.02,
             "oswald_e": 0.8,
+            "cg_fraction_cbar": 0.30,
+            "horizontal_tail_volume_coefficient": 0.40,
         }
         provided_req = _provided_configuration(data, req_data)
 
@@ -392,6 +394,13 @@ def main():
             prop_efficiency=guess_data.get("prop_efficiency", guess_defaults["prop_efficiency"]),
             cd0=guess_data.get("cd0", guess_defaults["cd0"]),
             oswald_e=guess_data.get("oswald_e", guess_defaults["oswald_e"]),
+            cg_fraction_cbar=guess_data.get(
+                "cg_fraction_cbar", guess_defaults["cg_fraction_cbar"]
+            ),
+            horizontal_tail_volume_coefficient=guess_data.get(
+                "horizontal_tail_volume_coefficient",
+                guess_defaults["horizontal_tail_volume_coefficient"],
+            ),
         )
 
         if req.propulsion_type not in {"jet", "prop"}:
@@ -512,6 +521,7 @@ def main():
                 "solver_options": solver_options,
             },
             "iteration_history": result.iteration_history,
+            "design_adjustments": result.design_adjustments,
             "design_point": result.design_point,
             "advanced_results": {},
             "uncertainty_analysis": {},
@@ -534,6 +544,7 @@ def main():
                 },
                 "iterations": result.iterations,
                 "iteration_history": result.iteration_history,
+                "design_adjustments": result.design_adjustments,
                 "design_point": result.design_point,
                 "drag_params": result.drag_params,
                 "aero_params": result.aero_params,
@@ -570,6 +581,11 @@ def main():
                 inputs_for_geom["requirements"] = asdict(req)
             if "initial_guess" not in inputs_for_geom:
                 inputs_for_geom["initial_guess"] = asdict(guess)
+            else:
+                inputs_for_geom["initial_guess"] = dict(inputs_for_geom["initial_guess"])
+            inputs_for_geom["initial_guess"]["thickness_ratio"] = result.geometry.get(
+                "thickness_ratio", guess.thickness_ratio
+            )
 
             detailed_geom = geometry_detailed_from_inputs(inputs_for_geom, result)
             result.geometry_detailed = detailed_geom
@@ -782,7 +798,7 @@ def main():
                     "cbar_m": result.geometry.get(
                         "mean_chord_m", result.wing_area_m2 / max(result.geometry.get("span_m", 1.0), 1e-6)
                     ),
-                    "wing_t_c": guess.thickness_ratio,
+                    "wing_t_c": result.geometry.get("thickness_ratio", guess.thickness_ratio),
                     "fuselage_length_m": result.geometry.get(
                         "fuselage_length_m", (result.geometry.get("span_m", 10.0) * 0.8)
                     ),
@@ -793,8 +809,8 @@ def main():
                 }
                 stability_input = {
                     "x_ac_w_cbar": 0.25,
-                    "x_cg_cbar": 0.3,
-                    "vh_coeff": 0.4,
+                    "x_cg_cbar": guess.cg_fraction_cbar,
+                    "vh_coeff": guess.horizontal_tail_volume_coefficient,
                     "vv_coeff": 0.07,
                     "l_ht_m": geometry_input["fuselage_length_m"] * 0.45,
                     "l_vt_m": geometry_input["fuselage_length_m"] * 0.45,
@@ -1019,7 +1035,10 @@ def main():
                         blocking=False,
                         message="OAT sensitivity completed, but no candidate passed reduced-order screening.",
                     )
-                constraint_reqs = {"fuel_weight_kg": result.fuel_weight_kg}
+                constraint_reqs = {
+                    "fuel_weight_kg": result.fuel_weight_kg,
+                    "aircraft_role": req.aircraft_role,
+                }
                 if isinstance(inputs_for_geom.get("geometry_constraints", None), dict):
                     constraint_reqs.update(inputs_for_geom["geometry_constraints"])
                 geom_constraints = GeometryConstraintChecker(
@@ -1163,7 +1182,21 @@ def main():
 
         send_report_path_to_gui(run_dir)
 
-        print("\nSuccess! Design iteration completed.")
+        if output_data.get("engineering_feasible") is True:
+            print("\nSuccess: numerical convergence and all blocking engineering gates passed.")
+        else:
+            failed_ids = [
+                str(item.get("id"))
+                for item in output_data.get("constraints", [])
+                if isinstance(item, dict)
+                and item.get("blocking") is True
+                and item.get("passed") is not True
+            ]
+            print(
+                "\nDesign completed but is not deliverable. Failed blocking checks: "
+                + (", ".join(failed_ids) if failed_ids else "incomplete engineering evidence")
+            )
+            sys.exit(2)
 
     except Exception as e:
         print(f"Error during sizing: {e}")

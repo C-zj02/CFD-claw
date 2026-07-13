@@ -40,9 +40,11 @@ def test_design_preflight_reports_user_default_and_derived_sources(tmp_path: Pat
         assert payload["field_sources"]["requirements.range_m"] == "user"
         assert payload["field_sources"]["requirements.cruise_mach"] == "default"
         assert payload["field_sources"]["initial_guess.mtow_kg"] == "derived"
+        assert payload["field_sources"]["solver.auto_repair_enabled"] == "default"
         assumptions = {item["path"]: item for item in payload["assumptions"]}
         assert assumptions["requirements.cruise_mach"]["source"] == "default"
         assert assumptions["initial_guess.mtow_kg"]["source"] == "derived"
+        assert assumptions["solver.auto_repair_enabled"]["source"] == "default"
         assert any("默认或推导字段" in warning for warning in payload["warnings"])
     finally:
         service._design_jobs.shutdown()
@@ -91,6 +93,7 @@ def test_result_file_listing_filters_unsafe_files_and_external_symlinks(tmp_path
     hidden.mkdir()
     (output / "design report.md").write_text("# Design", encoding="utf-8")
     (nested / "constraint.png").write_bytes(b"png")
+    (output / "geometry.obj").write_text("o aircraft\nv 0 0 0\n", encoding="utf-8")
     (output / "interactive.html").write_text("<h1>Chart</h1>", encoding="utf-8")
     (output / "solver.exe").write_bytes(b"not allowed")
     (hidden / "notes.md").write_text("hidden", encoding="utf-8")
@@ -105,11 +108,18 @@ def test_result_file_listing_filters_unsafe_files_and_external_symlinks(tmp_path
     files = store.list_result_files("job id", output)
 
     paths = {item["path"] for item in files}
-    assert paths == {"design report.md", "interactive.html", "plots/constraint.png"}
+    assert paths == {
+        "design report.md",
+        "geometry.obj",
+        "interactive.html",
+        "plots/constraint.png",
+    }
     report = next(item for item in files if item["path"] == "design report.md")
     assert report["kind"] == "markdown"
     assert "job%20id" in report["preview_url"]
     assert "design%20report.md" in report["preview_url"]
+    model = next(item for item in files if item["path"] == "geometry.obj")
+    assert model["kind"] == "model"
     assert report["download_url"].endswith("?download=1")
 
 

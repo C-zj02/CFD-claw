@@ -156,7 +156,15 @@ def normalized_advanced_constraints(
                 actual=item.get("actual_value"),
                 unit="m3" if name == "Fuel Volume" else "ratio",
                 blocking=True,
-                evidence={"model": item.get("description", "Geometry constraint check"), "prediction": True},
+                evidence={
+                    "model": item.get("description", "Geometry constraint check"),
+                    "prediction": True,
+                    **(
+                        {"volume_breakdown": dict(item["details"])}
+                        if name == "Fuel Volume" and isinstance(item.get("details"), dict)
+                        else {}
+                    ),
+                },
                 recommendation=(
                     "Increase usable wing tank volume or reduce mission fuel."
                     if name == "Fuel Volume"

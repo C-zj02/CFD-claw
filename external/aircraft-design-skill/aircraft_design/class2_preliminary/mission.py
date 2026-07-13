@@ -261,6 +261,7 @@ def mission_fuel_breakdown(
                 "w_start_kg": w_start_n / CONST.g0_m_s2,
                 "w_end_kg": w_n / CONST.g0_m_s2,
                 "fuel_kg": (w_start_n - w_n) / CONST.g0_m_s2,
+                "distance_m": descent_dist,
             },
         )
     )
@@ -271,12 +272,15 @@ def mission_fuel_breakdown(
         total_fraction = 1.0 - (1.0 - total_fraction) * (1.0 - s.fuel_fraction)
         weight_multiplier *= 1.0 - s.fuel_fraction
 
-    total_fraction = 1.0 - (1.0 - total_fraction) * (1.0 - reserve_fraction)
+    segment_fraction = total_fraction
+    reserve_fuel_fraction = (1.0 - segment_fraction) * reserve_fraction
+    total_fraction = segment_fraction + reserve_fuel_fraction
     closure = 1.0 - weight_multiplier * (1.0 - reserve_fraction)
 
     return {
         "fuel_fraction_total": total_fraction,
         "reserve_fraction": reserve_fraction,
+        "reserve_fuel_fraction": reserve_fuel_fraction,
         "segments": [{"name": s.name, "fuel_fraction": s.fuel_fraction, "details": s.details} for s in segments],
         "closure": {"fuel_fraction_total_from_product": closure, "difference": total_fraction - closure},
     }
@@ -320,15 +324,16 @@ def generate_mission_envelope(
         isa_delta_c=isa_delta_c,
     )
 
+    # The breakdown already includes reserve in ``fuel_fraction_total``.
     total_fuel_fraction = result["fuel_fraction_total"]
-    total_fuel_kg = w0_kg * total_fuel_fraction / (1.0 - reserve_fraction)
+    total_fuel_kg = w0_kg * total_fuel_fraction
 
     return {
         "mission": base_mission,
         "fuel_breakdown": result,
         "total_fuel_kg": total_fuel_kg,
         "total_fuel_fraction": total_fuel_fraction,
-        "reserve_fuel_kg": total_fuel_kg * reserve_fraction,
+        "reserve_fuel_kg": w0_kg * result["reserve_fuel_fraction"],
         "segments": result["segments"],
     }
 

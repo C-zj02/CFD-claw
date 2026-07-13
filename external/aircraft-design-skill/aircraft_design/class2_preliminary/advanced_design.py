@@ -313,7 +313,7 @@ def execute_stage4_mission(
         isa_delta_c=isa_delta_c,
     )
 
-    total_fuel_kg = w0_kg * breakdown["fuel_fraction_total"] / (1.0 - breakdown.get("reserve_fraction", 0.0))
+    total_fuel_kg = w0_kg * breakdown["fuel_fraction_total"]
 
     mission_time_s = 0.0
     mission_distance_m = 0.0

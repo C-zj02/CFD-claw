@@ -240,6 +240,8 @@ class AircraftDesignInitialGuess:
     prop_efficiency: float = 0.8
     cd0: float = 0.025
     oswald_e: float = 0.82
+    cg_fraction_cbar: float = 0.30
+    horizontal_tail_volume_coefficient: float = 0.40
 
     def __post_init__(self) -> None:
         values = {
@@ -261,6 +263,15 @@ class AircraftDesignInitialGuess:
             ),
             "cd0": _bounded(self.cd0, "initial_guess.cd0", 0.001, 0.3),
             "oswald_e": _bounded(self.oswald_e, "initial_guess.oswald_e", 0.1, 1.2),
+            "cg_fraction_cbar": _bounded(
+                self.cg_fraction_cbar, "initial_guess.cg_fraction_cbar", 0.05, 0.55
+            ),
+            "horizontal_tail_volume_coefficient": _bounded(
+                self.horizontal_tail_volume_coefficient,
+                "initial_guess.horizontal_tail_volume_coefficient",
+                0.1,
+                1.5,
+            ),
         }
         for name, value in values.items():
             object.__setattr__(self, name, value)
@@ -326,6 +337,8 @@ class AircraftDesignRequest:
     initial_guess: AircraftDesignInitialGuess
     tolerance: float = 0.001
     max_iterations: int = 50
+    auto_repair_enabled: bool = False
+    max_repair_attempts: int = 3
     provenance: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -340,6 +353,14 @@ class AircraftDesignRequest:
             raise ValueError("max_iterations must be an integer")
         if self.max_iterations < 1 or self.max_iterations > 500:
             raise ValueError("max_iterations must be between 1 and 500")
+        if not isinstance(self.auto_repair_enabled, bool):
+            raise ValueError("auto_repair_enabled must be a boolean")
+        if isinstance(self.max_repair_attempts, bool) or not isinstance(
+            self.max_repair_attempts, int
+        ):
+            raise ValueError("max_repair_attempts must be an integer")
+        if self.max_repair_attempts < 0 or self.max_repair_attempts > 8:
+            raise ValueError("max_repair_attempts must be between 0 and 8")
         if not isinstance(self.provenance, dict):
             raise ValueError("provenance must be an object")
         object.__setattr__(self, "provenance", copy.deepcopy(self.provenance))
@@ -354,6 +375,8 @@ class AircraftDesignRequest:
             "initial_guess",
             "tolerance",
             "max_iterations",
+            "auto_repair_enabled",
+            "max_repair_attempts",
             "solver_options",
             "provenance",
         }
@@ -364,7 +387,14 @@ class AircraftDesignRequest:
         if not isinstance(solver_options, dict):
             raise ValueError("solver_options must be an object")
         unknown_solver_options = sorted(
-            set(solver_options) - {"tolerance", "max_iter", "max_iterations"}
+            set(solver_options)
+            - {
+                "tolerance",
+                "max_iter",
+                "max_iterations",
+                "auto_repair_enabled",
+                "max_repair_attempts",
+            }
         )
         if unknown_solver_options:
             raise ValueError(
@@ -378,6 +408,12 @@ class AircraftDesignRequest:
         max_iterations = value.get(
             "max_iterations",
             solver_options.get("max_iterations", solver_options.get("max_iter", 50)),
+        )
+        auto_repair_enabled = value.get(
+            "auto_repair_enabled", solver_options.get("auto_repair_enabled", False)
+        )
+        max_repair_attempts = value.get(
+            "max_repair_attempts", solver_options.get("max_repair_attempts", 3)
         )
         provenance = value.get("provenance")
         if provenance is None:
@@ -435,6 +471,8 @@ class AircraftDesignRequest:
             initial_guess=initial_guess,
             tolerance=tolerance,
             max_iterations=max_iterations,
+            auto_repair_enabled=auto_repair_enabled,
+            max_repair_attempts=max_repair_attempts,
             provenance=provenance,
         )
 
@@ -445,6 +483,8 @@ class AircraftDesignRequest:
             "solver_options": {
                 "tolerance": self.tolerance,
                 "max_iter": self.max_iterations,
+                "auto_repair_enabled": self.auto_repair_enabled,
+                "max_repair_attempts": self.max_repair_attempts,
             },
             "provenance": copy.deepcopy(self.provenance),
         }
@@ -456,5 +496,7 @@ class AircraftDesignRequest:
             "initial_guess": self.initial_guess.to_dict(),
             "tolerance": self.tolerance,
             "max_iterations": self.max_iterations,
+            "auto_repair_enabled": self.auto_repair_enabled,
+            "max_repair_attempts": self.max_repair_attempts,
             "provenance": copy.deepcopy(self.provenance),
         }
