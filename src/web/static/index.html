@@ -224,18 +224,18 @@
                 <details class="design-advanced" id="designAdvancedPanel">
                   <summary>初始参数与求解设置</summary>
                   <div class="design-run-grid">
-                    <div class="design-run-field"><label for="designMtowGuess">MTOW 初猜（kg）</label><input id="designMtowGuess" data-design-advanced type="number" value="2500" min="1" max="2000000" step="1" disabled></div>
+                    <div class="design-run-field"><label for="designMtowGuess">最大起飞重量初值（MTOW，kg）</label><input id="designMtowGuess" data-design-advanced type="number" value="2500" min="1" max="2000000" step="1" disabled></div>
                     <div class="design-run-field"><label for="designWingLoading">翼载初猜（Pa）</label><input id="designWingLoading" data-design-advanced type="number" value="3000" min="50" max="20000" step="10" disabled></div>
                     <div class="design-run-field"><label for="designThrustWeight">推重比初猜</label><input id="designThrustWeight" data-design-advanced type="number" value="0.6" min="0.02" max="3" step="0.01" disabled></div>
                     <div class="design-run-field"><label for="designAspectRatio">展弦比</label><input id="designAspectRatio" data-design-advanced type="number" value="10" min="1" max="40" step="0.1" disabled></div>
                     <div class="design-run-field"><label for="designSweepDeg">后掠角（deg）</label><input id="designSweepDeg" data-design-advanced type="number" value="5" min="0" max="75" step="0.5" disabled></div>
                     <div class="design-run-field"><label for="designTaperRatio">梯形比</label><input id="designTaperRatio" data-design-advanced type="number" value="0.5" min="0.05" max="1" step="0.01" disabled></div>
                     <div class="design-run-field"><label for="designThicknessRatio">厚度比</label><input id="designThicknessRatio" data-design-advanced type="number" value="0.12" min="0.03" max="0.3" step="0.01" disabled></div>
-                    <div class="design-run-field"><label id="designSfcLabel" for="designSfc">螺旋桨 BSFC（kg/J）</label><input id="designSfc" data-design-advanced data-energy-mode="prop" type="number" value="8.45e-8" min="1e-10" max="1e-5" step="any" disabled></div>
+                    <div class="design-run-field"><label id="designSfcLabel" for="designSfc">螺旋桨功率比油耗（BSFC，kg/J）</label><input id="designSfc" data-design-advanced data-energy-mode="prop" type="number" value="8.45e-8" min="1e-10" max="1e-5" step="any" disabled></div>
                     <div id="designPropEfficiencyField" class="design-run-field"><label for="designPropEfficiency">螺旋桨效率</label><input id="designPropEfficiency" data-design-advanced type="number" value="0.8" min="0.1" max="1" step="0.01" disabled></div>
                     <div class="design-run-field"><label for="designCd0">零升阻力系数</label><input id="designCd0" data-design-advanced type="number" value="0.025" min="0.001" max="0.3" step="0.001" disabled></div>
-                    <div class="design-run-field"><label for="designOswald">Oswald 效率因子</label><input id="designOswald" data-design-advanced type="number" value="0.82" min="0.1" max="1.2" step="0.01" disabled></div>
-                    <div class="design-run-field"><label for="designCgFraction">重心位置（cbar）</label><input id="designCgFraction" data-design-advanced type="number" value="0.30" min="0.05" max="0.55" step="0.01" disabled></div>
+                    <div class="design-run-field"><label for="designOswald">奥斯瓦尔德效率因子</label><input id="designOswald" data-design-advanced type="number" value="0.82" min="0.1" max="1.2" step="0.01" disabled></div>
+                    <div class="design-run-field"><label for="designCgFraction">重心位置（平均气动弦长比例）</label><input id="designCgFraction" data-design-advanced type="number" value="0.30" min="0.05" max="0.55" step="0.01" disabled></div>
                     <div class="design-run-field"><label for="designTailVolume">平尾容积系数</label><input id="designTailVolume" data-design-advanced type="number" value="0.40" min="0.1" max="1.5" step="0.01" disabled></div>
                     <div class="design-run-field"><label for="designTolerance">收敛容差</label><input id="designTolerance" data-design-advanced type="number" value="0.001" min="0.000001" max="0.1" step="any" disabled></div>
                     <div class="design-run-field"><label for="designMaxIterations">最大迭代次数</label><input id="designMaxIterations" data-design-advanced type="number" value="50" min="1" max="500" step="1" disabled></div>

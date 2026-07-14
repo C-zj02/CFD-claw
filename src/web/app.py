@@ -732,9 +732,7 @@ class ClawdWebService:
         allowed = set(snapshot.get("allowed_actions") or [])
         actions: list[dict[str, Any]] = []
         has_questions = bool(diagnosis.get("clarification_questions"))
-        if has_questions and (
-            "answer_questions" in allowed or "apply_change" in allowed
-        ):
+        if has_questions and "answer_questions" in allowed:
             # A contradictory diagnosis may expose both a prerequisite question
             # and repair proposals.  The browser submits every visible answer with
             # its button, so resolve the questions first and present proposals on
@@ -773,7 +771,7 @@ class ClawdWebService:
                     "payload": {},
                 }
             )
-        if "defer_unsupported" in allowed:
+        if not has_questions and "defer_unsupported" in allowed:
             unsupported_paths = [
                 item.get("field_path")
                 for item in diagnosis.get("coverage", [])

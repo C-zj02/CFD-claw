@@ -23,6 +23,16 @@ def _workflow(tmp_path: Path) -> DesignRequirementWorkflow:
     return DesignRequirementWorkflow(DesignRevisionStore(tmp_path / "requirements"))
 
 
+_COMPLEX_UNSUPPORTED_REQUEST = (
+    "设计一款隐身作战无人机，要求最大起飞重量不大于260kg，任务载荷60kg，"
+    "设计巡航高度9.5km，巡航马赫数0.6，要求巡航航时不低于1h，"
+    "设计最大飞行马赫数0.8，使用升限10km，采用火箭助推+伞降回收形式，"
+    "发射场海拔1500m，火箭助推结束为马赫数0.28、相对高度40m，"
+    "开伞速度Ma0.24，相对高度1000m，采用单发布局形式，"
+    "布局风格可参考沙赫德-136无人机，展弦比不大于2.5。"
+)
+
+
 def _record_submission(
     workflow: DesignRequirementWorkflow,
     session_id: str,
@@ -183,6 +193,27 @@ def test_locked_repair_proposal_requires_explicit_confirmation(tmp_path: Path) -
     ]
 
 
+def test_change_proposal_cannot_bypass_pending_clarification(tmp_path: Path) -> None:
+    workflow = _workflow(tmp_path)
+    initial = workflow.start(
+        "session-question-before-change",
+        "设计一款无人机，最大起飞重量不大于150kg，任务载荷150kg。",
+        client_action_id="start-question-before-change",
+    )
+
+    assert initial["allowed_actions"] == ["answer_questions"]
+    assert initial["diagnosis"]["clarification_questions"]
+    proposal = initial["diagnosis"]["change_proposals"][0]
+    with pytest.raises(WorkflowStateError, match="must be answered before"):
+        workflow.apply_change(
+            "session-question-before-change",
+            proposal_id=proposal["proposal_id"],
+            expected_revision_hash=initial["revision_hash"],
+            client_action_id="change-too-early",
+            user_confirmed=True,
+        )
+
+
 def test_unsupported_requirements_are_retained_when_user_accepts_reduced_scope(
     tmp_path: Path,
 ) -> None:
@@ -234,6 +265,105 @@ def test_unsupported_requirements_are_retained_when_user_accepts_reduced_scope(
     assert len(deferrals["fields"]) == 4
 
 
+def test_unsupported_request_answers_blocking_questions_before_scope_deferral(
+    tmp_path: Path,
+) -> None:
+    workflow = _workflow(tmp_path)
+    initial = workflow.start(
+        "session-two-step",
+        _COMPLEX_UNSUPPORTED_REQUEST,
+        client_action_id="start-two-step",
+    )
+
+    assert initial["diagnosis"]["status"] == "unsupported"
+    assert initial["allowed_actions"] == ["answer_questions"]
+    questions = {
+        item["question_id"]: item
+        for item in initial["diagnosis"]["clarification_questions"]
+    }
+    assert set(questions) == {
+        "mission.range.required",
+        "propulsion.type.high_speed",
+    }
+    with pytest.raises(WorkflowStateError, match="must be answered before"):
+        workflow.defer_unsupported(
+            "session-two-step",
+            field_paths=None,
+            scope_statement="先求解当前模型覆盖范围。",
+            expected_revision_hash=initial["revision_hash"],
+            client_action_id="defer-too-early",
+            user_confirmed=True,
+        )
+
+    answered = workflow.answer_questions(
+        "session-two-step",
+        answers=[
+            {
+                "question_id": "mission.range.required",
+                "field_path": "mission.range_m",
+                "value": 950_000,
+            },
+            {
+                "question_id": "propulsion.type.high_speed",
+                "field_path": "propulsion.propulsion_type",
+                "value": "jet",
+            },
+        ],
+        expected_revision_hash=initial["revision_hash"],
+        client_action_id="answer-two-step",
+    )
+
+    assert answered["diagnosis"]["status"] == "unsupported"
+    assert answered["diagnosis"]["clarification_questions"] == []
+    assert answered["allowed_actions"] == ["defer_unsupported"]
+    answered_fields = {
+        item["path"]: item for item in answered["intent"]["requirements"]
+    }
+    assert answered_fields["requirements.range_m"]["value"] == 950_000
+    assert answered_fields["requirements.propulsion_type"]["value"] == "jet"
+
+    unsupported_paths = [
+        item["field_path"]
+        for item in answered["diagnosis"]["coverage"]
+        if item["status"] == "unsupported" and item["blocking"]
+    ]
+    scoped = workflow.defer_unsupported(
+        "session-two-step",
+        field_paths=unsupported_paths,
+        scope_statement=(
+            "保留当前模型未覆盖的专项要求作为后续验证缺口，"
+            "本轮只求解已覆盖的 Class I/II 范围。"
+        ),
+        expected_revision_hash=answered["revision_hash"],
+        client_action_id="defer-two-step",
+        user_confirmed=True,
+    )
+
+    assert scoped["diagnosis"]["status"] == "ready_for_solver"
+    assert scoped["allowed_actions"] == ["confirm_revision"]
+    scoped_fields = {item["path"]: item for item in scoped["intent"]["requirements"]}
+    for path in (
+        "performance.min_cruise_endurance_s",
+        "performance.max_flight_mach",
+        "launch.mode",
+        "recovery.mode",
+        "configuration.stealth_requirement",
+    ):
+        assert scoped_fields[path]["role"] == "soft_goal"
+        assert scoped_fields[path]["source"] == "user"
+    assert scoped_fields["requirements.range_m"]["value"] == 950_000
+    assert scoped_fields["requirements.propulsion_type"]["value"] == "jet"
+
+    confirmed = workflow.confirm_revision(
+        "session-two-step",
+        expected_revision_hash=scoped["revision_hash"],
+        client_action_id="confirm-two-step",
+        user_confirmed=True,
+    )
+    assert confirmed["confirmed"] is True
+    assert confirmed["allowed_actions"] == ["submit_solver"]
+
+
 def test_confirmation_is_required_before_solver_projection(tmp_path: Path) -> None:
     workflow = _workflow(tmp_path)
     ready = workflow.start(
@@ -277,11 +407,32 @@ def test_deferred_out_of_envelope_solver_field_is_preserved_but_not_projected(
     )
     assert initial["diagnosis"]["status"] == "unsupported"
 
+    question = initial["diagnosis"]["clarification_questions"][0]
+    assert question["question_id"] == "performance.service_ceiling.high_cruise"
+    answered = workflow.answer_questions(
+        "session-001",
+        answers=[
+            {
+                "question_id": question["question_id"],
+                "field_path": question["field_path"],
+                "value": 40_000.0,
+            }
+        ],
+        expected_revision_hash=initial["revision_hash"],
+        client_action_id="answer-ceiling",
+    )
+    assert answered["allowed_actions"] == ["defer_unsupported"]
+    unsupported_paths = [
+        item["field_path"]
+        for item in answered["diagnosis"]["coverage"]
+        if item["status"] == "unsupported" and item["blocking"]
+    ]
+
     deferred = workflow.defer_unsupported(
         "session-001",
-        field_paths=["requirements.cruise_altitude_m"],
+        field_paths=unsupported_paths,
         scope_statement="保留 40 km 目标，先在当前大气模型覆盖范围内完成方案筛选。",
-        expected_revision_hash=initial["revision_hash"],
+        expected_revision_hash=answered["revision_hash"],
         client_action_id="scope-accepted",
         user_confirmed=True,
     )
@@ -289,6 +440,7 @@ def test_deferred_out_of_envelope_solver_field_is_preserved_but_not_projected(
     fields = {item["path"]: item for item in deferred["intent"]["requirements"]}
     assert fields["deferred.requirements.cruise_altitude_m"]["value"] == 40_000.0
     assert fields["deferred.requirements.cruise_altitude_m"]["role"] == "soft_goal"
+    assert fields["requirements.service_ceiling_m"]["value"] == 40_000.0
     assert fields["requirements.cruise_altitude_m"]["value"] <= 35_000.0
     assert fields["requirements.cruise_altitude_m"]["source"] == "default"
 

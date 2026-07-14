@@ -146,6 +146,11 @@ class DesignRequirementWorkflow:
         current = self._load_current_guarded(session_id, expected_revision_hash)
         intent = DesignIntent.from_dict(current["declared_intent"])
         diagnosis = FeasibilityDiagnosis.from_dict(current["diagnosis"])
+        if diagnosis.clarification_questions:
+            raise WorkflowStateError(
+                "clarification questions must be answered before change proposals "
+                "can be applied"
+            )
         proposal = next(
             (item for item in diagnosis.change_proposals if item.proposal_id == proposal_id),
             None,
@@ -517,6 +522,11 @@ class DesignRequirementWorkflow:
         if diagnosis.status is not DesignIntentStatus.UNSUPPORTED:
             raise WorkflowStateError(
                 "unsupported requirements can be deferred only from the unsupported state"
+            )
+        if diagnosis.clarification_questions:
+            raise WorkflowStateError(
+                "clarification questions must be answered before unsupported requirements "
+                "can be deferred"
             )
         blockers = {
             record.field_path: record
@@ -1347,13 +1357,13 @@ class DesignRequirementWorkflow:
         defaults_materialized: bool,
         submitted: bool = False,
     ) -> list[str]:
+        if diagnosis.clarification_questions:
+            return ["answer_questions"]
         if diagnosis.status in {
             DesignIntentStatus.CONTRADICTORY_REQUIREMENTS,
             DesignIntentStatus.REPAIRABLE,
         }:
             return ["apply_change"]
-        if diagnosis.status is DesignIntentStatus.NEEDS_CLARIFICATION:
-            return ["answer_questions"]
         if diagnosis.status is DesignIntentStatus.UNSUPPORTED:
             return ["defer_unsupported"]
         if diagnosis.status is DesignIntentStatus.READY_FOR_SOLVER:

@@ -217,11 +217,11 @@ def _requirement_interaction(*, action_enabled: bool = True) -> dict:
         },
         "actions": [
             {
-                "action": "apply_change_proposal",
-                "label": "采用修改建议",
+                "action": "answer_question",
+                "label": "提交确认信息",
                 "enabled": action_enabled,
                 "primary": True,
-                "payload": {"proposal_id": "scope.cruise_only"},
+                "payload": {},
             }
         ],
     }
@@ -391,6 +391,8 @@ def _install_api_mock(
     running_fallback: bool = False,
     messages: list[dict] | None = None,
     requirement_action_response: dict | None = None,
+    requirement_action_responses: list[dict] | None = None,
+    requirement_action_error: str | None = None,
     stream_completion_job: dict | None = None,
 ):
     jobs = jobs or []
@@ -490,9 +492,21 @@ def _install_api_mock(
                     "payload": route.request.post_data_json or {},
                 }
             )
+            if requirement_action_error:
+                fulfill_json(route, {"error": requirement_action_error}, status=400)
+                return
+            response_index = len(state["requirement_action_requests"]) - 1
+            sequenced_response = (
+                requirement_action_responses[
+                    min(response_index, len(requirement_action_responses) - 1)
+                ]
+                if requirement_action_responses
+                else None
+            )
             fulfill_json(
                 route,
-                requirement_action_response
+                sequenced_response
+                or requirement_action_response
                 or {"interaction": _requirement_interaction(action_enabled=False)},
             )
             return
@@ -726,7 +740,7 @@ def test_requirement_interaction_card_renders_and_posts_revision_action(
         playwright_api.expect(historical_card).to_have_attribute("data-current", "false")
         playwright_api.expect(historical_card).to_contain_text("历史需求版本")
         playwright_api.expect(
-            historical_card.get_by_role("button", name="采用修改建议")
+            historical_card.get_by_role("button", name="提交确认信息")
         ).to_be_disabled()
         card = cards.nth(1)
         playwright_api.expect(card).to_be_visible()
@@ -749,10 +763,13 @@ def test_requirement_interaction_card_renders_and_posts_revision_action(
             "input[data-requirement-question='question-range-001']"
         )
         playwright_api.expect(range_answer).to_have_attribute("type", "number")
+        playwright_api.expect(range_answer).to_have_attribute("placeholder", "请输入数值（米）")
         range_answer.fill("500000")
         playwright_api.expect(card).to_contain_text("先冻结助推接口")
+        playwright_api.expect(card).to_contain_text("移出本轮求解范围")
+        assert "out_of_scope" not in card.inner_text()
 
-        action_button = card.get_by_role("button", name="采用修改建议")
+        action_button = card.get_by_role("button", name="提交确认信息")
         with page.expect_response(
             re.compile(
                 r"/api/sessions/e2e-session/requirement-revisions/"
@@ -766,10 +783,10 @@ def test_requirement_interaction_card_renders_and_posts_revision_action(
         request = mock_state["requirement_action_requests"][0]
         assert request["path"].endswith("/requirement-revision-001/actions")
         payload = request["payload"]
-        assert payload["action"] == "apply_change_proposal"
+        assert payload["action"] == "answer_question"
         assert payload["expected_revision_hash"] == "a" * 64
         assert payload["client_action_id"]
-        assert payload["proposal_id"] == "scope.cruise_only"
+        assert "proposal_id" not in payload
         assert payload["decisions"]["clarification_answers"] == [
             {
                 "question_id": "question-scope-001",
@@ -792,7 +809,7 @@ def test_requirement_interaction_card_renders_and_posts_revision_action(
         current_card = cards.last
         playwright_api.expect(current_card).to_contain_text("已记录巡航段优先的用户决定")
         playwright_api.expect(
-            current_card.get_by_role("button", name="采用修改建议")
+            current_card.get_by_role("button", name="提交确认信息")
         ).to_be_disabled()
 
         page.set_viewport_size({"width": 390, "height": 844})
@@ -822,6 +839,544 @@ def test_requirement_interaction_card_renders_and_posts_revision_action(
         page.set_viewport_size({"width": 1280, "height": 900})
         page.locator("#designWorkspaceBtn").click()
         playwright_api.expect(page.locator("#designResultsContent")).to_contain_text("初步可行候选")
+    finally:
+        context.close()
+
+
+def test_requirement_units_follow_field_semantics(
+    e2e_browser,
+    static_app_url: str,
+) -> None:
+    interaction = _requirement_interaction(action_enabled=False)
+    interaction["intent"]["requirements"] = [
+        {
+            "path": path,
+            "value": value,
+            "unit": unit,
+            "role": "technology_assumption",
+            "locked": False,
+            "source": "default",
+            "applicable_model": "aircraft_class_i_ii_v2",
+        }
+        for path, value, unit in [
+            ("requirements.assumed_climb_rate_m_s", 5.0, "s"),
+            ("initial_guess.sfc_cruise_1_s", 2.3e-5, "s"),
+            ("initial_guess.jet_tsfc_kg_per_n_s", 2.3e-5, "s"),
+            ("initial_guess.prop_bsfc_kg_per_j", 8.45e-8, None),
+            ("initial_guess.sweep_deg", 35.0, None),
+            ("requirements.max_load_factor", 3.8, None),
+        ]
+    ]
+    interaction["diagnosis"]["clarification_questions"] = []
+    messages = [
+        {
+            "role": "assistant",
+            "text": "",
+            "events": [
+                {
+                    "kind": "requirement_interaction",
+                    "preview": {"interaction": interaction},
+                }
+            ],
+        }
+    ]
+
+    context = e2e_browser.new_context(viewport={"width": 1280, "height": 900})
+    page = context.new_page()
+    _install_api_mock(page, messages=messages)
+    try:
+        page.goto(static_app_url)
+        card = page.locator("[data-testid='requirement-interaction']")
+        climb_rate = card.locator(
+            "tr[data-field-path='requirements.assumed_climb_rate_m_s']"
+        )
+        playwright_api.expect(climb_rate.locator("td").nth(2)).to_have_text("m/s")
+        playwright_api.expect(
+            card.locator("tr[data-field-path='initial_guess.sfc_cruise_1_s'] td").nth(2)
+        ).to_have_text("1/s")
+        playwright_api.expect(
+            card.locator("tr[data-field-path='initial_guess.jet_tsfc_kg_per_n_s'] td").nth(2)
+        ).to_have_text("kg/(N·s)")
+        playwright_api.expect(
+            card.locator("tr[data-field-path='initial_guess.prop_bsfc_kg_per_j'] td").nth(2)
+        ).to_have_text("kg/J")
+        playwright_api.expect(
+            card.locator("tr[data-field-path='initial_guess.sweep_deg'] td").nth(2)
+        ).to_have_text("度")
+        playwright_api.expect(
+            card.locator("tr[data-field-path='requirements.max_load_factor'] td").nth(2)
+        ).to_have_text("g")
+    finally:
+        context.close()
+
+
+def test_only_latest_card_is_current_when_confirmation_reuses_revision_id(
+    e2e_browser,
+    static_app_url: str,
+) -> None:
+    awaiting_confirmation = _requirement_interaction()
+    awaiting_confirmation["revision"].update(
+        {"status": "ready_for_solver", "confirmed": False}
+    )
+    awaiting_confirmation["diagnosis"].update(
+        {
+            "status": "ready_for_solver",
+            "clarification_questions": [],
+            "blocking_reasons": [],
+            "ready_for_solver": True,
+        }
+    )
+    awaiting_confirmation["actions"] = [
+        {
+            "action": "confirm_revision",
+            "label": "确认需求版本",
+            "enabled": True,
+            "primary": True,
+            "payload": {"user_confirmed": True},
+        }
+    ]
+    confirmed = json.loads(json.dumps(awaiting_confirmation))
+    confirmed["revision"]["confirmed"] = True
+    confirmed["actions"] = [
+        {
+            "action": "submit_solver",
+            "label": "开始总体设计求解",
+            "enabled": True,
+            "primary": True,
+            "payload": {"timeout_seconds": 180.0},
+        }
+    ]
+    messages = [
+        {
+            "role": "assistant",
+            "text": "",
+            "events": [
+                {
+                    "kind": "requirement_interaction",
+                    "preview": {"interaction": interaction},
+                }
+            ],
+        }
+        for interaction in (awaiting_confirmation, confirmed)
+    ]
+
+    context = e2e_browser.new_context(viewport={"width": 1280, "height": 900})
+    page = context.new_page()
+    _install_api_mock(page, messages=messages)
+    try:
+        page.goto(static_app_url)
+        cards = page.locator("[data-testid='requirement-interaction']")
+        playwright_api.expect(cards).to_have_count(2)
+        playwright_api.expect(cards.nth(0)).to_have_attribute("data-current", "false")
+        playwright_api.expect(
+            cards.nth(0).get_by_role("button", name="确认需求版本")
+        ).to_be_disabled()
+        playwright_api.expect(cards.nth(1)).to_have_attribute("data-current", "true")
+        playwright_api.expect(
+            cards.nth(1).get_by_role("button", name="开始总体设计求解")
+        ).to_be_enabled()
+        assert page.locator(
+            "[data-testid='requirement-interaction'][data-current='true']"
+        ).count() == 1
+    finally:
+        context.close()
+
+
+def test_change_proposal_action_posts_only_proposal_id(
+    e2e_browser,
+    static_app_url: str,
+) -> None:
+    interaction = _requirement_interaction()
+    interaction["diagnosis"]["clarification_questions"] = []
+    interaction["actions"] = [
+        {
+            "action": "apply_change",
+            "label": "应用参数修改",
+            "enabled": True,
+            "primary": True,
+            "payload": {"user_confirmed": True},
+        }
+    ]
+    updated = json.loads(json.dumps(interaction))
+    updated["revision"].update(
+        {
+            "revision_id": "requirement-revision-002",
+            "revision_number": 2,
+            "revision_hash": "b" * 64,
+        }
+    )
+    updated["diagnosis"]["change_proposals"] = []
+    updated["diagnosis"]["summary"] = "已应用确认的参数修改。"
+    updated["actions"] = []
+    messages = [
+        {
+            "role": "assistant",
+            "text": "",
+            "events": [
+                {
+                    "kind": "requirement_interaction",
+                    "preview": {"interaction": interaction},
+                }
+            ],
+        }
+    ]
+
+    context = e2e_browser.new_context(viewport={"width": 1280, "height": 900})
+    page = context.new_page()
+    mock_state = _install_api_mock(
+        page,
+        messages=messages,
+        requirement_action_response={"interaction": updated},
+    )
+    try:
+        page.goto(static_app_url)
+        card = page.locator("[data-testid='requirement-interaction']")
+        card.get_by_role("button", name="应用参数修改").click()
+        payload = mock_state["requirement_action_requests"][0]["payload"]
+        assert payload["action"] == "apply_change"
+        assert payload["proposal_id"] == "scope.cruise_only"
+        assert "decisions" not in payload
+    finally:
+        context.close()
+
+
+def test_unsupported_request_uses_strict_answer_defer_confirm_sequence(
+    e2e_browser,
+    static_app_url: str,
+) -> None:
+    unsupported_paths = [
+        "performance.min_cruise_endurance_s",
+        "performance.max_flight_mach",
+        "launch.mode",
+        "recovery.mode",
+        "configuration.stealth_requirement",
+    ]
+    initial = _requirement_interaction()
+    initial["revision"] = {
+        "revision_id": "complex-revision-001",
+        "revision_number": 1,
+        "revision_hash": "1" * 64,
+        "status": "unsupported",
+        "confirmed": False,
+    }
+    initial["intent"]["requirements"] = [
+        {
+            "path": "weights.max_mtow_kg",
+            "value": 260,
+            "unit": "kg",
+            "role": "hard_constraint",
+            "locked": True,
+            "source": "user",
+            "applicable_model": "class1.weights",
+        },
+        {
+            "path": "requirements.payload_kg",
+            "value": 60,
+            "unit": "kg",
+            "role": "hard_constraint",
+            "locked": True,
+            "source": "user",
+            "applicable_model": "class1.weights",
+        },
+        *[
+            {
+                "path": path,
+                "value": {
+                    "performance.min_cruise_endurance_s": 3600,
+                    "performance.max_flight_mach": 0.8,
+                    "launch.mode": "rocket_assist",
+                    "recovery.mode": "parachute",
+                    "configuration.stealth_requirement": True,
+                }[path],
+                "unit": None,
+                "role": "hard_constraint",
+                "locked": True,
+                "source": "user",
+                "applicable_model": None,
+            }
+            for path in unsupported_paths
+        ],
+    ]
+    initial["diagnosis"].update(
+        {
+            "status": "unsupported",
+            "summary": "专项任务要求未被当前模型覆盖，且有两个求解输入需要确认。",
+            "coverage": [
+                {
+                    "field_path": path,
+                    "status": "unsupported",
+                    "model_id": None,
+                    "reason": "当前 Class I/II 模型未覆盖该专项要求。",
+                    "blocking": True,
+                }
+                for path in unsupported_paths
+            ],
+            "clarification_questions": [
+                {
+                    "question_id": "mission.range.required",
+                    "field_path": "mission.range_m",
+                    "question": "What design mission range should the sizing solver close?",
+                    "reason": "The current solver requires a positive mission range.",
+                    "options": [],
+                    "recommended_option": None,
+                    "consequence_if_unanswered": "The sizing run cannot start.",
+                    "blocking": True,
+                },
+                {
+                    "question_id": "propulsion.type.high_speed",
+                    "field_path": "propulsion.propulsion_type",
+                    "question": "Which propulsion branch should be used?",
+                    "reason": "Propulsion type changes the sizing assumptions.",
+                    "options": ["jet", "prop"],
+                    "recommended_option": "jet",
+                    "consequence_if_unanswered": "No propulsion default is applied silently.",
+                    "blocking": True,
+                },
+            ],
+            "change_proposals": [],
+            "blocking_reasons": ["专项要求未覆盖。"],
+            "ready_for_solver": False,
+        }
+    )
+    initial["actions"] = [
+        {
+            "action": "answer_question",
+            "label": "提交确认信息",
+            "enabled": True,
+            "primary": True,
+            "payload": {},
+        }
+    ]
+
+    answered = json.loads(json.dumps(initial))
+    answered["revision"].update(
+        {
+            "revision_id": "complex-revision-002",
+            "revision_number": 2,
+            "revision_hash": "2" * 64,
+        }
+    )
+    answered["intent"]["requirements"].extend(
+        [
+            {
+                "path": "requirements.range_m",
+                "value": 950000,
+                "unit": "m",
+                "role": "hard_constraint",
+                "locked": True,
+                "source": "user",
+                "applicable_model": "class1.mission",
+            },
+            {
+                "path": "requirements.propulsion_type",
+                "value": "jet",
+                "unit": None,
+                "role": "hard_constraint",
+                "locked": True,
+                "source": "user",
+                "applicable_model": "class2.propulsion",
+            },
+        ]
+    )
+    answered["diagnosis"]["clarification_questions"] = []
+    answered["diagnosis"]["summary"] = "确认信息已记录，下一步处理专项模型缺口。"
+    answered["actions"] = [
+        {
+            "action": "defer_unsupported",
+            "label": "保留专项需求，先求解已覆盖范围",
+            "enabled": True,
+            "primary": True,
+            "payload": {
+                "field_paths": unsupported_paths,
+                "scope_statement": "保留专项要求，本轮只求解已覆盖范围。",
+                "user_confirmed": True,
+            },
+        }
+    ]
+
+    scoped = json.loads(json.dumps(answered))
+    scoped["revision"].update(
+        {
+            "revision_id": "complex-revision-003",
+            "revision_number": 3,
+            "revision_hash": "3" * 64,
+            "status": "ready_for_solver",
+        }
+    )
+    scoped["diagnosis"].update(
+        {
+            "status": "ready_for_solver",
+            "summary": "专项要求已保留为验证缺口，当前求解范围可以确认。",
+            "coverage": [],
+            "blocking_reasons": [],
+            "ready_for_solver": True,
+        }
+    )
+    for requirement in scoped["intent"]["requirements"]:
+        if requirement["path"] in unsupported_paths:
+            requirement["role"] = "soft_goal"
+            requirement["locked"] = False
+    scoped["actions"] = [
+        {
+            "action": "confirm_revision",
+            "label": "确认需求版本",
+            "enabled": True,
+            "primary": True,
+            "payload": {"user_confirmed": True},
+        }
+    ]
+
+    confirmed = json.loads(json.dumps(scoped))
+    confirmed["revision"]["confirmed"] = True
+    confirmed["actions"] = [
+        {
+            "action": "submit_solver",
+            "label": "开始总体设计求解",
+            "enabled": True,
+            "primary": True,
+            "payload": {"timeout_seconds": 180.0},
+        }
+    ]
+    messages = [
+        {
+            "role": "assistant",
+            "text": "",
+            "events": [
+                {
+                    "kind": "requirement_interaction",
+                    "preview": {"interaction": initial},
+                }
+            ],
+        }
+    ]
+
+    context = e2e_browser.new_context(viewport={"width": 1280, "height": 900})
+    page = context.new_page()
+    mock_state = _install_api_mock(
+        page,
+        messages=messages,
+        requirement_action_responses=[
+            {"interaction": answered},
+            {"interaction": scoped},
+            {"interaction": confirmed},
+        ],
+    )
+    try:
+        page.goto(static_app_url)
+        card = page.locator("[data-testid='requirement-interaction']")
+        playwright_api.expect(card).to_have_count(1)
+        playwright_api.expect(
+            card.get_by_role("button", name="提交确认信息")
+        ).to_be_visible()
+        assert card.get_by_role(
+            "button", name="保留专项需求，先求解已覆盖范围"
+        ).count() == 0
+        playwright_api.expect(card).to_contain_text("请确认总体设计需要闭合的任务航程")
+        playwright_api.expect(card).to_contain_text("请确认高速巡航需求采用哪种推进类型")
+        playwright_api.expect(card).to_contain_text("最大起飞重量上限")
+        playwright_api.expect(card).to_contain_text("任务航程 · 单位：米")
+        initial_text = card.inner_text()
+        assert "What design mission range" not in initial_text
+        assert "Which propulsion branch" not in initial_text
+        assert "mission.range_m" not in initial_text
+        assert "propulsion.propulsion_type" not in initial_text
+
+        card.locator("input[data-requirement-question='mission.range.required']").fill(
+            "950000"
+        )
+        playwright_api.expect(
+            card.get_by_role("radio", name="喷气推进（推荐）")
+        ).to_be_checked()
+        card.get_by_role("button", name="提交确认信息").click()
+        playwright_api.expect(card).to_contain_text("确认信息已记录")
+
+        first_payload = mock_state["requirement_action_requests"][0]["payload"]
+        assert first_payload["action"] == "answer_question"
+        assert first_payload["decisions"]["clarification_answers"] == [
+            {
+                "question_id": "mission.range.required",
+                "field_path": "mission.range_m",
+                "value": 950000,
+            },
+            {
+                "question_id": "propulsion.type.high_speed",
+                "field_path": "propulsion.propulsion_type",
+                "value": "jet",
+            },
+        ]
+        assert card.get_by_role("button", name="提交确认信息").count() == 0
+        defer_button = card.get_by_role(
+            "button", name="保留专项需求，先求解已覆盖范围"
+        )
+        playwright_api.expect(defer_button).to_be_visible()
+        playwright_api.expect(
+            card.locator("tr[data-field-path='requirements.range_m']")
+        ).to_contain_text("950000")
+        playwright_api.expect(
+            card.locator("tr[data-field-path='requirements.propulsion_type']")
+        ).to_contain_text("喷气推进")
+
+        defer_button.click()
+        playwright_api.expect(card).to_contain_text("当前求解范围可以确认")
+        second_payload = mock_state["requirement_action_requests"][1]["payload"]
+        assert second_payload["action"] == "defer_unsupported"
+        assert "decisions" not in second_payload
+
+        confirm_button = card.get_by_role("button", name="确认需求版本")
+        playwright_api.expect(confirm_button).to_be_visible()
+        confirm_button.click()
+        third_payload = mock_state["requirement_action_requests"][2]["payload"]
+        assert third_payload["action"] == "confirm_revision"
+        assert "decisions" not in third_payload
+        playwright_api.expect(
+            card.get_by_role("button", name="开始总体设计求解")
+        ).to_be_visible()
+        playwright_api.expect(card.locator(".requirement-action-error")).to_be_hidden()
+    finally:
+        context.close()
+
+
+def test_requirement_action_backend_error_is_shown_in_chinese(
+    e2e_browser,
+    static_app_url: str,
+) -> None:
+    interaction = _requirement_interaction()
+    messages = [
+        {
+            "role": "assistant",
+            "text": "",
+            "events": [
+                {
+                    "kind": "requirement_interaction",
+                    "preview": {"interaction": interaction},
+                }
+            ],
+        }
+    ]
+    raw_error = (
+        "decisions are not accepted by defer_unsupported; submit clarification "
+        "answers with answer_question first"
+    )
+    context = e2e_browser.new_context(viewport={"width": 1280, "height": 900})
+    page = context.new_page()
+    _install_api_mock(
+        page,
+        messages=messages,
+        requirement_action_error=raw_error,
+    )
+    try:
+        page.goto(static_app_url)
+        card = page.locator("[data-testid='requirement-interaction']")
+        card.locator("input[data-requirement-question='question-range-001']").fill(
+            "500000"
+        )
+        card.get_by_role("button", name="提交确认信息").click()
+        error = card.locator(".requirement-action-error")
+        playwright_api.expect(error).to_be_visible()
+        playwright_api.expect(error).to_contain_text("请先完整填写当前需求卡片中的确认信息")
+        assert "defer_unsupported" not in error.inner_text()
+        assert "answer_question" not in error.inner_text()
+        assert "decisions are not accepted" not in error.inner_text()
     finally:
         context.close()
 
@@ -970,6 +1525,7 @@ def test_deferred_requirements_remain_visible_as_validation_gaps(
             "max_flight_mach": 0.8,
             "recovery.mode": "parachute",
             "configuration_reference": "沙赫德-136无人机",
+            "stealth_requirement": True,
         },
     }
 
@@ -988,18 +1544,24 @@ def test_deferred_requirements_remain_visible_as_validation_gaps(
 
         gaps = page.locator("[data-testid='design-validation-gaps']")
         playwright_api.expect(gaps).to_be_visible()
-        assert gaps.locator("tbody tr").count() == 5
-        playwright_api.expect(gaps).to_contain_text("requirements.cruise_altitude_m")
-        playwright_api.expect(gaps).to_contain_text("40,000")
-        playwright_api.expect(gaps).to_contain_text("launch.mode")
-        assert gaps.locator("tbody tr").filter(has_text="launch.mode").count() == 1
-        playwright_api.expect(gaps).to_contain_text("rocket_assist")
+        assert gaps.locator("tbody tr").count() == 6
+        playwright_api.expect(gaps).to_contain_text("巡航高度")
+        playwright_api.expect(gaps).to_contain_text("40,000 米")
+        playwright_api.expect(gaps).to_contain_text("发射方式")
+        assert gaps.locator("tbody tr").filter(has_text="发射方式").count() == 1
+        playwright_api.expect(gaps).to_contain_text("火箭助推")
         playwright_api.expect(gaps).to_contain_text("火箭助推轨迹模型未接入")
         playwright_api.expect(gaps).to_contain_text("本轮仅求解已覆盖范围")
-        playwright_api.expect(gaps).to_contain_text("max_flight_mach")
-        playwright_api.expect(gaps).to_contain_text("recovery.mode")
-        playwright_api.expect(gaps).to_contain_text("configuration.reference")
+        playwright_api.expect(gaps).to_contain_text("最大飞行马赫数")
+        playwright_api.expect(gaps).to_contain_text("回收方式")
+        playwright_api.expect(gaps).to_contain_text("参考构型")
         playwright_api.expect(gaps).to_contain_text("沙赫德-136无人机")
+        stealth_row = gaps.locator("tbody tr").filter(has_text="隐身要求")
+        playwright_api.expect(stealth_row).to_contain_text("是")
+        gap_text = gaps.inner_text()
+        assert "launch.mode" not in gap_text
+        assert "max_flight_mach" not in gap_text
+        assert "recovery.mode" not in gap_text
     finally:
         context.close()
 
@@ -1210,7 +1772,7 @@ def _legacy_propulsion_energy_editor_contract(
         page.locator("#designUseAdvanced").check()
 
         playwright_api.expect(page.locator("#designSfcLabel")).to_have_text(
-            "螺旋桨 BSFC（kg/J）"
+            "螺旋桨功率比油耗（BSFC，kg/J）"
         )
         playwright_api.expect(page.locator("#designSfc")).to_be_enabled()
         playwright_api.expect(page.locator("#designPropEfficiencyField")).to_be_visible()
@@ -1219,7 +1781,7 @@ def _legacy_propulsion_energy_editor_contract(
 
         page.locator("#designPropulsionType").select_option("jet")
         playwright_api.expect(page.locator("#designSfcLabel")).to_have_text(
-            "喷气 TSFC（kg/(N·s)）"
+            "喷气发动机推力比油耗（TSFC，kg/(N·s)）"
         )
         playwright_api.expect(page.locator("#designPropEfficiencyField")).to_be_hidden()
         playwright_api.expect(page.locator("#designPropEfficiency")).to_be_disabled()
@@ -1278,8 +1840,8 @@ def _legacy_propulsion_energy_editor_contract(
 @pytest.mark.parametrize(
     ("propulsion_type", "canonical_field", "label"),
     [
-        ("prop", "prop_bsfc_kg_per_j", "螺旋桨 BSFC（kg/J）"),
-        ("jet", "jet_tsfc_kg_per_n_s", "喷气 TSFC（kg/(N·s)）"),
+        ("prop", "prop_bsfc_kg_per_j", "螺旋桨功率比油耗（BSFC，kg/J）"),
+        ("jet", "jet_tsfc_kg_per_n_s", "喷气发动机推力比油耗（TSFC，kg/(N·s)）"),
     ],
 )
 def _legacy_sfc_editor_migration_contract(
@@ -1406,6 +1968,51 @@ def test_history_recovery_infeasible_result_report_preview_and_comparison(
             engineering_feasible=True,
         ),
     ]
+    jobs[0]["result"]["engineering"]["provenance"] = {
+        "runner_validation": {"status": "complete"},
+        "input_fields": {"requirements.range_m": "user"},
+    }
+    jobs[0]["result"]["engineering"]["stage_status"]["compatibility_weight_loop"] = {
+        "status": "not_converged",
+        "blocking": True,
+        "message": "Weight loop did not converge",
+    }
+    jobs[0]["result"]["engineering"]["constraints"].extend(
+        [
+            {
+                "id": "static_margin",
+                "label": "Static stability margin",
+                "category": "stability",
+                "direction": "minimum",
+                "required": 0.0,
+                "actual": -0.03,
+                "unit": "c_bar",
+                "margin": -0.03,
+                "margin_ratio": -0.03,
+                "passed": False,
+                "severity": "error",
+                "blocking": True,
+                "evidence": {"model": "E2E fixture", "prediction": True},
+                "recommendation": "Move the center of gravity forward.",
+            },
+            {
+                "id": "declared.special_mission_model_coverage",
+                "label": "Special mission model coverage",
+                "category": "requirements",
+                "direction": "minimum",
+                "required": 1.0,
+                "actual": 0.0,
+                "unit": "boolean",
+                "margin": -1.0,
+                "margin_ratio": -1.0,
+                "passed": False,
+                "severity": "error",
+                "blocking": True,
+                "evidence": {"model": "E2E fixture", "prediction": True},
+                "recommendation": "Add dedicated mission models.",
+            },
+        ]
+    )
     context = e2e_browser.new_context(viewport={"width": 1440, "height": 900})
     page = context.new_page()
     _install_api_mock(page, jobs=jobs)
@@ -1420,7 +2027,35 @@ def test_history_recovery_infeasible_result_report_preview_and_comparison(
 
         playwright_api.expect(page.locator("#designResultsContent")).to_contain_text("工程不可行")
         playwright_api.expect(page.locator("#designResultsContent")).to_contain_text("数值已收敛")
-        playwright_api.expect(page.locator("#designResultsContent")).to_contain_text("Climb thrust margin")
+        playwright_api.expect(page.locator("#designResultsContent")).to_contain_text("爬升推力裕度")
+        playwright_api.expect(page.locator("#designResultsContent")).to_contain_text("平均气动弦长比例")
+        playwright_api.expect(page.locator("#designResultsContent")).to_contain_text("专项任务模型覆盖")
+        nonconverged_stage = page.locator(".design-stage-item").filter(has_text="未收敛")
+        playwright_api.expect(nonconverged_stage).to_have_class(re.compile(r"\bis-fail\b"))
+        coverage_row = page.locator("#designResultsContent tbody tr").filter(
+            has_text="专项任务模型覆盖"
+        )
+        playwright_api.expect(coverage_row).to_contain_text("是")
+        playwright_api.expect(coverage_row).to_contain_text("否")
+        playwright_api.expect(coverage_row).to_contain_text("-1")
+        playwright_api.expect(coverage_row).not_to_contain_text("待判定")
+        localized_results_text = page.locator("#designResultsContent").inner_text()
+        for english_text in (
+            "Climb thrust margin",
+            "Increase installed thrust",
+            "Converged",
+            "Propulsion gate",
+            "Climb margin failed",
+            "AircraftDesignRunner",
+            "design_stage",
+            "c_bar",
+            "boolean",
+        ):
+            assert english_text not in localized_results_text
+        playwright_api.expect(page.locator("#designResultsContent")).to_contain_text("求解器校验")
+        playwright_api.expect(page.locator("#designResultsContent")).to_contain_text("输入字段来源")
+        assert "runner_validation" not in localized_results_text
+        assert "input_fields" not in localized_results_text
         playwright_api.expect(page.locator("[data-testid='design-visualization']")).to_be_visible()
         playwright_api.expect(page.locator(".design-model-viewport canvas")).to_be_visible()
         playwright_api.expect(page.locator(".design-gallery-primary")).to_have_attribute(

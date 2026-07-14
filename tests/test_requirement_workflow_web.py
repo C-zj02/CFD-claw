@@ -115,6 +115,16 @@ def _action_payload(interaction: dict, action: str, action_id: str) -> dict:
     }
 
 
+_COMPLEX_UNSUPPORTED_REQUEST = (
+    "设计一款隐身作战无人机，要求最大起飞重量不大于260kg，任务载荷60kg，"
+    "设计巡航高度9.5km，巡航马赫数0.6，要求巡航航时不低于1h，"
+    "设计最大飞行马赫数0.8，使用升限10km，采用火箭助推+伞降回收形式，"
+    "发射场海拔1500m，火箭助推结束为马赫数0.28、相对高度40m，"
+    "开伞速度Ma0.24，相对高度1000m，采用单发布局形式，"
+    "布局风格可参考沙赫德-136无人机，展弦比不大于2.5。"
+)
+
+
 def test_design_request_is_gated_before_skill_loading_or_llm(web_service) -> None:
     session_id = _create_aircraft_session(web_service)
     streamed_events: list[dict] = []
@@ -302,6 +312,81 @@ def test_batch_answers_and_repair_actions_create_new_interactions(web_service) -
     assert response["session"]["messages"][-1]["events"][0]["kind"] == (
         "requirement_interaction"
     )
+
+
+def test_complex_request_exposes_answer_then_defer_then_confirm(web_service) -> None:
+    session_id = _create_aircraft_session(web_service)
+    initial = web_service.send_message(
+        session_id,
+        _COMPLEX_UNSUPPORTED_REQUEST,
+    )["reply"]["events"][0]["preview"]["interaction"]
+
+    assert initial["diagnosis"]["status"] == "unsupported"
+    assert [item["action"] for item in initial["actions"]] == ["answer_question"]
+    assert not any(item["action"] == "defer_unsupported" for item in initial["actions"])
+    answers = [
+        {
+            "question_id": "mission.range.required",
+            "field_path": "mission.range_m",
+            "value": 950_000,
+        },
+        {
+            "question_id": "propulsion.type.high_speed",
+            "field_path": "propulsion.propulsion_type",
+            "value": "jet",
+        },
+    ]
+    answered = web_service.apply_requirement_revision_action(
+        session_id,
+        initial["revision"]["revision_id"],
+        {
+            **_action_payload(initial, "answer_question", "answer-complex-web"),
+            "decisions": {"clarification_answers": answers},
+        },
+    )["interaction"]
+
+    assert answered["diagnosis"]["status"] == "unsupported"
+    assert answered["diagnosis"]["clarification_questions"] == []
+    assert [item["action"] for item in answered["actions"]] == ["defer_unsupported"]
+    answered_fields = {
+        item["path"]: item for item in answered["intent"]["requirements"]
+    }
+    assert answered_fields["requirements.range_m"]["value"] == 950_000
+    assert answered_fields["requirements.propulsion_type"]["value"] == "jet"
+
+    defer_payload = _action_payload(
+        answered,
+        "defer_unsupported",
+        "defer-complex-web",
+    )
+    assert "decisions" not in defer_payload
+    scoped = web_service.apply_requirement_revision_action(
+        session_id,
+        answered["revision"]["revision_id"],
+        defer_payload,
+    )["interaction"]
+
+    assert scoped["diagnosis"]["status"] == "ready_for_solver"
+    assert [item["action"] for item in scoped["actions"]] == ["confirm_revision"]
+    scoped_fields = {item["path"]: item for item in scoped["intent"]["requirements"]}
+    for path in (
+        "performance.min_cruise_endurance_s",
+        "performance.max_flight_mach",
+        "launch.mode",
+        "recovery.mode",
+        "configuration.stealth_requirement",
+    ):
+        assert scoped_fields[path]["role"] == "soft_goal"
+    assert scoped_fields["requirements.range_m"]["value"] == 950_000
+    assert scoped_fields["requirements.propulsion_type"]["value"] == "jet"
+
+    confirmed = web_service.apply_requirement_revision_action(
+        session_id,
+        scoped["revision"]["revision_id"],
+        _action_payload(scoped, "confirm_revision", "confirm-complex-web"),
+    )["interaction"]
+    assert confirmed["revision"]["confirmed"] is True
+    assert [item["action"] for item in confirmed["actions"]] == ["submit_solver"]
 
 
 def test_apply_change_and_defer_unsupported_are_audited_web_actions(web_service) -> None:

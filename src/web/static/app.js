@@ -4,16 +4,16 @@
     const DESIGN_ENERGY_CONFIG = Object.freeze({
       prop: Object.freeze({
         field: "prop_bsfc_kg_per_j",
-        label: "螺旋桨 BSFC（kg/J）",
-        inputLabel: "螺旋桨 BSFC",
+        label: "螺旋桨功率比油耗（BSFC，kg/J）",
+        inputLabel: "螺旋桨功率比油耗",
         defaultValue: 8.45e-8,
         min: 1e-10,
         max: 1e-5,
       }),
       jet: Object.freeze({
         field: "jet_tsfc_kg_per_n_s",
-        label: "喷气 TSFC（kg/(N·s)）",
-        inputLabel: "喷气 TSFC",
+        label: "喷气发动机推力比油耗（TSFC，kg/(N·s)）",
+        inputLabel: "喷气发动机推力比油耗",
         defaultValue: 2.3e-5,
         min: 1e-9,
         max: 1e-3,
@@ -923,6 +923,7 @@
     }
 
     function eventTitle(event) {
+      if (event.kind === "design_stage") return "总体设计计算";
       if (event.kind === "agent_step") return cleanUiText(event.agent_name || event.tool_name || "智能体");
       if (event.kind === "planning") return "开始分析";
       if (event.kind === "drafting") return "组织回答";
@@ -983,6 +984,7 @@
         if (hits != null) return "已探索 " + hits + " 条资料";
         return "已完成资料检索";
       }
+      if (event.kind === "design_stage") return designJobStatusLabel(event.stage);
       if (event.kind === "agent_step") return cleanUiText(event.agent_role || "智能体") + " · " + cleanUiText(event.stage || "协同");
       if (event.kind === "planning") return "已开始分析";
       if (event.kind === "permission") return "已确认权限";
@@ -1384,8 +1386,340 @@
         robust_preliminary_feasible: ["稳健初步可行", "pass"],
       };
       const normalized = String(status || "needs_clarification");
-      const [label, tone] = statuses[normalized] || [normalized.replaceAll("_", " "), "neutral"];
+      const [label, tone] = statuses[normalized] || ["状态待确认", "neutral"];
       return { label, tone };
+    }
+
+    const REQUIREMENT_FIELD_LABELS = Object.freeze({
+      "weights.max_mtow_kg": "最大起飞重量上限",
+      "requirements.range_m": "任务航程",
+      "requirements.payload_kg": "任务载荷",
+      "requirements.cruise_mach": "巡航马赫数",
+      "requirements.cruise_altitude_m": "巡航高度",
+      "requirements.takeoff_distance_m": "起飞距离",
+      "requirements.landing_distance_m": "着陆距离",
+      "requirements.max_load_factor": "最大过载",
+      "requirements.sustained_turn_g": "持续盘旋过载",
+      "requirements.service_ceiling_m": "实用升限",
+      "requirements.aircraft_role": "飞行器任务类型",
+      "requirements.propulsion_type": "推进类型",
+      "requirements.reserve_fraction": "储备燃油比例",
+      "requirements.tail_layout": "尾翼布局",
+      "requirements.cl_max_takeoff": "起飞最大升力系数",
+      "requirements.cl_max_landing": "着陆最大升力系数",
+      "requirements.assumed_climb_rate_m_s": "假定爬升率",
+      "requirements.uncertainty_enabled": "不确定性分析",
+      "performance.min_cruise_endurance_s": "最低巡航航时",
+      "performance.max_flight_mach": "最大飞行马赫数",
+      "geometry.max_aspect_ratio": "最大展弦比",
+      "launch.mode": "发射方式",
+      "launch.field_altitude_m": "发射场海拔",
+      "launch.booster_end_mach": "助推结束马赫数",
+      "launch.booster_end_relative_altitude_m": "助推结束相对高度",
+      "recovery.mode": "回收方式",
+      "recovery.parachute_open_mach": "开伞马赫数",
+      "recovery.parachute_open_relative_altitude_m": "开伞相对高度",
+      "propulsion.engine_count": "发动机数量",
+      "configuration.reference": "参考构型",
+      "configuration.stealth_requirement": "隐身要求",
+      "initial_guess.mtow_kg": "最大起飞重量初值",
+      "initial_guess.wing_loading_pa": "翼载初值",
+      "initial_guess.thrust_to_weight": "推重比初值",
+      "initial_guess.aspect_ratio": "展弦比初值",
+      "initial_guess.sweep_deg": "后掠角初值",
+      "initial_guess.taper_ratio": "梯形比初值",
+      "initial_guess.thickness_ratio": "厚度比初值",
+      "initial_guess.sfc_cruise_1_s": "巡航等效耗油率",
+      "initial_guess.jet_tsfc_kg_per_n_s": "喷气发动机推力比油耗",
+      "initial_guess.prop_bsfc_kg_per_j": "螺旋桨发动机功率比油耗",
+      "initial_guess.prop_efficiency": "螺旋桨效率",
+      "initial_guess.cd0": "零升阻力系数",
+      "initial_guess.oswald_e": "奥斯瓦尔德效率因子",
+      "initial_guess.cg_fraction_cbar": "重心位置",
+      "initial_guess.horizontal_tail_volume_coefficient": "平尾容积系数",
+      "solver.tolerance": "收敛容差",
+      "solver.max_iterations": "最大迭代次数",
+      "solver.auto_repair_enabled": "自动修正",
+      "solver.max_repair_attempts": "最大修正轮次",
+      "project_name": "项目名称",
+      "initial_guess": "初始设计参数",
+    });
+
+    const REQUIREMENT_PATH_ALIASES = Object.freeze({
+      "mission.range_m": "requirements.range_m",
+      "mission.payload_kg": "requirements.payload_kg",
+      "mission.cruise_mach": "requirements.cruise_mach",
+      "mission.cruise_altitude_m": "requirements.cruise_altitude_m",
+      "mission.max_flight_mach": "performance.max_flight_mach",
+      "propulsion.propulsion_type": "requirements.propulsion_type",
+      "mass.maximum_takeoff_mass": "weights.max_mtow_kg",
+      "configuration.reference_style": "configuration.reference",
+    });
+
+    const REQUIREMENT_UNITS_BY_PATH = Object.freeze({
+      "requirements.assumed_climb_rate_m_s": "m/s",
+      "requirements.max_load_factor": "g",
+      "requirements.sustained_turn_g": "g",
+      "requirements.reserve_fraction": "无量纲",
+      "requirements.cl_max_takeoff": "无量纲",
+      "requirements.cl_max_landing": "无量纲",
+      "initial_guess.thrust_to_weight": "无量纲",
+      "initial_guess.aspect_ratio": "无量纲",
+      "initial_guess.sweep_deg": "度",
+      "initial_guess.taper_ratio": "无量纲",
+      "initial_guess.thickness_ratio": "无量纲",
+      "initial_guess.sfc_cruise_1_s": "1/s",
+      "initial_guess.jet_tsfc_kg_per_n_s": "kg/(N·s)",
+      "initial_guess.prop_bsfc_kg_per_j": "kg/J",
+      "initial_guess.prop_efficiency": "无量纲",
+      "initial_guess.cd0": "无量纲",
+      "initial_guess.oswald_e": "无量纲",
+      "initial_guess.cg_fraction_cbar": "平均气动弦长比例",
+      "initial_guess.horizontal_tail_volume_coefficient": "无量纲",
+      "solver.tolerance": "无量纲",
+    });
+
+    const REQUIREMENT_VALUE_LABELS = Object.freeze({
+      jet: "喷气推进",
+      prop: "螺旋桨推进",
+      uav: "无人机",
+      fighter: "战斗机",
+      transport: "运输机",
+      general_aviation: "通用航空飞机",
+      rocket_assist: "火箭助推",
+      parachute: "伞降回收",
+      conventional: "常规尾翼",
+      t_tail: "T 形尾翼",
+      v_tail: "V 形尾翼",
+      twin_fin: "双垂尾",
+      provide_project_specific_high_lift_data: "提供项目专用增升数据",
+      accept_preliminary_clmax_assumption: "采用初步最大升力系数假设",
+      relax_field_length_requirement: "放宽场长要求",
+      out_of_scope: "移出本轮求解范围",
+    });
+
+    const REQUIREMENT_ACTION_LABELS = Object.freeze({
+      answer_question: "提交确认信息",
+      apply_change: "应用参数修改",
+      defer_unsupported: "保留专项需求，先求解已覆盖范围",
+      confirm_revision: "确认需求版本",
+      submit_solver: "开始总体设计求解",
+    });
+
+    const REQUIREMENT_COVERAGE_REASONS = Object.freeze({
+      "weights.max_mtow_kg": "将在重量闭合后复核，目前不是直接优化约束。",
+      "requirements.range_m": "已接入任务航程与燃油闭合模型。",
+      "requirements.payload_kg": "已接入重量与任务闭合模型。",
+      "requirements.cruise_mach": "已接入亚声速巡航气动与推进评估。",
+      "requirements.cruise_altitude_m": "已接入巡航大气、阻力、推力与任务评估。",
+      "requirements.takeoff_distance_m": "已接入预测起飞距离的硬约束校核。",
+      "requirements.landing_distance_m": "已接入预测着陆距离的硬约束校核。",
+      "requirements.service_ceiling_m": "已接入实用升限推力约束。",
+      "requirements.propulsion_type": "已接入喷气与螺旋桨两类通用推进分支。",
+      "performance.min_cruise_endurance_s": "当前模型未独立预测燃油受限的最大巡航航时。",
+      "performance.max_flight_mach": "当前模型未接入最大速度、跨声速阻力增量、推进极限和颤振联合验证。",
+      "geometry.max_aspect_ratio": "将在几何闭合后复核，并由有界修正过程遵守该上限。",
+      "launch.mode": "当前模型未接入发射轨迹及其与飞行器载荷的接口校核。",
+      "launch.field_altitude_m": "当前模型尚未把发射场大气条件耦合到发射轨迹。",
+      "launch.booster_end_mach": "当前模型未接入火箭助推分离轨迹校核。",
+      "launch.booster_end_relative_altitude_m": "当前模型未接入火箭助推分离高度校核。",
+      "recovery.mode": "当前模型未接入回收系统展开过程与载荷校核。",
+      "recovery.parachute_open_mach": "当前模型未接入开伞包线与开伞冲击校核。",
+      "recovery.parachute_open_relative_altitude_m": "当前模型未接入伞降过程与高度裕度校核。",
+      "propulsion.engine_count": "当前模型可完成通用推力设计，但尚未验证发动机数量与安装方案。",
+      "configuration.reference": "参考构型尚未转换为经过验证的几何约束。",
+      "configuration.stealth_requirement": "当前模型未接入雷达散射截面、进排气遮蔽、材料和特征控制验证。",
+    });
+
+    const REQUIREMENT_QUESTION_COPY = Object.freeze({
+      "mission.range.required": {
+        question: "请确认总体设计需要闭合的任务航程。",
+        reason: "当前确定性求解需要正的任务航程；系统不会把巡航航时静默换算成任务航程。",
+        consequence: "未确认任务航程前，不能启动总体参数求解。",
+      },
+      "mission.payload.required": {
+        question: "请确认任务载荷质量。",
+        reason: "任务载荷是重量闭合的必要输入，且必须为非负数。",
+        consequence: "未确认任务载荷前，不能启动总体参数求解。",
+      },
+      "propulsion.type.high_speed": {
+        question: "请确认高速巡航需求采用哪种推进类型。",
+        reason: "推进类型会显著改变耗油率、推力衰减和安装假设。",
+        consequence: "该选择影响较大，系统不会静默采用任务类型默认值。",
+      },
+      "performance.service_ceiling.high_cruise": {
+        question: "请确认高空巡航任务采用的实用升限。",
+        reason: "默认实用升限低于当前巡航高度，不能直接作为未确认假设。",
+        consequence: "实用升限未确认前，系统无法完成求解输入闭合。",
+      },
+      "field_length.takeoff.assumption": {
+        question: "请确认如何建立起飞阶段的增升能力假设。",
+        reason: "小于 100 米的起飞距离对最大升力系数、越障和场地条件高度敏感。",
+        consequence: "未确认前，不能把该起飞距离作为稳健的初步设计约束。",
+      },
+      "field_length.landing.assumption": {
+        question: "请确认如何建立着陆阶段的增升能力假设。",
+        reason: "小于 100 米的着陆距离对最大升力系数、越障和场地条件高度敏感。",
+        consequence: "未确认前，不能把该着陆距离作为稳健的初步设计约束。",
+      },
+    });
+
+    const REQUIREMENT_PROPOSAL_COPY = Object.freeze({
+      "ceiling.raise_service_ceiling": ["提高实用升限，使其不低于巡航高度并保留初步裕度。", "恢复巡航高度与实用升限的合理顺序。", "可能增加爬升能力、推进系统或机翼面积需求。"],
+      "ceiling.lower_cruise_altitude": ["降低巡航高度，使其低于已声明的实用升限。", "在不提高升限要求的情况下消除高度冲突。", "会改变大气、阻力、航程和隐身假设。"],
+      "mach.raise_maximum_mach": ["提高最大飞行马赫数，使其高于巡航马赫数。", "恢复必要的速度裕度。", "可能需要不同的推进方案和跨声速气动弹性验证。"],
+      "mach.lower_cruise_mach": ["降低巡航马赫数，使其低于最大飞行马赫数。", "消除巡航与最大速度之间的直接冲突。", "会增加任务时间，并改变航程与燃油设计。"],
+      "mass.increase_mtow_allowance": ["当前任务载荷占最大起飞重量的比例过高，建议放宽重量上限。", "为结构、推进、系统和燃油恢复初步重量空间。", "会增加飞行器尺寸、发射需求、成本和潜在特征。"],
+      "mass.reduce_payload": ["当前任务载荷占最大起飞重量的比例过高，建议降低载荷。", "降低重量闭合的主要压力。", "会降低任务载荷能力。"],
+      "geometry.reduce_aspect_ratio": ["将设计展弦比降到声明的上限以内。", "使几何输入满足展弦比上限。", "通常会增加诱导阻力或机翼面积需求。"],
+      "geometry.relax_aspect_ratio_limit": ["放宽展弦比上限以包含当前几何方案。", "保留当前气动几何输入。", "会增加翼展，并可能与包装或发射约束冲突。"],
+      "mission.restore_preliminary_reserve": ["长航程任务应保留默认的初步性能储备。", "降低大气、航路和模型不确定性的影响。", "会增加燃油需求或降低载荷航程能力。"],
+    });
+
+    function containsChineseText(value) {
+      return /[\u3400-\u9fff]/.test(String(value || ""));
+    }
+
+    function requirementPathKey(path) {
+      const raw = String(path || "");
+      const active = raw.startsWith("deferred.") ? raw.slice("deferred.".length) : raw;
+      return REQUIREMENT_PATH_ALIASES[active] || active;
+    }
+
+    function requirementFieldLabel(path) {
+      const raw = String(path || "");
+      const prefix = raw.startsWith("deferred.") ? "保留目标：" : "";
+      const key = requirementPathKey(raw);
+      return prefix + (REQUIREMENT_FIELD_LABELS[key] || "其他工程参数");
+    }
+
+    function requirementModelLabel(model) {
+      return ({
+        aircraft_class_i_ii_v2: "总体设计 I/II 级模型",
+        class1: "一级总体设计模型",
+        class2: "二级初步设计模型",
+      })[model] || (model ? "专项工程模型" : "");
+    }
+
+    function requirementUnitLabel(unit, path) {
+      const fieldUnit = REQUIREMENT_UNITS_BY_PATH[requirementPathKey(path)];
+      if (fieldUnit) return fieldUnit;
+      const leaf = requirementPathKey(path).split(".").pop() || "";
+      const inferredUnit = unit
+        || (leaf.endsWith("_kg") ? "kg" : "")
+        || (leaf.endsWith("_m") ? "m" : "")
+        || (leaf.endsWith("_s") ? "s" : "")
+        || (leaf.endsWith("_pa") ? "Pa" : "")
+        || (leaf.includes("mach") ? "Mach" : "")
+        || (leaf === "engine_count" ? "count" : "");
+      return ({ Mach: "马赫", m: "米", s: "秒", count: "个", ratio: "比值", deg: "度" })[inferredUnit]
+        || inferredUnit
+        || "--";
+    }
+
+    function requirementValueLabel(value) {
+      return typeof value === "string" ? (REQUIREMENT_VALUE_LABELS[value] || value) : value;
+    }
+
+    function localizeCoverageReason(path, reason = "") {
+      if (containsChineseText(reason)) return reason;
+      const localized = REQUIREMENT_COVERAGE_REASONS[requirementPathKey(path)];
+      if (localized) return localized;
+      return reason ? "当前总体模型已记录该字段的覆盖状态，详细证据保留在工程审计中。" : "";
+    }
+
+    function localizedRequirementQuestion(question) {
+      const questionId = String(question?.question_id || "");
+      const known = REQUIREMENT_QUESTION_COPY[questionId];
+      if (known) return known;
+      const fieldLabel = requirementFieldLabel(question?.field_path);
+      if (questionId.startsWith("solver_completion.")) {
+        return {
+          question: `请确认${fieldLabel}的有效求解值。`,
+          reason: "当前需求已通过上层检查，但该字段仍不满足确定性求解器的输入契约。",
+          consequence: "未确认前，不能补齐默认值或确认需求版本。",
+        };
+      }
+      if (questionId.startsWith("solver_outcome.")) {
+        return {
+          question: `请确认下一轮需要评估的${fieldLabel}。`,
+          reason: "上一次求解提供了相关诊断证据，但没有可安全自动采用的新值。",
+          consequence: "未确认前，当前失败仍只作为诊断记录，不能授权新一轮求解。",
+        };
+      }
+      return {
+        question: `请确认${fieldLabel}。`,
+        reason: containsChineseText(question?.reason) ? question.reason : "该参数会直接影响总体设计求解和工程判定。",
+        consequence: containsChineseText(question?.consequence_if_unanswered)
+          ? question.consequence_if_unanswered
+          : "未确认前不能进入下一步求解。",
+      };
+    }
+
+    function localizedRequirementSummary(diagnosis) {
+      if (containsChineseText(diagnosis?.summary)) return diagnosis.summary;
+      return ({
+        unsupported: "存在当前总体模型尚未覆盖的强制要求。这表示模型覆盖不足，并不代表已经判定方案在物理上不可行。",
+        needs_clarification: "部分关键输入需要确认，完成确认后才能进入确定性总体参数求解。",
+        contradictory_requirements: "需求中存在明确的跨字段冲突。系统尚未修改任何要求，请确认下方修正方案。",
+        repairable: "当前需求可通过明确的参数修改继续推进；用户输入和锁定值在确认前保持不变。",
+        ready_for_solver: "必要输入已补齐，跨字段检查通过，当前版本可以由用户确认后进入求解。工程可行性仍需以完整求解结果为准。",
+      })[diagnosis?.status] || "当前需求已完成总体设计求解前诊断。";
+    }
+
+    function localizedRequirementBlocker(reason) {
+      if (containsChineseText(reason)) return reason;
+      const unsupported = String(reason || "").match(/^No applicable model for ([^:]+):/);
+      if (unsupported) {
+        const path = unsupported[1];
+        return `${requirementFieldLabel(path)}：${localizeCoverageReason(path, reason)}`;
+      }
+      const exact = {
+        "The locked service ceiling is below the locked cruise altitude.": "已锁定的实用升限低于已锁定的巡航高度。",
+        "The locked maximum Mach number is below locked cruise Mach.": "已锁定的最大飞行马赫数低于已锁定的巡航马赫数。",
+        "The locked payload equals or exceeds the locked maximum takeoff mass.": "已锁定的任务载荷等于或超过最大起飞重量上限。",
+        "The locked aspect ratio exceeds the locked upper bound.": "已锁定的展弦比超过已锁定的上限。",
+        "One or more high-impact inputs must be clarified before deterministic sizing.": "确定性总体参数求解前，必须确认一项或多项高影响输入。",
+        "The current revision has a deterministic repair proposal that has not been applied.": "当前版本包含尚未确认应用的确定性修正建议。",
+        "One or more user-requested field changes have not yet been confirmed.": "一项或多项用户提出的字段修改尚未确认。",
+      };
+      return exact[String(reason || "")] || "当前需求仍有一项必须处理的工程阻断条件。";
+    }
+
+    function localizedProposalCopy(proposal, index) {
+      const known = REQUIREMENT_PROPOSAL_COPY[proposal?.proposal_id];
+      if (known) return known[index] || "";
+      const values = [proposal?.reason, proposal?.expected_benefit, proposal?.engineering_cost];
+      if (containsChineseText(values[index])) return values[index];
+      return [
+        "该建议用于消除当前需求或设计变量中的工程冲突。",
+        "采用后将通过完整重算评估对总体方案的影响。",
+        "可能改变重量、几何、推进、性能或验证裕度。",
+      ][index];
+    }
+
+    function localizedRequirementError(message) {
+      const text = String(message || "");
+      if (containsChineseText(text)) return text;
+      if (/stale|does not match|not current|conflict|expected_revision_hash/i.test(text)) {
+        return "需求版本已更新，请在最新的需求卡片上重新操作。";
+      }
+      if (/requires.*confirmation|user confirmation|explicitly confirmed/i.test(text)) {
+        return "本步骤需要明确确认后才能继续。";
+      }
+      if (/not ready|ready for solver|can_submit/i.test(text)) {
+        return "当前需求版本尚未达到可求解状态，请先处理卡片中的待确认项。";
+      }
+      if (/clarification|answer|question/i.test(text)) {
+        return "请先完整填写当前需求卡片中的确认信息，再提交本步骤。";
+      }
+      if (/proposal/i.test(text)) {
+        return "请选择当前版本中可用的参数修改建议。";
+      }
+      if (/unsupported|scope|defer/i.test(text)) {
+        return "当前专项需求范围尚未满足该操作的前置条件。";
+      }
+      return "需求操作未完成，请检查当前版本中的确认项后重试。";
     }
 
     function requirementRoleLabel(role) {
@@ -1394,7 +1728,7 @@
         soft_goal: "软目标",
         design_variable: "设计变量",
         technology_assumption: "技术假设",
-      })[role] || role || "--";
+      })[role] || "未分类";
     }
 
     function requirementSourceLabel(source) {
@@ -1403,7 +1737,7 @@
         derived: "推导",
         default: "默认",
         reference: "参考",
-      })[source] || source || "--";
+      })[source] || "未声明";
     }
 
     function requirementCoverageMeta(record, requirement) {
@@ -1414,12 +1748,12 @@
         unsupported: ["未覆盖", "blocked"],
         unknown: ["未声明", "neutral"],
       };
-      const [label, tone] = labels[status] || [status, "neutral"];
+      const [label, tone] = labels[status] || ["状态未知", "neutral"];
       return {
         label,
         tone,
-        model: record?.model_id || requirement?.applicable_model || "",
-        reason: record?.reason || "",
+        model: requirementModelLabel(record?.model_id || requirement?.applicable_model || ""),
+        reason: localizeCoverageReason(record?.field_path || requirement?.path, record?.reason || ""),
       };
     }
 
@@ -1427,7 +1761,7 @@
       if (value == null || value === "") return "--";
       if (typeof value === "boolean") return value ? "是" : "否";
       if (typeof value === "number") return Number.isInteger(value) ? String(value) : String(Number(value.toPrecision(8)));
-      if (typeof value === "string") return value;
+      if (typeof value === "string") return requirementValueLabel(value);
       try { return JSON.stringify(value); } catch (_err) { return String(value); }
     }
 
@@ -1492,8 +1826,17 @@
     function markHistoricalRequirementCards(currentRevisionId = "") {
       const cards = Array.from(chatLog.querySelectorAll(".requirement-interaction"));
       const effectiveCurrentId = currentRevisionId || cards.at(-1)?.dataset.revisionId || "";
+      let currentCard = cards.at(-1) || null;
+      if (effectiveCurrentId) {
+        for (let index = cards.length - 1; index >= 0; index -= 1) {
+          if (cards[index].dataset.revisionId === effectiveCurrentId) {
+            currentCard = cards[index];
+            break;
+          }
+        }
+      }
       for (const card of cards) {
-        const historical = Boolean(effectiveCurrentId && card.dataset.revisionId && card.dataset.revisionId !== effectiveCurrentId);
+        const historical = card !== currentCard;
         card.classList.toggle("is-historical", historical);
         card.dataset.current = historical ? "false" : "true";
         const note = card.querySelector(".requirement-history-note");
@@ -1542,7 +1885,7 @@
         return;
       }
 
-      setDesignRunBusy(true, job.message || "总体设计任务已启动");
+      setDesignRunBusy(true, localizedJobMessage(job.message, job.status) || "总体设计任务已启动");
       refreshDesignJobMessage();
       void monitorDesignJob(job.job_id).finally(() => refreshRequirementActionSession(sessionId));
     }
@@ -1569,9 +1912,16 @@
       const actionPayload = actionSpec?.payload && typeof actionSpec.payload === "object"
         ? { ...actionSpec.payload }
         : {};
-      const selectedProposal = panel.querySelector("input[data-requirement-proposal]:checked")?.value || "";
-      const proposalId = actionPayload.proposal_id || actionSpec.proposal_id || selectedProposal;
-      const collectedDecisions = collectRequirementDecisions(panel);
+      const actionName = String(actionSpec?.action || "");
+      const acceptsAnswers = actionName === "answer_question" || actionName === "answer_questions";
+      const acceptsProposal = actionName === "apply_change" || actionName === "apply_change_proposal";
+      const selectedProposal = acceptsProposal
+        ? panel.querySelector("input[data-requirement-proposal]:checked")?.value || ""
+        : "";
+      const proposalId = acceptsProposal
+        ? actionPayload.proposal_id || actionSpec.proposal_id || selectedProposal
+        : "";
+      const collectedDecisions = acceptsAnswers ? collectRequirementDecisions(panel) : {};
       const configuredDecisions = actionPayload.decisions;
       delete actionPayload.decisions;
       const decisions = configuredDecisions && typeof configuredDecisions === "object" && !Array.isArray(configuredDecisions)
@@ -1614,11 +1964,12 @@
           : "需求版本操作已提交。" );
       } catch (error) {
         setRequirementControlsPending(panel, false, button);
+        const localizedError = localizedRequirementError(error.message);
         if (errorBox) {
-          errorBox.textContent = error.message;
+          errorBox.textContent = localizedError;
           errorBox.hidden = false;
         }
-        setStatus(error.message, true);
+        setStatus(localizedError, true);
       }
     }
 
@@ -1671,11 +2022,14 @@
       if (diagnosis.summary) {
         const summary = document.createElement("p");
         summary.className = "requirement-summary";
-        summary.textContent = diagnosis.summary;
+        summary.textContent = localizedRequirementSummary(diagnosis);
         panel.appendChild(summary);
       }
 
-      const blockingReasons = Array.isArray(diagnosis.blocking_reasons) ? diagnosis.blocking_reasons : [];
+      const blockingReasons = Array.from(new Set(
+        (Array.isArray(diagnosis.blocking_reasons) ? diagnosis.blocking_reasons : [])
+          .map(localizedRequirementBlocker),
+      ));
       if (blockingReasons.length) {
         const blockers = document.createElement("div");
         blockers.className = "requirement-blockers";
@@ -1718,9 +2072,9 @@
           const row = document.createElement("tr");
           row.dataset.fieldPath = requirement.path || "";
           const values = [
-            requirement.path || "--",
+            requirementFieldLabel(requirement.path),
             formatRequirementValue(requirement.value),
-            requirement.unit || "--",
+            requirementUnitLabel(requirement.unit, requirement.path),
             requirementRoleLabel(requirement.role),
           ];
           for (const value of values) {
@@ -1766,14 +2120,20 @@
         questionTitle.textContent = "需要确认（最多 3 项）";
         questionSection.appendChild(questionTitle);
         questions.forEach((question, questionIndex) => {
+          const localizedQuestion = localizedRequirementQuestion(question);
           const fieldset = document.createElement("fieldset");
           fieldset.className = "requirement-question";
           const legend = document.createElement("legend");
-          legend.textContent = (questionIndex + 1) + ". " + (question.question || question.field_path || "确认需求");
+          legend.textContent = (questionIndex + 1) + ". " + localizedQuestion.question;
           fieldset.appendChild(legend);
           const meta = document.createElement("div");
           meta.className = "requirement-question-meta";
-          meta.textContent = [question.field_path, question.reason].filter(Boolean).join(" · ");
+          const questionUnit = requirementUnitLabel(question.unit, question.field_path);
+          meta.textContent = [
+            requirementFieldLabel(question.field_path),
+            questionUnit === "--" ? "" : "单位：" + questionUnit,
+            localizedQuestion.reason,
+          ].filter(Boolean).join(" · ");
           fieldset.appendChild(meta);
           const questionOptions = Array.isArray(question.options) ? question.options : [];
           if (questionOptions.length) {
@@ -1807,16 +2167,18 @@
             input.className = "requirement-question-input";
             input.dataset.requirementQuestion = question.question_id || String(questionIndex);
             input.dataset.fieldPath = question.field_path || "";
-            input.placeholder = numeric ? "请输入数值" : "请输入回答";
+            input.placeholder = numeric
+              ? "请输入数值" + (questionUnit === "--" ? "" : `（${questionUnit}）`)
+              : "请输入回答";
             if (numeric) input.step = "any";
             if (question.recommended_option != null) input.value = formatRequirementValue(question.recommended_option);
             input.disabled = historical;
             fieldset.appendChild(input);
           }
-          if (question.consequence_if_unanswered) {
+          if (localizedQuestion.consequence) {
             const consequence = document.createElement("div");
             consequence.className = "requirement-question-consequence";
-            consequence.textContent = "未确认影响：" + question.consequence_if_unanswered;
+            consequence.textContent = "未确认影响：" + localizedQuestion.consequence;
             fieldset.appendChild(consequence);
           }
           questionSection.appendChild(fieldset);
@@ -1844,13 +2206,13 @@
           const copy = document.createElement("span");
           copy.className = "requirement-proposal-copy";
           const change = document.createElement("strong");
-          change.textContent = (proposal.field_path || "参数") + "："
+          change.textContent = requirementFieldLabel(proposal.field_path) + "："
             + formatRequirementValue(proposal.old_value) + " → " + formatRequirementValue(proposal.proposed_value);
           const reason = document.createElement("span");
-          reason.textContent = proposal.reason || "";
+          reason.textContent = localizedProposalCopy(proposal, 0);
           copy.appendChild(change);
           copy.appendChild(reason);
-          const details = [proposal.expected_benefit, proposal.engineering_cost].filter(Boolean).join(" · ");
+          const details = [localizedProposalCopy(proposal, 1), localizedProposalCopy(proposal, 2)].filter(Boolean).join(" · ");
           if (details) {
             const detail = document.createElement("small");
             detail.textContent = details;
@@ -1877,7 +2239,7 @@
         const button = document.createElement("button");
         button.type = "button";
         button.className = "requirement-action" + (action.primary ? " is-primary" : "");
-        button.textContent = action.label || action.action.replaceAll("_", " ");
+        button.textContent = action.label || REQUIREMENT_ACTION_LABELS[action.action] || "执行当前步骤";
         button.disabled = historical || action.enabled === false || !revisionId || !revision.revision_hash;
         if (action.enabled === false && action.reason) button.title = action.reason;
         button.addEventListener("click", () => submitRequirementAction(panel, interaction, action, button));
@@ -2525,7 +2887,7 @@
       if (designUseAdvanced.checked) {
         const energyConfig = DESIGN_ENERGY_CONFIG[currentDesignEnergyMode()];
         request.initial_guess = {
-          mtow_kg: designInputNumber(designMtowGuess, "MTOW 初猜"),
+          mtow_kg: designInputNumber(designMtowGuess, "最大起飞重量初值"),
           wing_loading_pa: designInputNumber(designWingLoading, "翼载初猜"),
           thrust_to_weight: designInputNumber(designThrustWeight, "推重比初猜"),
           aspect_ratio: designInputNumber(designAspectRatio, "展弦比"),
@@ -2552,12 +2914,12 @@
       const failed = ["failed", "engineering_infeasible", "nonconverged", "cancelled", "timed_out", "interrupted"].includes(event.stage);
       return {
         kind: "design_stage",
-        tool_name: "AircraftDesignRunner",
+        tool_name: "总体设计求解器",
         stage: event.stage,
-        summary: event.message,
+        summary: localizedStageMessage(event.message, event.stage),
         preview: event.detail || { progress: event.progress },
         is_error: failed,
-        error: failed ? event.message : null,
+        error: failed ? localizedStageMessage(event.message, event.stage) : null,
       };
     }
 
@@ -2590,7 +2952,7 @@
         cancelled: "已取消",
         timed_out: "已超时",
         interrupted: "已中断",
-      }[status] || status || "未知";
+      }[status] || "状态未知";
     }
 
     function designJobTimestamp(value) {
@@ -2616,17 +2978,222 @@
       return Number.isFinite(parsed) ? parsed : null;
     }
 
+    const DESIGN_CONSTRAINT_LABELS = Object.freeze({
+      "class1.range": "任务航程",
+      "class1.fuel_fraction": "任务燃油质量分数",
+      "class1.takeoff_distance": "预测起飞距离",
+      "class1.landing_distance": "预测着陆距离",
+      "class1.sustained_turn_thrust": "持续盘旋推重比",
+      "class1.service_ceiling_thrust": "实用升限推重比",
+      "class1.weight_closure": "最大起飞重量闭合误差",
+      "advanced.propulsion.cruise_thrust_margin": "巡航推力裕度",
+      "advanced.propulsion.climb_thrust_margin": "爬升推力裕度",
+      "advanced.mission.fuel_capacity": "可用任务燃油",
+      "advanced.stability.static_margin_min": "最小静稳定裕度",
+      "advanced.stability.static_margin_max": "建议最大静稳定裕度",
+      "advanced.structures.weight_feedback": "结构重量反馈",
+      "advanced.geometry.fuel_volume": "可用燃油容积",
+      "advanced.geometry.aspect_ratio_limit": "展弦比上限",
+      "advanced.optimization.reduced_order_screened_candidates": "降阶筛选候选方案数",
+      "declared.max_mtow_kg": "最大起飞重量上限",
+      "declared.max_aspect_ratio": "最大展弦比",
+      "declared.min_cruise_endurance_s": "最低巡航航时",
+      "declared.special_mission_model_coverage": "专项任务模型覆盖",
+      "thrust_margin_cruise": "巡航推力裕度",
+      "thrust_margin_climb": "爬升推力裕度",
+      "mission_fuel_capacity": "任务燃油容量",
+      "mission_fuel_fraction": "任务燃油质量分数",
+      "static_margin": "静稳定裕度",
+      "Evaluated mission distance": "评估任务航程",
+      "Predicted mission range": "预测最大航程",
+      "Range metric with undeclared evidence": "航程指标（证据未声明）",
+      "Mission fuel mass fraction": "任务燃油质量分数",
+      "Predicted takeoff distance": "预测起飞距离",
+      "Predicted landing distance": "预测着陆距离",
+      "Sustained-turn thrust-to-weight": "持续盘旋推重比",
+      "Service-ceiling thrust-to-weight": "实用升限推重比",
+      "Relative MTOW closure error": "最大起飞重量闭合相对误差",
+      "Cruise thrust margin": "巡航推力裕度",
+      "Climb thrust margin": "爬升推力裕度",
+      "Available mission fuel": "可用任务燃油",
+      "Mission fuel capacity": "任务燃油容量",
+      "Mission fuel fraction": "任务燃油质量分数",
+      "Static stability margin": "静稳定裕度",
+      "Minimum static margin": "最小静稳定裕度",
+      "Maximum recommended static margin": "建议最大静稳定裕度",
+      "Advanced structural-weight feedback": "结构重量反馈",
+      "Fuel Volume": "可用燃油容积",
+      "Fuel volume": "可用燃油容积",
+      "Aspect Ratio Limit": "展弦比上限",
+      "Reduced-order screened candidates": "降阶筛选候选方案数",
+      "Maximum takeoff weight": "最大起飞重量上限",
+      "Maximum aspect ratio": "最大展弦比",
+      "Minimum cruise endurance": "最低巡航航时",
+      "Weight closure": "重量闭合",
+    });
+
+    const DESIGN_RECOMMENDATION_LABELS = Object.freeze({
+      "Increase installed thrust.": "增加安装推力，并重新校核巡航与爬升推力裕度。",
+      "Increase available thrust or reduce weight and drag until the margin is positive.": "增加可用推力，或降低重量与阻力，直至推力裕度为正。",
+      "Increase T/W, reduce W/S, or increase takeoff CLmax.": "提高推重比、降低翼载，或提高起飞最大升力系数。",
+      "Reduce W/S, increase landing CLmax, or improve braking assumptions.": "降低翼载、提高着陆最大升力系数，或改进制动假设。",
+      "Increase T/W or reduce turn load factor and induced drag.": "提高推重比，或降低盘旋过载与诱导阻力。",
+      "Increase installed thrust or reduce ceiling requirement.": "增加安装推力，或适当降低实用升限要求。",
+      "Reduce mission demand or improve aerodynamic and propulsion efficiency.": "降低任务需求，或提高气动与推进效率。",
+      "Reduce mission fuel demand or increase usable fuel capacity and close the weight loop again.": "降低任务燃油需求，或增加可用燃油容量，并重新执行重量闭合。",
+      "Move the CG forward or increase horizontal-tail effectiveness.": "前移重心，或提高平尾效能。",
+      "Increase usable wing tank volume or reduce mission fuel.": "增加机翼可用油箱容积，或降低任务燃油需求。",
+    });
+
+    const DESIGN_PROVENANCE_LABELS = Object.freeze({
+      auto_repair: "自动修正记录",
+      requirement_workflow: "需求协商记录",
+      propulsion_energy: "推进能耗模型",
+      input_fields: "输入字段来源",
+      request_contract_version: "请求契约版本",
+      solver_submission: "求解提交记录",
+      design_attempt_history: "设计尝试记录",
+      validation_level: "验证层级",
+      model_version: "模型版本",
+      requirement_intent: "需求意图记录",
+      user_requirements: "用户原始要求",
+      soft_goals: "保留软目标",
+      projection: "求解输入投影",
+      runner_validation: "求解器校验",
+      auto_repair_history: "自动修正历史",
+      project_name: "项目名称",
+      ui: "界面提交信息",
+    });
+
+    function designConstraintLabel(item) {
+      const record = item && typeof item === "object" ? item : { id: item };
+      const id = String(record.id || "");
+      const raw = String(record.label || record.name || id || "");
+      if (DESIGN_CONSTRAINT_LABELS[id]) return DESIGN_CONSTRAINT_LABELS[id];
+      if (DESIGN_CONSTRAINT_LABELS[raw]) return DESIGN_CONSTRAINT_LABELS[raw];
+      if (containsChineseText(raw)) return raw;
+      return "其他工程约束";
+    }
+
+    function designStageStatusLabel(status) {
+      return ({
+        passed: "通过",
+        pass: "通过",
+        completed: "已完成",
+        feasible: "可行",
+        failed: "未通过",
+        fail: "未通过",
+        infeasible: "不可行",
+        not_converged: "未收敛",
+        nonconverged: "未收敛",
+        error: "错误",
+        pending: "待处理",
+        running: "计算中",
+        unknown: "待判定",
+      })[String(status || "unknown").toLowerCase()] || "待判定";
+    }
+
+    function localizedStageMessage(message, status = "") {
+      if (!message) return "";
+      if (containsChineseText(message)) return message;
+      const normalized = String(status || "").toLowerCase();
+      if (["failed", "fail", "infeasible", "not_converged", "nonconverged", "error"].includes(normalized)) {
+        return "该阶段未通过，请查看约束裕度和诊断记录。";
+      }
+      return "该阶段已更新工程状态。";
+    }
+
+    function localizedJobMessage(message, status = "") {
+      if (!message) return "";
+      if (containsChineseText(message)) return message;
+      const normalized = String(status || "").toLowerCase();
+      if (["failed", "engineering_infeasible", "nonconverged", "cancelled", "timed_out", "interrupted"].includes(normalized)) {
+        return "任务未通过，请查看约束裕度和诊断建议。";
+      }
+      if (["queued", "preparing", "running", "validating"].includes(normalized)) {
+        return `任务${designJobStatusLabel(normalized)}。`;
+      }
+      return "任务状态已更新。";
+    }
+
+    function localizedEngineeringRecommendation(value) {
+      const text = String(value || "");
+      if (containsChineseText(text)) return text;
+      return DESIGN_RECOMMENDATION_LABELS[text]
+        || "请根据未通过的约束调整相关设计变量，并执行完整重算。";
+    }
+
+    function localizedEngineeringIssue(issue) {
+      const code = String(issue?.code || "");
+      const message = String(issue?.message || "");
+      if (containsChineseText(message)) return message;
+      const labels = {
+        process_exit: "求解器进程异常退出。",
+        solver_nonconverged_exit: "求解器未完成数值收敛。",
+        missing_output_dir: "求解器没有生成结果目录。",
+        missing_artifact: "缺少必要的工程结果文件。",
+        invalid_design_data: "工程结果数据无法解析。",
+        input_mismatch: "结果中的输入快照与本次提交不一致。",
+        missing_outputs: "工程结果缺少总体输出数据。",
+        invalid_metric: "工程结果包含无效的关键指标。",
+        missing_geometry: "工程结果缺少可用的几何数据。",
+        invalid_constraints_contract: "约束结果不符合当前数据契约。",
+        invalid_constraint_contract: "一项约束结果不完整。",
+        invalid_stage_status_contract: "阶段门结果不符合当前数据契约。",
+        inconsistent_engineering_feasibility: "工程可行性标记与阻断证据不一致。",
+        blocking_constraint_failed: "一项阻断约束未通过。",
+        blocking_constraint_unknown: "一项阻断约束缺少明确判定。",
+        blocking_stage_failed: "一项阻断阶段门未通过。",
+        engineering_infeasible: "当前方案未通过工程可行性判定。",
+      };
+      return labels[code] || "工程校验发现一项需要处理的问题。";
+    }
+
+    function designProvenanceLabel(key) {
+      const raw = String(key || "");
+      if (DESIGN_PROVENANCE_LABELS[raw]) return DESIGN_PROVENANCE_LABELS[raw];
+      if (REQUIREMENT_FIELD_LABELS[raw]) return REQUIREMENT_FIELD_LABELS[raw];
+      if (containsChineseText(raw)) return raw;
+      return "其他追溯信息";
+    }
+
+    function formatDesignProvenanceValue(value) {
+      if (value && typeof value === "object") {
+        const size = Array.isArray(value) ? value.length : Object.keys(value).length;
+        return `已记录 ${size} 项结构化数据`;
+      }
+      return formatDesignValue(value);
+    }
+
     function formatDesignValue(value, unit = "", digits = 2) {
       if (value === null || value === undefined || value === "") return "--";
+      if (typeof value === "boolean") return value ? "是" : "否";
+      if (unit === "boolean") {
+        if (value === 1 || value === "1") return "是";
+        if (value === 0 || value === "0") return "否";
+        return "待判定";
+      }
+      const localizedUnit = ({
+        ratio: "比值",
+        count: "个",
+        cbar: "平均气动弦长比例",
+        c_bar: "平均气动弦长比例",
+        m3: "m³",
+        relative_error: "相对误差",
+        Mach: "马赫",
+      })[unit] || unit;
       const numeric = finiteDesignNumber(value);
       if (numeric !== null) {
         const magnitude = Math.abs(numeric);
         const places = magnitude >= 100 ? 1 : magnitude >= 10 ? Math.min(digits, 2) : digits;
-        return numeric.toLocaleString("zh-CN", { maximumFractionDigits: places }) + (unit ? " " + unit : "");
+        return numeric.toLocaleString("zh-CN", { maximumFractionDigits: places }) + (localizedUnit ? " " + localizedUnit : "");
       }
-      if (typeof value === "boolean") return value ? "是" : "否";
       if (typeof value === "object") return JSON.stringify(value);
-      return String(value) + (unit ? " " + unit : "");
+      return String(requirementValueLabel(value)) + (localizedUnit ? " " + localizedUnit : "");
+    }
+
+    function formatConstraintMargin(item) {
+      return formatDesignValue(item?.margin, item?.unit === "boolean" ? "" : item?.unit);
     }
 
     function formatRepairValue(value) {
@@ -2669,17 +3236,18 @@
           : rawPath;
         return fieldPathAliases[path] || path;
       };
-      const addGap = ({ path: rawPath, value, reason, source, scopeStatement = "", preferReason = false }) => {
+      const addGap = ({ path: rawPath, value, unit, reason, source, scopeStatement = "", preferReason = false }) => {
         const path = normalizedPath(rawPath);
         if (!path) return;
         const existing = gaps.get(path);
         if (!existing) {
-          gaps.set(path, { path, value, reason, source, scopeStatement });
+          gaps.set(path, { path, value, unit, reason, source, scopeStatement });
           return;
         }
         gaps.set(path, {
           ...existing,
           value: existing.value === undefined ? value : existing.value,
+          unit: existing.unit || unit,
           reason: preferReason && reason ? reason : existing.reason || reason,
           source: preferReason && source ? source : existing.source || source,
           scopeStatement: preferReason && scopeStatement
@@ -2694,6 +3262,7 @@
         addGap({
           path,
           value: requirement.value,
+          unit: requirement.unit,
           reason: "该要求已从当前求解范围延后，仍需完成对应专项验证。",
           source: "延后需求",
         });
@@ -2705,6 +3274,7 @@
           addGap({
             path: field?.field_path || field?.retained_field_path,
             value: field?.value,
+            unit: field?.unit,
             reason: field?.coverage_reason || field?.scope_statement || deferral?.scope_statement
               || "当前总体模型尚未覆盖该专项要求。",
             source: "范围协商记录",
@@ -2743,7 +3313,7 @@
       });
       const failedStatuses = ["failed", "cancelled", "timed_out", "interrupted"];
       if (failedStatuses.includes(job.status)) {
-        return outcome({ tone: "fail", label: designJobStatusLabel(job.status), detail: job.error || job.message || "任务未完成。" });
+        return outcome({ tone: "fail", label: designJobStatusLabel(job.status), detail: localizedJobMessage(job.error || job.message, job.status) || "任务未完成。" });
       }
       if (job.status === "nonconverged" || overall === "nonconverged" || numerical === false) {
         return outcome({ tone: "fail", label: "数值未收敛", detail: "当前结果不能作为工程可行方案。" });
@@ -2770,7 +3340,7 @@
         });
       }
       if (["queued", "running", "preparing", "validating"].includes(job.status) || !job.terminal) {
-        return outcome({ tone: "warn", label: designJobStatusLabel(job.status), detail: job.message || "工程校验尚未完成。" });
+        return outcome({ tone: "warn", label: designJobStatusLabel(job.status), detail: localizedJobMessage(job.message, job.status) || "工程校验尚未完成。" });
       }
       return outcome({
         tone: "warn",
@@ -2837,7 +3407,7 @@
       for (const event of events) {
         const item = designNode("li", event.is_error ? "is-fail" : "");
         item.appendChild(designNode("strong", "", designJobStatusLabel(event.stage)));
-        item.appendChild(designNode("span", "", event.summary || "阶段已更新"));
+        item.appendChild(designNode("span", "", localizedStageMessage(event.summary, event.stage) || "阶段已更新"));
         list.appendChild(item);
       }
       designRunTimeline.appendChild(list);
@@ -2899,7 +3469,7 @@
       const summary = designNode("div", "design-preflight-grid");
       for (const assumption of assumptions) {
         const item = designNode("div", "design-preflight-item");
-        item.appendChild(designNode("span", "", assumption.path || assumption.name || "假设"));
+        item.appendChild(designNode("span", "", requirementFieldLabel(assumption.path || assumption.name)));
         item.appendChild(designNode("strong", "", formatDesignValue(assumption.value)));
         item.appendChild(designNode("small", "", assumption.source === "user" ? "用户输入" : assumption.source === "derived" ? "推导值" : "默认值"));
         summary.appendChild(item);
@@ -2910,7 +3480,12 @@
         warningBox.setAttribute("role", "alert");
         warningBox.appendChild(designNode("strong", "", "需要确认"));
         const list = document.createElement("ul");
-        for (const warning of warnings) list.appendChild(designNode("li", "", typeof warning === "string" ? warning : warning.message || JSON.stringify(warning)));
+        for (const warning of warnings) {
+          const message = typeof warning === "string" ? warning : warning?.message;
+          list.appendChild(designNode("li", "", containsChineseText(message)
+            ? message
+            : "预检发现一项需要确认的工程问题。"));
+        }
         warningBox.appendChild(list);
         designPreflightSummary.appendChild(warningBox);
       }
@@ -2952,7 +3527,9 @@
       try {
         request = buildDesignJobRequest();
       } catch (error) {
-        designPreflightState.textContent = error.message;
+        designPreflightState.textContent = containsChineseText(error.message)
+          ? error.message
+          : "预检失败，请检查输入字段。";
         designPreflightState.className = "is-fail";
         designPreflightConfirm.disabled = true;
         designRunBtn.disabled = true;
@@ -3047,20 +3624,29 @@
     function stageDisplayName(id) {
       return {
         requirements: "需求归一化",
-        class1: "Class I 总体闭合",
-        class1_sizing: "Class I 总体闭合",
-        class2: "Class II 初步设计",
+        declared_requirement: "声明需求",
+        mission: "任务性能",
+        weight: "重量闭合",
+        performance: "飞行性能",
+        numerical: "数值收敛",
+        propulsion: "推进校核",
+        stability: "稳定与操纵",
+        structures: "结构与载荷",
+        optimization: "方案优化",
+        class1: "一级总体闭合",
+        class1_sizing: "一级总体闭合",
+        class2: "二级初步设计",
         stage2_aero: "气动分析",
         stage3_propulsion: "推进校核",
         stage4_mission: "任务性能",
         stage5_stability: "稳定与操纵",
         stage6_structures: "结构与载荷",
         stage7_optimization: "方案优化",
-        class3: "Class III 几何与结构",
+        class3: "三级几何与结构",
         geometry: "几何生成",
         report: "统一报告",
         reporting: "统一报告",
-      }[id] || String(id || "阶段").replaceAll("_", " ");
+      }[id] || "其他工程阶段";
     }
 
     function createDesignSection(title, description = "") {
@@ -3075,7 +3661,7 @@
     function convergenceSeries(history) {
       if (!Array.isArray(history)) return { points: [], label: "" };
       const candidates = [
-        { keys: ["mtow_kg", "mtow", "weight_kg", "weight"], label: "MTOW (kg)" },
+        { keys: ["mtow_kg", "mtow", "weight_kg", "weight"], label: "最大起飞重量（kg）" },
         { keys: ["error", "relative_error", "residual", "delta"], label: "收敛误差" },
       ];
       for (const candidate of candidates) {
@@ -3520,9 +4106,14 @@
         const rows = outcome.validationGaps.map((gap) => ({
           className: "is-warn",
           cells: [
-            gap.path,
-            formatDesignValue(gap.value),
-            gap.reason || "--",
+            requirementFieldLabel(gap.path),
+            formatDesignValue(
+              gap.value,
+              requirementUnitLabel(gap.unit, gap.path) === "--"
+                ? ""
+                : requirementUnitLabel(gap.unit, gap.path),
+            ),
+            localizeCoverageReason(gap.path, gap.reason) || "--",
             [gap.scopeStatement, gap.source ? "来源：" + gap.source : ""].filter(Boolean).join(" · ") || "--",
           ],
         }));
@@ -3575,10 +4166,10 @@
               className: record.result_status === "completed" ? "is-pass" : "is-warn",
               cells: [
                 record.repair_attempt,
-                action.path || "--",
+                requirementFieldLabel(action.path),
                 formatRepairValue(action.from),
                 formatRepairValue(action.to),
-                (action.trigger_constraint_ids || []).join(", ") || "--",
+                (action.trigger_constraint_ids || []).map((id) => designConstraintLabel({ id })).join("、") || "--",
               ],
             });
           }
@@ -3593,11 +4184,11 @@
         const rows = constraints.map((item) => {
           const passed = item.passed;
           const tone = passed === true ? "pass" : passed === false ? "fail" : "warn";
-          const label = item.label || item.name || item.id || "约束";
+          const label = designConstraintLabel(item);
           const constraintName = designNode("div", "design-constraint-name");
           constraintName.appendChild(designNode("strong", "", label));
           if (item.blocking) constraintName.appendChild(designNode("small", "", "阻断约束"));
-          const marginText = formatDesignValue(item.margin, item.unit);
+          const marginText = formatConstraintMargin(item);
           const ratio = finiteDesignNumber(item.margin_ratio);
           return {
             className: "is-" + tone,
@@ -3625,11 +4216,11 @@
         const grid = designNode("div", "design-stage-grid");
         for (const stage of stages) {
           const rawStatus = String(stage.status || "unknown").toLowerCase();
-          const tone = ["passed", "pass", "completed", "feasible"].includes(rawStatus) ? "pass" : ["failed", "fail", "infeasible", "error"].includes(rawStatus) ? "fail" : "warn";
+          const tone = ["passed", "pass", "completed", "feasible"].includes(rawStatus) ? "pass" : ["failed", "fail", "infeasible", "not_converged", "nonconverged", "error"].includes(rawStatus) ? "fail" : "warn";
           const item = designNode("div", "design-stage-item is-" + tone);
           item.appendChild(designNode("span", "", stageDisplayName(stage.name || stage.id)));
-          item.appendChild(designStatusChip(rawStatus === "passed" ? "通过" : rawStatus === "failed" ? "未通过" : rawStatus, tone));
-          if (stage.message || stage.error) item.appendChild(designNode("p", "", stage.message || stage.error));
+          item.appendChild(designStatusChip(designStageStatusLabel(rawStatus), tone));
+          if (stage.message || stage.error) item.appendChild(designNode("p", "", localizedStageMessage(stage.message || stage.error, rawStatus)));
           grid.appendChild(item);
         }
         stageSection.appendChild(grid);
@@ -3649,10 +4240,10 @@
         const rows = comparisons.map((item) => ({
           className: item.passed === true ? "is-pass" : item.passed === false ? "is-fail" : "is-warn",
           cells: [
-            item.label || item.name || item.id || item.requirement || "指标",
+            designConstraintLabel(item),
             formatConstraintRequirement(item),
             formatDesignValue(item.actual, item.unit),
-            formatDesignValue(item.margin, item.unit),
+            formatConstraintMargin(item),
             designStatusChip(item.passed === true ? "满足" : item.passed === false ? "不满足" : "待判定", item.passed === true ? "pass" : item.passed === false ? "fail" : "warn"),
           ],
         }));
@@ -3665,7 +4256,7 @@
       const recommendations = [...new Set([
         ...(Array.isArray(engineering.recommendations) ? engineering.recommendations : []),
         ...(Array.isArray(engineering.diagnostic_recommendations) ? engineering.diagnostic_recommendations : []),
-      ].map(String))];
+      ].map(localizedEngineeringRecommendation))];
       if (recommendations.length) {
         const recommendationSection = createDesignSection("诊断与下一步");
         const list = designNode("ol", "design-recommendations");
@@ -3679,8 +4270,8 @@
         const provenanceSection = createDesignSection("结果追溯");
         const list = designNode("dl", "design-provenance");
         for (const [key, value] of Object.entries(provenance)) {
-          list.appendChild(designNode("dt", "", key.replaceAll("_", " ")));
-          list.appendChild(designNode("dd", "", formatDesignValue(value)));
+          list.appendChild(designNode("dt", "", designProvenanceLabel(key)));
+          list.appendChild(designNode("dd", "", formatDesignProvenanceValue(value)));
         }
         provenanceSection.appendChild(list);
         designResultsContent.appendChild(provenanceSection);
@@ -3819,13 +4410,15 @@
       });
       if (constraintIds.length) {
         const constraintRows = constraintIds.map((id) => {
-          const label = constraintMaps.map((map) => map.get(id)).find(Boolean)?.label || id;
+          const label = designConstraintLabel(
+            constraintMaps.map((map) => map.get(id)).find(Boolean) || { id },
+          );
           return {
             cells: [label, ...constraintMaps.map((map) => {
               const constraint = map.get(id);
               if (!constraint) return "--";
               const tone = constraint.passed === true ? "pass" : constraint.passed === false ? "fail" : "warn";
-              const copy = designNode("span", "design-margin-value is-" + tone, formatDesignValue(constraint.margin, constraint.unit));
+              const copy = designNode("span", "design-margin-value is-" + tone, formatConstraintMargin(constraint));
               return copy;
             })],
           };
@@ -3857,6 +4450,18 @@
       return "download";
     }
 
+    function resultFileKindLabel(kind) {
+      return ({
+        image: "图片",
+        model: "三维模型",
+        markdown: "设计报告",
+        html: "交互式报告",
+        json: "结构化数据",
+        text: "文本数据",
+        download: "结果文件",
+      })[kind] || "结果文件";
+    }
+
     function renderDesignReports() {
       designReportList.innerHTML = "";
       const job = state.activeDesignJob;
@@ -3879,7 +4484,7 @@
         const button = designNode("button", "design-report-item" + (state.selectedResultFile === key ? " is-active" : ""));
         button.type = "button";
         button.appendChild(designNode("strong", "", file.name || file.filename || "结果文件"));
-        button.appendChild(designNode("span", "", resultFileKind(file) + (file.size_bytes ? " · " + formatBytes(file.size_bytes) : "")));
+        button.appendChild(designNode("span", "", resultFileKindLabel(resultFileKind(file)) + (file.size_bytes ? " · " + formatBytes(file.size_bytes) : "")));
         button.addEventListener("click", () => {
           state.selectedResultFile = key;
           renderDesignReports();
@@ -4147,7 +4752,7 @@
       } catch (error) {
         state.designJobs = [];
         renderDesignJobHistory();
-        if (!options.silent) setStatus(error.message, true);
+        if (!options.silent) setStatus("无法刷新总体设计任务，请稍后重试。", true);
       }
     }
 
@@ -4167,13 +4772,13 @@
       state.designJobMessage = null;
       applyDesignJobRequest(job.request);
       designProgress.value = job.progress || 0;
-      designRunStatus.textContent = job.message || designJobStatusLabel(job.status);
+      designRunStatus.textContent = localizedJobMessage(job.message, job.status) || designJobStatusLabel(job.status);
       saveLocalState();
       renderDesignJobHistory();
       renderDesignWorkspace();
 
       if (!job.terminal) {
-        setDesignRunBusy(true, job.message || "正在恢复任务");
+        setDesignRunBusy(true, localizedJobMessage(job.message, job.status) || "正在恢复任务");
         refreshDesignJobMessage();
         if (options.monitor !== false) void monitorDesignJob(job.job_id);
         return job;
@@ -4216,7 +4821,10 @@
             if ((parsed.data.sequence || 0) <= state.designJobSequence) continue;
             state.designJobSequence = parsed.data.sequence || state.designJobSequence;
             if (designProgress) designProgress.value = parsed.data.progress || 0;
-            if (designRunStatus) designRunStatus.textContent = parsed.data.message || "正在计算";
+            if (designRunStatus) designRunStatus.textContent = localizedJobMessage(
+              parsed.data.message,
+              parsed.data.stage || "running",
+            ) || "正在计算";
             state.designJobEvents.push(designProgressEvent(parsed.data));
             refreshDesignJobMessage();
             renderDesignRunTimeline();
@@ -4264,7 +4872,7 @@
           state.designJobSequence = job.last_sequence || state.designJobSequence;
           state.designJobEvents = (job.events || []).map(designProgressEvent);
           if (designProgress) designProgress.value = job.progress || 0;
-          if (designRunStatus) designRunStatus.textContent = job.message || designJobStatusLabel(job.status);
+          if (designRunStatus) designRunStatus.textContent = localizedJobMessage(job.message, job.status) || designJobStatusLabel(job.status);
           renderDesignRunTimeline();
           if (job.terminal) return { job };
         } catch (error) {
@@ -4279,7 +4887,7 @@
 
     function designResultText(job) {
       const outcome = designOutcome(job);
-      const issueText = (job.result?.issues || []).map((issue) => "- " + issue.message).join("\n");
+      const issueText = (job.result?.issues || []).map((issue) => "- " + localizedEngineeringIssue(issue)).join("\n");
       const title = outcome.tone === "pass"
         ? outcome.limitedScope ? "总体设计：覆盖范围内初步通过" : "总体设计：初步可行候选（当前模型）"
         : outcome.tone === "fail" ? "总体设计方案未通过工程判定" : "总体设计计算已完成";
@@ -4325,7 +4933,7 @@
         );
         state.renderedDesignJobId = job.job_id;
         if (designProgress) designProgress.value = 100;
-        if (designRunStatus) designRunStatus.textContent = job.message || job.status;
+        if (designRunStatus) designRunStatus.textContent = localizedJobMessage(job.message, job.status) || designJobStatusLabel(job.status);
         setDesignRunBusy(false);
         if (designRetryBtn) designRetryBtn.disabled = false;
         const outcome = designOutcome(job);
@@ -4335,11 +4943,12 @@
         await refreshDesignJobs({ silent: true });
       } catch (error) {
         if (controller.signal.aborted || state.designJobId !== jobId) return;
+        const localizedError = localizedJobMessage(error.message, "failed") || "总体设计任务未完成。";
         if (state.designJobMessage) state.designJobMessage.remove();
         state.designJobMessage = null;
-        chatLog.appendChild(createMessage("system", error.message));
-        setDesignRunBusy(false, error.message);
-        setStatus(error.message, true);
+        chatLog.appendChild(createMessage("system", localizedError));
+        setDesignRunBusy(false, localizedError);
+        setStatus(localizedError, true);
       } finally {
         if (state.designStreamController === controller) state.designStreamController = null;
       }
@@ -4385,8 +4994,9 @@
         designCancelBtn.disabled = false;
         await monitorDesignJob(state.designJobId);
       } catch (error) {
-        setDesignRunBusy(false, error.message);
-        setStatus(error.message, true);
+        const localizedError = localizedJobMessage(error.message, "failed") || "总体设计任务提交失败。";
+        setDesignRunBusy(false, localizedError);
+        setStatus(localizedError, true);
       }
     }
 
@@ -4400,7 +5010,7 @@
           body: "{}",
         });
       } catch (error) {
-        setStatus(error.message, true);
+        setStatus(localizedJobMessage(error.message, "failed") || "取消任务失败。", true);
       }
     }
 
@@ -4429,8 +5039,9 @@
         renderDesignWorkspace();
         await monitorDesignJob(state.designJobId);
       } catch (error) {
-        setDesignRunBusy(false, error.message);
-        setStatus(error.message, true);
+        const localizedError = localizedJobMessage(error.message, "failed") || "重新提交任务失败。";
+        setDesignRunBusy(false, localizedError);
+        setStatus(localizedError, true);
       }
     }
 
