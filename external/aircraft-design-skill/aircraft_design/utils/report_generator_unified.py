@@ -267,13 +267,16 @@ class UnifiedReportGenerator:
         thrust_to_weight = metrics.get("thrust_to_weight")
         v_stall_m_s = metrics.get("v_stall_m_s")
         actual_range_m = performance.get("actual_range_m")
+        range_metric_kind = performance.get("range_metric_kind")
+        range_is_capability_prediction = range_metric_kind == "independent_capability_prediction"
+        range_is_evaluated_mission = range_metric_kind == "evaluated_mission_distance"
 
         formulas = [
             "$$\\frac{W}{S}=\\frac{W_0 g}{S}$$",
             "$$\\frac{T}{W}=\\frac{T_{SL}}{W_0 g}$$",
             "$$V_{stall}=\\sqrt{\\frac{2W_0 g}{\\rho S C_{L\\max}}}$$",
         ]
-        if isinstance(actual_range_m, (int, float)):
+        if isinstance(actual_range_m, (int, float)) and range_is_capability_prediction:
             formulas.append("$$R=\\frac{V}{c}\\frac{L}{D}\\ln\\left(\\frac{W_i}{W_f}\\right)$$")
 
         lines = [
@@ -287,7 +290,21 @@ class UnifiedReportGenerator:
             f"| 失速速度 $V_{{stall}}$ | {self._fmt_num(v_stall_m_s)} | m/s |",
         ]
         if isinstance(actual_range_m, (int, float)):
-            lines.append(f"| 实际航程 | {self._fmt_num(actual_range_m)} | m |")
+            if range_is_capability_prediction:
+                range_label = "预测最大航程"
+            elif range_is_evaluated_mission:
+                range_label = "评估任务航程"
+            else:
+                range_label = "航程指标（证据类型未声明）"
+            lines.append(f"| {range_label} | {self._fmt_num(actual_range_m)} | m |")
+            if range_is_evaluated_mission:
+                lines.append(
+                    "| 航程证据类型 | 规定任务剖面距离闭合，不是独立最大航程预测 | - |"
+                )
+            elif not range_is_capability_prediction:
+                lines.append(
+                    "| 航程证据类型 | 未声明；不得解释为实际、已达或最大航程能力 | - |"
+                )
 
         lines.extend(
             [

@@ -25,17 +25,21 @@ class _StaticOnlyService:
     """The browser route mock owns APIs; the real server supplies production assets."""
 
 
-@pytest.fixture(scope="session")
-def e2e_browser(playwright):
-    try:
-        browser = playwright.chromium.launch(headless=True)
-    except playwright_api.Error as exc:
-        message = str(exc).lower()
-        if "executable doesn't exist" in message or "please run the following command" in message:
-            pytest.skip(f"Playwright Chromium binary is unavailable: {exc}")
-        raise
-    yield browser
-    browser.close()
+@pytest.fixture(scope="module")
+def e2e_browser():
+    # Keep Playwright's sync event loop inside this module.  The plugin's
+    # session-scoped fixture otherwise remains active while later tests call
+    # asyncio.run(), which Python correctly rejects as a nested event loop.
+    with playwright_api.sync_playwright() as playwright:
+        try:
+            browser = playwright.chromium.launch(headless=True)
+        except playwright_api.Error as exc:
+            message = str(exc).lower()
+            if "executable doesn't exist" in message or "please run the following command" in message:
+                pytest.skip(f"Playwright Chromium binary is unavailable: {exc}")
+            raise
+        yield browser
+        browser.close()
 
 
 @pytest.fixture()
@@ -51,14 +55,17 @@ def static_app_url():
         thread.join(timeout=2)
 
 
-def _session_payload(design_results: list[dict] | None = None) -> dict:
+def _session_payload(
+    design_results: list[dict] | None = None,
+    messages: list[dict] | None = None,
+) -> dict:
     return {
         "session_id": "e2e-session",
         "provider": "openai",
         "model": "deepseek-v4-pro",
         "auto_skill": None,
         "auto_approve": True,
-        "messages": [],
+        "messages": messages or [],
         "design_results": design_results or [],
     }
 
@@ -100,6 +107,123 @@ def _request(project_name: str, *, payload_kg: float = 500.0) -> dict:
         },
         "tolerance": 0.001,
         "max_iterations": 50,
+    }
+
+
+def _requirement_interaction(*, action_enabled: bool = True) -> dict:
+    return {
+        "contract_version": 1,
+        "type": "aircraft_requirement_review",
+        "session_id": "e2e-session",
+        "revision": {
+            "revision_id": "requirement-revision-001",
+            "revision_number": 1,
+            "revision_hash": "a" * 64,
+            "status": "unsupported",
+            "confirmed": False,
+        },
+        "intent": {
+            "requirements": [
+                {
+                    "path": "mission.max_flight_mach",
+                    "value": 0.8,
+                    "unit": "Mach",
+                    "role": "hard_constraint",
+                    "locked": True,
+                    "source": "user",
+                    "applicable_model": None,
+                },
+                {
+                    "path": "launch.mode",
+                    "value": "rocket_assist",
+                    "unit": None,
+                    "role": "hard_constraint",
+                    "locked": True,
+                    "source": "user",
+                    "applicable_model": None,
+                },
+            ]
+        },
+        "diagnosis": {
+            "status": "unsupported",
+            "summary": "火箭助推和最大飞行马赫数尚未进入当前专项模型。",
+            "coverage": [
+                {
+                    "field_path": "mission.max_flight_mach",
+                    "status": "unsupported",
+                    "model_id": None,
+                    "reason": "当前只校核巡航设计点。",
+                    "blocking": True,
+                },
+                {
+                    "field_path": "launch.mode",
+                    "status": "unsupported",
+                    "model_id": None,
+                    "reason": "火箭助推轨迹模型尚未接入。",
+                    "blocking": True,
+                },
+            ],
+            "clarification_questions": [
+                {
+                    "question_id": "question-scope-001",
+                    "field_path": "launch.mode",
+                    "question": "是否先对巡航段开展概念设计？",
+                    "reason": "助推段目前不能完成专项验证。",
+                    "options": ["先设计巡航段", "等待专项模型"],
+                    "recommended_option": "先设计巡航段",
+                    "consequence_if_unanswered": "整体方案保持模型未覆盖状态。",
+                    "blocking": True,
+                },
+                {
+                    "question_id": "question-mtow-001",
+                    "field_path": "mass.maximum_takeoff_mass",
+                    "question": "请确认最大起飞重量上限。",
+                    "reason": "该数值用于锁定重量闭合边界。",
+                    "options": [],
+                    "recommended_option": 260,
+                    "consequence_if_unanswered": "无法建立重量上限约束。",
+                    "blocking": True,
+                },
+                {
+                    "question_id": "question-range-001",
+                    "field_path": "mission.range_m",
+                    "question": "请确认任务航程。",
+                    "reason": "任务航程用于燃油与重量闭合。",
+                    "options": [],
+                    "recommended_option": None,
+                    "consequence_if_unanswered": "无法建立任务闭合边界。",
+                    "blocking": True,
+                }
+            ],
+            "change_proposals": [
+                {
+                    "proposal_id": "scope.cruise_only",
+                    "field_path": "launch.mode",
+                    "old_value": "rocket_assist",
+                    "proposed_value": "out_of_scope",
+                    "reason": "先冻结助推接口，仅求解巡航段。",
+                    "affected_constraints": ["launch.mode"],
+                    "expected_benefit": "可继续评估巡航重量与气动闭合。",
+                    "engineering_cost": "不能宣称全任务剖面可行。",
+                    "target_locked": True,
+                    "requires_user_confirmation": True,
+                    "source_revision": 1,
+                }
+            ],
+            "blocking_reasons": ["火箭助推轨迹模型未覆盖。"],
+            "conflicting_fields": [],
+            "assumptions": [],
+            "ready_for_solver": False,
+        },
+        "actions": [
+            {
+                "action": "apply_change_proposal",
+                "label": "采用修改建议",
+                "enabled": action_enabled,
+                "primary": True,
+                "payload": {"proposal_id": "scope.cruise_only"},
+            }
+        ],
     }
 
 
@@ -169,6 +293,7 @@ def _job(
             "thrust_to_weight": 0.6,
             "span_m": 9.0,
             "actual_range_m": 1_200_000.0,
+            "range_metric_kind": "evaluated_mission_distance",
             "iterations": 12,
             "engineering_feasible": engineering_feasible,
             "engineering_status": "feasible" if engineering_feasible else "infeasible",
@@ -264,6 +389,9 @@ def _install_api_mock(
     jobs: list[dict] | None = None,
     sessions: list[dict] | None = None,
     running_fallback: bool = False,
+    messages: list[dict] | None = None,
+    requirement_action_response: dict | None = None,
+    stream_completion_job: dict | None = None,
 ):
     jobs = jobs or []
     sessions = sessions or []
@@ -274,6 +402,8 @@ def _install_api_mock(
         "preflight_calls": 0,
         "preflight_requests": [],
         "session_requests": [],
+        "requirement_action_requests": [],
+        "stream_completed": False,
     }
 
     config = {
@@ -326,7 +456,7 @@ def _install_api_mock(
         if path == "/api/sessions" and method == "POST":
             request = route.request.post_data_json or {}
             state["session_requests"].append(request)
-            session = _session_payload(jobs)
+            session = _session_payload(jobs, messages)
             session["auto_skill"] = request.get("auto_skill")
             fulfill_json(route, {"session": session}, status=201)
             return
@@ -337,12 +467,34 @@ def _install_api_mock(
             session_id = path.removeprefix("/api/sessions/").strip("/")
             summary = next((item for item in sessions if item.get("session_id") == session_id), None)
             if summary is None:
-                fulfill_json(route, {"error": "unknown session"}, status=404)
-                return
+                if session_id == "e2e-session" and state["stream_completed"]:
+                    fulfill_json(route, {"session": _session_payload(jobs, messages)})
+                    return
+                else:
+                    fulfill_json(route, {"error": "unknown session"}, status=404)
+                    return
             session = _session_payload(summary.get("design_results", []))
             session["session_id"] = session_id
             session["auto_skill"] = summary.get("auto_skill")
             fulfill_json(route, {"session": session})
+            return
+        if (
+            path.startswith("/api/sessions/")
+            and "/requirement-revisions/" in path
+            and path.endswith("/actions")
+            and method == "POST"
+        ):
+            state["requirement_action_requests"].append(
+                {
+                    "path": path,
+                    "payload": route.request.post_data_json or {},
+                }
+            )
+            fulfill_json(
+                route,
+                requirement_action_response
+                or {"interaction": _requirement_interaction(action_enabled=False)},
+            )
             return
         if path == "/api/design-jobs/preflight" and method == "POST":
             state["preflight_calls"] += 1
@@ -368,6 +520,28 @@ def _install_api_mock(
             fulfill_json(route, {"jobs": jobs})
             return
         if path.endswith("/stream"):
+            if stream_completion_job is not None:
+                state["stream_completed"] = True
+                detail_by_id[stream_completion_job["job_id"]] = stream_completion_job
+                jobs[:] = [
+                    stream_completion_job,
+                    *[
+                        job
+                        for job in jobs
+                        if job["job_id"] != stream_completion_job["job_id"]
+                    ],
+                ]
+                route.fulfill(
+                    status=200,
+                    content_type="text/event-stream; charset=utf-8",
+                    body=(
+                        "event: done\n"
+                        + "data: "
+                        + json.dumps({"job": stream_completion_job}, ensure_ascii=False)
+                        + "\n\n"
+                    ),
+                )
+                return
             state["stream_failures"] += 1
             route.fulfill(status=503, content_type="text/plain", body="stream unavailable")
             return
@@ -464,6 +638,194 @@ def test_chat_header_owns_aircraft_skill_toggle(
         context.close()
 
 
+def test_requirement_interaction_card_renders_and_posts_revision_action(
+    e2e_browser,
+    static_app_url: str,
+) -> None:
+    interaction = _requirement_interaction()
+    interaction["revision"]["revision_number"] = 2
+    historical_interaction = json.loads(json.dumps(interaction))
+    historical_interaction["revision"]["revision_id"] = "requirement-revision-000"
+    historical_interaction["revision"]["revision_number"] = 1
+    historical_interaction["revision"]["revision_hash"] = "b" * 64
+    updated_interaction = json.loads(json.dumps(interaction))
+    updated_interaction["revision"]["revision_id"] = "requirement-revision-002"
+    updated_interaction["revision"]["revision_number"] = 3
+    updated_interaction["revision"]["revision_hash"] = "c" * 64
+    updated_interaction["diagnosis"]["summary"] = "已记录巡航段优先的用户决定。"
+    updated_interaction["actions"][0]["enabled"] = False
+    messages = [
+        {
+            "role": "assistant",
+            "text": "上一版需求诊断。",
+            "events": [
+                {
+                    "kind": "requirement_interaction",
+                    "preview": {"interaction": historical_interaction},
+                }
+            ],
+        },
+        {
+            "role": "assistant",
+            "text": "请先确认需求诊断，再进入总体参数求解。",
+            "events": [
+                {
+                    "kind": "requirement_interaction",
+                    "preview": {"interaction": interaction},
+                }
+            ],
+        }
+    ]
+    updated_messages = [
+        *messages,
+        {
+            "role": "assistant",
+            "text": "需求版本已更新。",
+            "events": [
+                {
+                    "kind": "requirement_interaction",
+                    "preview": {"interaction": updated_interaction},
+                }
+            ],
+        },
+    ]
+    running_job = _job(
+        "job-from-requirement-action",
+        "Negotiated UAV",
+        status="running",
+        mtow_kg=260.0,
+        engineering_feasible=False,
+        terminal=False,
+    )
+    running_job["result"] = None
+    running_job["result_files"] = []
+    completed_job = _job(
+        "job-from-requirement-action",
+        "Negotiated UAV",
+        status="completed",
+        mtow_kg=255.0,
+        engineering_feasible=True,
+    )
+    context = e2e_browser.new_context(viewport={"width": 1280, "height": 900})
+    page = context.new_page()
+    mock_state = _install_api_mock(
+        page,
+        messages=messages,
+        requirement_action_response={
+            "interaction": updated_interaction,
+            "session": _session_payload(messages=updated_messages),
+            "job": running_job,
+        },
+        stream_completion_job=completed_job,
+    )
+    try:
+        page.goto(static_app_url)
+        cards = page.locator("[data-testid='requirement-interaction']")
+        playwright_api.expect(cards).to_have_count(2)
+        historical_card = cards.nth(0)
+        playwright_api.expect(historical_card).to_have_attribute("data-current", "false")
+        playwright_api.expect(historical_card).to_contain_text("历史需求版本")
+        playwright_api.expect(
+            historical_card.get_by_role("button", name="采用修改建议")
+        ).to_be_disabled()
+        card = cards.nth(1)
+        playwright_api.expect(card).to_be_visible()
+        playwright_api.expect(card.locator(".requirement-status")).to_have_attribute(
+            "data-status", "unsupported"
+        )
+        playwright_api.expect(card.locator(".requirement-status")).to_contain_text("模型未覆盖")
+        playwright_api.expect(card).to_contain_text("火箭助推轨迹模型未覆盖")
+        playwright_api.expect(card.locator("tr[data-field-path='launch.mode']")).to_contain_text(
+            "已锁定"
+        )
+        assert card.locator(".requirement-lock.is-locked").count() == 2
+        assert card.locator(".requirement-question").count() == 3
+        numeric_answer = card.locator(
+            "input[data-requirement-question='question-mtow-001']"
+        )
+        playwright_api.expect(numeric_answer).to_have_attribute("type", "number")
+        playwright_api.expect(numeric_answer).to_have_value("260")
+        range_answer = card.locator(
+            "input[data-requirement-question='question-range-001']"
+        )
+        playwright_api.expect(range_answer).to_have_attribute("type", "number")
+        range_answer.fill("500000")
+        playwright_api.expect(card).to_contain_text("先冻结助推接口")
+
+        action_button = card.get_by_role("button", name="采用修改建议")
+        with page.expect_response(
+            re.compile(
+                r"/api/sessions/e2e-session/requirement-revisions/"
+                r"requirement-revision-001/actions$"
+            )
+        ) as response_info:
+            action_button.click()
+        assert response_info.value.status == 200
+
+        assert len(mock_state["requirement_action_requests"]) == 1
+        request = mock_state["requirement_action_requests"][0]
+        assert request["path"].endswith("/requirement-revision-001/actions")
+        payload = request["payload"]
+        assert payload["action"] == "apply_change_proposal"
+        assert payload["expected_revision_hash"] == "a" * 64
+        assert payload["client_action_id"]
+        assert payload["proposal_id"] == "scope.cruise_only"
+        assert payload["decisions"]["clarification_answers"] == [
+            {
+                "question_id": "question-scope-001",
+                "field_path": "launch.mode",
+                "value": "先设计巡航段",
+            },
+            {
+                "question_id": "question-mtow-001",
+                "field_path": "mass.maximum_takeoff_mass",
+                "value": 260,
+            },
+            {
+                "question_id": "question-range-001",
+                "field_path": "mission.range_m",
+                "value": 500000,
+            },
+        ]
+        assert cards.count() == 3
+        playwright_api.expect(cards.nth(1)).to_have_attribute("data-current", "false")
+        current_card = cards.last
+        playwright_api.expect(current_card).to_contain_text("已记录巡航段优先的用户决定")
+        playwright_api.expect(
+            current_card.get_by_role("button", name="采用修改建议")
+        ).to_be_disabled()
+
+        page.set_viewport_size({"width": 390, "height": 844})
+        geometry = current_card.evaluate(
+            """card => {
+                const bounds = card.getBoundingClientRect();
+                const table = card.querySelector('.requirement-table-wrap');
+                return {
+                    left: bounds.left,
+                    right: bounds.right,
+                    viewportWidth: window.innerWidth,
+                    documentWidth: document.documentElement.scrollWidth,
+                    tableClientWidth: table.clientWidth,
+                    tableScrollWidth: table.scrollWidth,
+                };
+            }"""
+        )
+        assert geometry["left"] >= -1
+        assert geometry["right"] <= geometry["viewportWidth"] + 1
+        assert geometry["documentWidth"] <= geometry["viewportWidth"] + 1
+        assert geometry["tableScrollWidth"] >= geometry["tableClientWidth"]
+
+        playwright_api.expect(page.locator("#designWorkspaceBtn")).to_be_visible()
+        page.wait_for_function(
+            "() => document.querySelector('#designActiveJobLabel')?.textContent.includes('初步可行候选')"
+        )
+        page.set_viewport_size({"width": 1280, "height": 900})
+        page.locator("#designWorkspaceBtn").click()
+        playwright_api.expect(page.locator("#designResultsContent")).to_contain_text("初步可行候选")
+    finally:
+        context.close()
+
+
 def test_chat_and_design_workspace_switch_without_creating_session(
     e2e_browser,
     static_app_url: str,
@@ -495,7 +857,7 @@ def test_chat_and_design_workspace_switch_without_creating_session(
         playwright_api.expect(page.locator("#designWorkspace")).to_be_visible()
         playwright_api.expect(page.locator("#chatLog")).to_be_hidden()
         playwright_api.expect(page.locator("#designPanelResults")).to_be_visible()
-        playwright_api.expect(page.locator("#designResultsContent")).to_contain_text("工程可行")
+        playwright_api.expect(page.locator("#designResultsContent")).to_contain_text("初步可行候选")
         assert page.locator("#designRunForm, #designPanelRun, #designTabRequirements, #designTabRun").count() == 0
         playwright_api.expect(page.locator("#designTabCompare")).to_be_hidden()
 
@@ -509,6 +871,135 @@ def test_chat_and_design_workspace_switch_without_creating_session(
         page.locator("#designBackChatBtn").click()
         playwright_api.expect(page.locator("#chatLog")).to_be_visible()
         assert len(mock_state["session_requests"]) == initial_session_requests
+    finally:
+        context.close()
+
+
+def test_design_outcome_requires_all_engineering_gates(
+    e2e_browser,
+    static_app_url: str,
+) -> None:
+    blocked = _job(
+        "job-inconsistent-blocking-count",
+        "inconsistent_engineering_result",
+        status="completed",
+        mtow_kg=2_300.0,
+        engineering_feasible=True,
+    )
+    blocked["result"]["engineering"]["blocking_failed_count"] = 1
+    incomplete = _job(
+        "job-missing-blocking-count",
+        "incomplete_engineering_result",
+        status="completed",
+        mtow_kg=2_250.0,
+        engineering_feasible=True,
+    )
+    del incomplete["result"]["engineering"]["blocking_failed_count"]
+
+    context = e2e_browser.new_context(viewport={"width": 1280, "height": 900})
+    page = context.new_page()
+    _install_api_mock(page, jobs=[blocked, incomplete])
+    try:
+        page.goto(static_app_url)
+        playwright_api.expect(page.locator("#designWorkspaceBtn")).to_be_visible()
+        page.locator("#designWorkspaceBtn").click()
+
+        outcome = page.locator("[data-testid='design-outcome']")
+        playwright_api.expect(outcome.locator(".design-outcome-copy strong")).to_have_text(
+            "工程不可行"
+        )
+        playwright_api.expect(outcome).to_contain_text("阻断项 1 项未通过")
+        playwright_api.expect(outcome).not_to_contain_text("初步可行候选")
+
+        page.locator("#designResultVersionSelect").select_option(
+            "job-missing-blocking-count"
+        )
+        playwright_api.expect(outcome.locator(".design-outcome-copy strong")).to_have_text(
+            "计算完成，待工程判定"
+        )
+        playwright_api.expect(outcome).to_contain_text("阻断项数量未知")
+        playwright_api.expect(outcome).not_to_contain_text("初步可行候选")
+    finally:
+        context.close()
+
+
+def test_deferred_requirements_remain_visible_as_validation_gaps(
+    e2e_browser,
+    static_app_url: str,
+) -> None:
+    result = _job(
+        "job-limited-scope-feasible",
+        "limited_scope_design",
+        status="completed",
+        mtow_kg=255.0,
+        engineering_feasible=True,
+    )
+    result["request"]["provenance"] = {
+        "requirement_intent": {
+            "requirements": [
+                {
+                    "path": "deferred.requirements.cruise_altitude_m",
+                    "value": 40_000.0,
+                    "role": "soft_goal",
+                    "locked": False,
+                }
+            ],
+            "metadata": {
+                "requirement_workflow": {
+                    "scope_deferrals": [
+                        {
+                            "revision": 2,
+                            "scope_statement": "本轮仅求解已覆盖范围",
+                            "fields": [
+                                {
+                                    "field_path": "launch.mode",
+                                    "retained_field_path": "launch.mode",
+                                    "value": "rocket_assist",
+                                    "coverage_reason": "火箭助推轨迹模型未接入",
+                                    "scope_statement": "本轮仅求解已覆盖范围",
+                                }
+                            ],
+                        }
+                    ]
+                }
+            },
+        },
+        "soft_goals": {
+            "deferred.requirements.cruise_altitude_m": 40_000.0,
+            "launch_mode": "rocket_assist",
+            "max_flight_mach": 0.8,
+            "recovery.mode": "parachute",
+            "configuration_reference": "沙赫德-136无人机",
+        },
+    }
+
+    context = e2e_browser.new_context(viewport={"width": 1280, "height": 900})
+    page = context.new_page()
+    _install_api_mock(page, jobs=[result])
+    try:
+        page.goto(static_app_url)
+        playwright_api.expect(page.locator("#designWorkspaceBtn")).to_be_visible()
+        page.locator("#designWorkspaceBtn").click()
+
+        results = page.locator("#designResultsContent")
+        playwright_api.expect(results).to_contain_text("覆盖范围内初步通过")
+        playwright_api.expect(results).to_contain_text("当前模型覆盖范围内的初步候选")
+        playwright_api.expect(results).not_to_contain_text("总体设计方案工程可行")
+
+        gaps = page.locator("[data-testid='design-validation-gaps']")
+        playwright_api.expect(gaps).to_be_visible()
+        assert gaps.locator("tbody tr").count() == 5
+        playwright_api.expect(gaps).to_contain_text("requirements.cruise_altitude_m")
+        playwright_api.expect(gaps).to_contain_text("40,000")
+        playwright_api.expect(gaps).to_contain_text("launch.mode")
+        assert gaps.locator("tbody tr").filter(has_text="launch.mode").count() == 1
+        playwright_api.expect(gaps).to_contain_text("rocket_assist")
+        playwright_api.expect(gaps).to_contain_text("火箭助推轨迹模型未接入")
+        playwright_api.expect(gaps).to_contain_text("本轮仅求解已覆盖范围")
+        playwright_api.expect(gaps).to_contain_text("max_flight_mach")
+        playwright_api.expect(gaps).to_contain_text("recovery.mode")
+        playwright_api.expect(gaps).to_contain_text("configuration.reference")
+        playwright_api.expect(gaps).to_contain_text("沙赫德-136无人机")
     finally:
         context.close()
 
@@ -561,7 +1052,7 @@ def test_design_result_entry_tracks_the_selected_conversation(
         playwright_api.expect(page.locator("#sessionMeta")).to_contain_text("design-conversation")
         playwright_api.expect(page.locator("#designWorkspaceBtn")).to_be_visible()
         page.locator("#designWorkspaceBtn").click()
-        playwright_api.expect(page.locator("#designResultsContent")).to_contain_text("工程可行")
+        playwright_api.expect(page.locator("#designResultsContent")).to_contain_text("初步可行候选")
         assert len(mock_state["session_requests"]) == initial_session_requests
     finally:
         context.close()
@@ -976,7 +1467,7 @@ def test_history_recovery_infeasible_result_report_preview_and_comparison(
         assert second_checksum != first_frame["checksum"]
 
         version_select.select_option("job-feasible")
-        playwright_api.expect(page.locator("#designResultsContent")).to_contain_text("工程可行")
+        playwright_api.expect(page.locator("#designResultsContent")).to_contain_text("初步可行候选")
         version_select.select_option("job-infeasible")
         playwright_api.expect(page.locator("#designResultsContent")).to_contain_text("工程不可行")
 
@@ -991,6 +1482,32 @@ def test_history_recovery_infeasible_result_report_preview_and_comparison(
         playwright_api.expect(page.locator("#designCompareContent")).to_contain_text("参数差值")
         playwright_api.expect(page.locator("#designCompareContent")).to_contain_text("约束裕度对比")
         playwright_api.expect(page.locator("#designCompareContent")).to_contain_text("Δ")
+    finally:
+        context.close()
+
+
+def test_unknown_range_evidence_is_not_labeled_as_evaluated_or_maximum_range(
+    e2e_browser,
+    static_app_url: str,
+) -> None:
+    job = _job(
+        "job-unknown-range-evidence",
+        "Unknown range evidence",
+        status="completed",
+        mtow_kg=2_300.0,
+        engineering_feasible=True,
+    )
+    job["result"]["summary"]["range_metric_kind"] = "unknown"
+    context = e2e_browser.new_context(viewport={"width": 1280, "height": 900})
+    page = context.new_page()
+    _install_api_mock(page, jobs=[job])
+    try:
+        page.goto(static_app_url)
+        page.locator("#designWorkspaceBtn").click()
+        results = page.locator("#designResultsContent")
+        playwright_api.expect(results).to_contain_text("航程指标（证据未声明）")
+        assert "预测最大航程" not in results.inner_text()
+        assert "评估任务航程" not in results.inner_text()
     finally:
         context.close()
 

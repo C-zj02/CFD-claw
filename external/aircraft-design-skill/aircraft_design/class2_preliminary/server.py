@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any
-from aircraft_design.design_loop_orchestrator import DesignRequirements, InitialGuess, sizing_loop, SizedAircraft
+from .design_loop_orchestrator import DesignRequirements, InitialGuess, SizedAircraft, sizing_loop
 
 app = FastAPI(
     title="Fixed Wing Aircraft Design Skill API",
@@ -44,6 +44,13 @@ class SizingRequest(BaseModel):
     initial_guess: InitialGuessModel
 
 
+class PerformanceResponse(BaseModel):
+    actual_range_m: Optional[float]
+    range_metric_kind: str
+    takeoff_distance_m: Optional[float]
+    landing_distance_m: Optional[float]
+
+
 class SizingResponse(BaseModel):
     converged: bool
     mtow_kg: float
@@ -53,7 +60,7 @@ class SizingResponse(BaseModel):
     thrust_sl_n: float
     geometry: Dict[str, Any]
     weight_breakdown: Dict[str, Any]
-    performance: Dict[str, float]
+    performance: PerformanceResponse
     iterations: int
 
 
@@ -84,6 +91,7 @@ def run_sizing_loop(request: SizingRequest):
             weight_breakdown=result.weight_breakdown,
             performance={
                 "actual_range_m": result.actual_range_m,
+                "range_metric_kind": result.range_metric_kind,
                 "takeoff_distance_m": result.takeoff_distance_m,
                 "landing_distance_m": result.landing_distance_m,
             },

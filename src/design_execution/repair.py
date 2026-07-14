@@ -25,11 +25,6 @@ _BOUNDS: dict[str, tuple[float, float]] = {
     "thrust_to_weight": (0.02, 3.0),
     "aspect_ratio": (1.0, 40.0),
     "thickness_ratio": (0.03, 0.30),
-    "jet_tsfc_kg_per_n_s": (1e-9, 0.001),
-    "prop_bsfc_kg_per_j": (1e-10, 1e-5),
-    "prop_efficiency": (0.1, 1.0),
-    "cd0": (0.001, 0.30),
-    "oswald_e": (0.1, 1.2),
     "cg_fraction_cbar": (0.05, 0.55),
     "horizontal_tail_volume_coefficient": (0.1, 1.5),
 }
@@ -154,31 +149,6 @@ def propose_aircraft_design_repair(
             "Increase aerodynamic efficiency for mission fuel and range closure.",
             mission_ids,
         )
-        propose(
-            "cd0",
-            initial.cd0 * 0.90,
-            "Reduce zero-lift drag within the declared technology envelope.",
-            mission_ids,
-        )
-        propose(
-            "oswald_e",
-            initial.oswald_e * 1.04,
-            "Improve span efficiency within the bounded design-variable range.",
-            mission_ids,
-        )
-        energy_field = (
-            "jet_tsfc_kg_per_n_s"
-            if request.requirements.propulsion_type == "jet"
-            else "prop_bsfc_kg_per_j"
-        )
-        energy_value = _finite(targets.get(energy_field))
-        if energy_value is not None:
-            propose(
-                energy_field,
-                energy_value * 0.94,
-                "Improve propulsion fuel consumption within the bounded assumption range.",
-                mission_ids,
-            )
 
     stability_ids = [
         item for item in failed_ids if item == "advanced.stability.static_margin_min"

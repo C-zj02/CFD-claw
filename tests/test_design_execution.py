@@ -132,6 +132,15 @@ def test_runner_delivers_medium_uav_after_full_engineering_closure() -> None:
         assert isinstance(result.design_data["iteration_history"], list)
         assert isinstance(result.design_data["design_adjustments"], list)
         assert isinstance(result.design_data["design_point"], dict)
+        performance = result.design_data["outputs"]["performance"]
+        assert performance["range_metric_kind"] == "evaluated_mission_distance"
+        assert performance["range_capability_independently_predicted"] is False
+        range_constraint = next(
+            item for item in result.design_data["constraints"] if item["id"] == "class1.range"
+        )
+        assert range_constraint["label"] == "Evaluated mission distance"
+        assert range_constraint["blocking"] is False
+        assert range_constraint["evidence"]["prediction"] is False
         for constraint in result.design_data["constraints"]:
             assert {
                 "id",
@@ -160,6 +169,7 @@ def test_runner_delivers_medium_uav_after_full_engineering_closure() -> None:
         assert summary["span_m"] > 0
         assert summary["iterations"] > 0
         assert summary["artifact_count"] > 0
+        assert summary["range_metric_kind"] == "evaluated_mission_distance"
         manifest = json.loads((result.task_dir / "run_result.json").read_text(encoding="utf-8"))
         assert manifest["status"] == "completed"
         assert manifest["engineering"]["numerical_converged"] is True
@@ -168,6 +178,23 @@ def test_runner_delivers_medium_uav_after_full_engineering_closure() -> None:
             encoding="utf-8"
         )
         assert "有界自动修复记录" in unified_report
+        assert "评估任务航程" in unified_report
+        assert "不是独立最大航程预测" in unified_report
+        assert "需求范围与交付判定" in unified_report
+        technical_report = (result.output_dir / "technical_roadmap_report.md").read_text(
+            encoding="utf-8"
+        )
+        assert "规定任务剖面的评估距离" in technical_report
+        assert "不是独立预测的最大航程" in technical_report
+        assert "需求范围与交付判定" in technical_report
+        assert "技术方案可行，风险可控" not in technical_report
+        advanced_report = (result.output_dir / "advanced_design_report.md").read_text(
+            encoding="utf-8"
+        )
+        assert "# 固定翼飞行器二阶段分析报告" in advanced_report
+        assert "**项目名称**: UAV_1200_km_500_kg" in advanced_report
+        assert "Supersonic4Mach" not in advanced_report
+        assert "需求范围与交付判定" in advanced_report
 
     assert events[0].stage is DesignRunStage.PREPARING
     assert events[-1].stage is DesignRunStage.COMPLETED
@@ -204,6 +231,14 @@ def test_repair_policy_changes_design_variables_only_and_honors_user_ar_limit() 
     payload = _medium_uav_request().to_dict()
     payload["auto_repair_enabled"] = True
     payload["provenance"] = {"user_requirements": {"max_aspect_ratio": 10.2}}
+    payload["initial_guess"].update(
+        {
+            "cd0": 0.027,
+            "oswald_e": 0.79,
+            "jet_tsfc_kg_per_n_s": 2.7e-5,
+            "prop_bsfc_kg_per_j": 9.1e-8,
+        }
+    )
     request = AircraftDesignRequest.from_dict(payload)
     engineering = AircraftDesignEngineeringResult(
         numerical_converged=True,
@@ -240,7 +275,16 @@ def test_repair_policy_changes_design_variables_only_and_honors_user_ar_limit() 
     assert proposal.request.requirements == request.requirements
     assert proposal.record["requirements_changed"] is False
     assert proposal.request.initial_guess.aspect_ratio <= 10.2
-    assert proposal.request.initial_guess.cd0 < request.initial_guess.cd0
+    for field in (
+        "cd0",
+        "oswald_e",
+        "jet_tsfc_kg_per_n_s",
+        "prop_bsfc_kg_per_j",
+    ):
+        assert getattr(proposal.request.initial_guess, field) == getattr(
+            request.initial_guess,
+            field,
+        )
     assert (
         proposal.request.initial_guess.cg_fraction_cbar
         < request.initial_guess.cg_fraction_cbar
@@ -249,7 +293,19 @@ def test_repair_policy_changes_design_variables_only_and_honors_user_ar_limit() 
         proposal.request.initial_guess.horizontal_tail_volume_coefficient
         > request.initial_guess.horizontal_tail_volume_coefficient
     )
-    assert all(action["path"].startswith(("initial_guess.", "solver.")) for action in proposal.record["actions"])
+    action_paths = {action["path"] for action in proposal.record["actions"]}
+    assert action_paths.isdisjoint(
+        {
+            "initial_guess.cd0",
+            "initial_guess.oswald_e",
+            "initial_guess.jet_tsfc_kg_per_n_s",
+            "initial_guess.prop_bsfc_kg_per_j",
+        }
+    )
+    assert all(
+        path.startswith(("initial_guess.", "solver."))
+        for path in action_paths
+    )
 
 
 def test_declared_supplemental_requirements_fail_closed_when_unmodeled() -> None:
@@ -289,7 +345,77 @@ def test_declared_supplemental_requirements_fail_closed_when_unmodeled() -> None
         "declared.min_cruise_endurance_s",
         "declared.special_mission_model_coverage",
     }
+    endurance = next(
+        item
+        for item in design_data["constraints"]
+        if item["id"] == "declared.min_cruise_endurance_s"
+    )
+    assert endurance["actual"] is None
+    assert endurance["evidence"]["prediction"] is False
+    assert "No independent" in endurance["evidence"]["model"]
     assert design_data["stage_status"]["declared_requirements"]["status"] == "failed"
+
+
+def test_delivery_report_limits_pass_claim_when_scope_gaps_remain(tmp_path: Path) -> None:
+    payload = _medium_uav_request().to_dict()
+    payload["provenance"] = {
+        "requirement_intent": {
+            "metadata": {
+                "requirement_workflow": {
+                    "scope_deferrals": [
+                        {
+                            "scope_statement": "只评估当前 Class I/II 覆盖范围。",
+                            "fields": [
+                                {
+                                    "field_path": "launch.mode",
+                                    "retained_field_path": "launch.mode",
+                                    "value": "rocket_assist",
+                                    "coverage_reason": "No launch trajectory model.",
+                                }
+                            ],
+                        }
+                    ]
+                }
+            }
+        },
+        "soft_goals": {
+            "launch_mode": "rocket_assist",
+            "configuration_reference": "Shahed-136",
+        },
+    }
+    request = AircraftDesignRequest.from_dict(payload)
+    engineering = AircraftDesignEngineeringResult(
+        numerical_converged=True,
+        engineering_feasible=True,
+        overall_status="feasible",
+    )
+    report_names = (
+        "design_report_unified.md",
+        "design_report_v2.md",
+        "design_report.md",
+        "technical_roadmap_report.md",
+        "advanced_design_report.md",
+    )
+    for name in report_names:
+        (tmp_path / name).write_text("# Report\n", encoding="utf-8")
+
+    AircraftDesignRunner._append_delivery_scope_report(
+        tmp_path,
+        request=request,
+        engineering=engineering,
+    )
+
+    report = (tmp_path / "design_report_v2.md").read_text(encoding="utf-8")
+    assert "覆盖范围内初步候选" in report
+    assert report.count("`launch.mode`") == 1
+    assert "`configuration.reference`" in report
+    assert "No launch trajectory model" in report
+    assert "只评估当前 Class I/II 覆盖范围" in report
+    assert "blocking_failed_count | `0`" in report
+    for name in report_names:
+        scoped_report = (tmp_path / name).read_text(encoding="utf-8")
+        assert scoped_report.count("## 需求范围与交付判定") == 1
+        assert "覆盖范围内初步候选" in scoped_report
 
 
 def test_runner_auto_repairs_static_margin_and_revalidates_complete_workflow() -> None:

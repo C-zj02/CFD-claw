@@ -137,6 +137,7 @@ class SizedAircraft:
     converged: bool
     iterations: int
     iteration_history: list[dict] = field(default_factory=list)
+    range_metric_kind: str = "unknown"
 
     # Attached details
     design_point: dict = field(default_factory=dict)
@@ -153,7 +154,7 @@ class SizedAircraft:
         return self.converged
 
 
-def _predicted_range_from_fuel_m(
+def _range_metric_from_closed_mission(
     *,
     mtow_kg: float,
     fuel_weight_kg: float,
@@ -162,8 +163,8 @@ def _predicted_range_from_fuel_m(
     lift_to_drag: float,
     propulsion_model: PropulsionModel,
     mission_breakdown: dict | None = None,
-) -> float | None:
-    """Predict total mission range using the closed segment fuel state."""
+) -> tuple[float | None, str]:
+    """Return a range value together with the evidence kind that produced it."""
 
     if isinstance(mission_breakdown, dict):
         segments = mission_breakdown.get("segments", [])
@@ -174,19 +175,22 @@ def _predicted_range_from_fuel_m(
                 if isinstance(segment, dict)
             )
             if segment_distance > 0.0:
-                return segment_distance
+                return segment_distance, "evaluated_mission_distance"
 
     reserve_multiplier = 1.0 + max(0.0, reserve_fraction)
     if mtow_kg <= 0.0 or cruise_speed_m_s <= 0.0 or lift_to_drag <= 0.0:
-        return None
+        return None, "unknown"
     mission_fraction = fuel_weight_kg / (mtow_kg * reserve_multiplier)
     if not 0.0 <= mission_fraction < 1.0:
-        return None
-    return cruise_range_from_fuel_fraction_m(
-        propulsion_model,
-        fuel_fraction=mission_fraction,
-        cruise_speed_m_s=cruise_speed_m_s,
-        lift_to_drag=lift_to_drag,
+        return None, "unknown"
+    return (
+        cruise_range_from_fuel_fraction_m(
+            propulsion_model,
+            fuel_fraction=mission_fraction,
+            cruise_speed_m_s=cruise_speed_m_s,
+            lift_to_drag=lift_to_drag,
+        ),
+        "independent_capability_prediction",
     )
 
 
@@ -206,8 +210,8 @@ def _evaluate_class1_constraints(
     tolerance: float,
     obstacle_height_m: float,
     mission_breakdown: dict | None = None,
-) -> tuple[dict[str, float | None], list[dict]]:
-    """Independently predict Class I performance and normalize its constraints."""
+) -> tuple[dict[str, float | str | None], list[dict]]:
+    """Evaluate Class I performance and normalize its evidence-backed constraints."""
 
     takeoff_prediction = takeoff_distance_over_obstacle_m(
         wing_loading_pa=wing_loading_pa,
@@ -229,7 +233,7 @@ def _evaluate_class1_constraints(
         runway_slope=requirements.runway_slope,
         headwind_m_s=requirements.headwind_m_s,
     )
-    range_prediction = _predicted_range_from_fuel_m(
+    range_value, range_metric_kind = _range_metric_from_closed_mission(
         mtow_kg=mtow_kg,
         fuel_weight_kg=fuel_weight_kg,
         reserve_fraction=requirements.reserve_fraction,
@@ -238,22 +242,51 @@ def _evaluate_class1_constraints(
         propulsion_model=propulsion_model,
         mission_breakdown=mission_breakdown,
     )
+    prescribed_mission_distance = range_metric_kind == "evaluated_mission_distance"
+    independent_range_prediction = range_metric_kind == "independent_capability_prediction"
 
     constraints = [
         normalized_constraint(
             constraint_id="class1.range",
-            label="Predicted mission range",
+            label=(
+                "Evaluated mission distance"
+                if prescribed_mission_distance
+                else (
+                    "Predicted mission range"
+                    if independent_range_prediction
+                    else "Range metric with undeclared evidence"
+                )
+            ),
             category="mission",
             direction="minimum",
             required=requirements.range_m,
-            actual=range_prediction,
+            actual=range_value,
             unit="m",
+            blocking=not prescribed_mission_distance,
             evidence={
-                "model": "Segment mission integration" if mission_breakdown else "Breguet range inversion",
-                "prediction": True,
+                "model": (
+                    "Prescribed segment mission distance accounting"
+                    if prescribed_mission_distance
+                    else (
+                        "Breguet range inversion"
+                        if independent_range_prediction
+                        else "No valid range evidence"
+                    )
+                ),
+                "prediction": independent_range_prediction,
+                "synthesis_target": prescribed_mission_distance,
                 "reserve_fraction": requirements.reserve_fraction,
             },
-            recommendation="Reduce range or payload, improve L/D, or reduce cruise SFC.",
+            recommendation=(
+                "Use the fuel-capacity and closure gates for this prescribed mission; "
+                "run an independent maximum-range analysis before claiming capability."
+                if prescribed_mission_distance
+                else (
+                    "Reduce range or payload, improve L/D, or reduce cruise SFC."
+                    if independent_range_prediction
+                    else "Restore complete finite range-model inputs before evaluating capability."
+                )
+            ),
             tolerance=max(1.0, requirements.range_m * 1e-9),
         ),
         normalized_constraint(
@@ -326,7 +359,8 @@ def _evaluate_class1_constraints(
         ),
     ]
     return {
-        "actual_range_m": range_prediction,
+        "actual_range_m": range_value,
+        "range_metric_kind": range_metric_kind,
         "takeoff_distance_m": takeoff_prediction if math.isfinite(takeoff_prediction) else None,
         "landing_distance_m": landing_prediction if math.isfinite(landing_prediction) else None,
     }, constraints
@@ -1052,6 +1086,7 @@ def sizing_loop(
                     landing_distance_m=performance["landing_distance_m"],
                     converged=True,
                     iterations=i + 1,
+                    range_metric_kind=str(performance["range_metric_kind"]),
                     design_point={
                         "thrust_to_weight": current_tw,
                         "wing_loading_pa": current_ws,
@@ -1113,6 +1148,7 @@ def sizing_loop(
             numerical_error_ratio=last_state["relative_error"],
             tolerance=tolerance,
             obstacle_height_m=obstacle_height_m,
+            mission_breakdown=last_state.get("mission_breakdown"),
         )
         return SizedAircraft(
             mtow_kg=last_state["mtow_kg"],
@@ -1127,6 +1163,7 @@ def sizing_loop(
             landing_distance_m=performance["landing_distance_m"],
             converged=False,
             iterations=len(history),
+            range_metric_kind=str(performance["range_metric_kind"]),
             iteration_history=history,
             design_point={"thrust_to_weight": current_tw, "wing_loading_pa": current_ws},
             drag_params={"cd0": guess.cd0, "k": polar.k, "oswald_e": guess.oswald_e},

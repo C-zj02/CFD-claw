@@ -48,6 +48,21 @@ RESULT_EXTENSIONS = {
     ".xlsx",
 }
 
+_UNSUPPORTED_SOFT_GOAL_PATHS = {
+    "max_flight_mach": "performance.max_flight_mach",
+    "launch_mode": "launch.mode",
+    "launch_field_altitude_m": "launch.field_altitude_m",
+    "booster_end_mach": "launch.booster_end_mach",
+    "booster_end_relative_altitude_m": "launch.booster_end_relative_altitude_m",
+    "recovery_mode": "recovery.mode",
+    "parachute_open_mach": "recovery.parachute_open_mach",
+    "parachute_open_relative_altitude_m": "recovery.parachute_open_relative_altitude_m",
+    "engine_count": "propulsion.engine_count",
+    "configuration_reference": "configuration.reference",
+    "stealth_requirement": "configuration.stealth_requirement",
+    "min_cruise_endurance_s": "performance.min_cruise_endurance_s",
+}
+
 
 def _as_dict(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
@@ -712,6 +727,11 @@ class AircraftDesignRunResult:
                 ),
                 "iterations": outputs.get("iterations"),
                 "actual_range_m": performance.get("actual_range_m") if isinstance(performance, dict) else None,
+                "range_metric_kind": (
+                    performance.get("range_metric_kind")
+                    if isinstance(performance, dict)
+                    else None
+                ),
                 "takeoff_distance_m": (
                     performance.get("takeoff_distance_m") if isinstance(performance, dict) else None
                 ),
@@ -1233,26 +1253,15 @@ class AircraftDesignRunner:
 
         min_endurance = _finite_number(declared.get("min_cruise_endurance_s"))
         if min_endurance is not None:
-            advanced = design_data.get("advanced_results")
-            mission = advanced.get("stage4_mission") if isinstance(advanced, dict) else None
-            segments = mission.get("segment_breakdown") if isinstance(mission, dict) else None
-            cruise_time = None
-            if isinstance(segments, list):
-                for segment in segments:
-                    if not isinstance(segment, dict) or segment.get("name") != "cruise":
-                        continue
-                    details = segment.get("details")
-                    cruise_time = _finite_number(details.get("time_s")) if isinstance(details, dict) else None
-                    break
             add_constraint(
                 "declared.min_cruise_endurance_s",
                 "Minimum cruise endurance",
                 "minimum",
                 min_endurance,
-                cruise_time,
+                None,
                 "s",
-                "Segment mission cruise duration",
-                "Increase mission cruise distance or reduce cruise speed; do not relabel total mission time as cruise endurance.",
+                "No independent maximum fuel-limited cruise-endurance model",
+                "Add an independent endurance capability analysis or retain this requirement as an explicit validation gap.",
             )
 
         unsupported_fields = sorted(
@@ -1346,6 +1355,11 @@ class AircraftDesignRunner:
         outputs = result.design_data.get("outputs")
         if isinstance(outputs, dict):
             outputs["auto_repair"] = payload
+        result.engineering = extract_engineering_result(
+            result.design_data,
+            output_dir=result.output_dir,
+            request=result.request,
+        )
         if result.output_dir is not None:
             (result.output_dir / "design_data.json").write_text(
                 json.dumps(result.design_data, ensure_ascii=False, indent=2),
@@ -1353,11 +1367,11 @@ class AircraftDesignRunner:
             )
             if repair_history:
                 self._append_repair_report(result.output_dir, payload)
-        result.engineering = extract_engineering_result(
-            result.design_data,
-            output_dir=result.output_dir,
-            request=result.request,
-        )
+            self._append_delivery_scope_report(
+                result.output_dir,
+                request=result.request,
+                engineering=result.engineering,
+            )
 
     @staticmethod
     def _append_repair_report(output_dir: Path, payload: dict[str, Any]) -> None:
@@ -1386,12 +1400,141 @@ class AircraftDesignRunner:
         lines.extend(
             [
                 "",
-                f"最终状态：`{'可行' if payload.get('succeeded_after_repair') else '未找到可行解'}`。",
+                "最终工程门状态："
+                f"`{'覆盖模型的工程门通过' if payload.get('succeeded_after_repair') else '未通过'}`。"
+                "整机范围结论见下方“需求范围与交付判定”。",
                 "",
             ]
         )
         appendix = "\n".join(lines)
-        for name in ("design_report_unified.md", "design_report_v2.md", "design_report.md"):
+        for name in (
+            "design_report_unified.md",
+            "design_report_v2.md",
+            "design_report.md",
+            "technical_roadmap_report.md",
+            "advanced_design_report.md",
+        ):
+            path = output_dir / name
+            if not path.is_file():
+                continue
+            content = path.read_text(encoding="utf-8")
+            if marker not in content:
+                path.write_text(content.rstrip() + "\n" + appendix, encoding="utf-8")
+
+    @staticmethod
+    def _append_delivery_scope_report(
+        output_dir: Path,
+        *,
+        request: AircraftDesignRequest,
+        engineering: AircraftDesignEngineeringResult,
+    ) -> None:
+        marker = "## 需求范围与交付判定"
+        provenance = request.provenance if isinstance(request.provenance, dict) else {}
+        requirement_intent = _as_dict(provenance.get("requirement_intent"))
+        metadata = _as_dict(requirement_intent.get("metadata"))
+        requirement_workflow = _as_dict(metadata.get("requirement_workflow"))
+
+        gaps: dict[str, dict[str, Any]] = {}
+        scope_deferrals = requirement_workflow.get("scope_deferrals")
+        if isinstance(scope_deferrals, list):
+            for deferral in scope_deferrals:
+                if not isinstance(deferral, dict):
+                    continue
+                default_scope = str(deferral.get("scope_statement") or "")
+                fields = deferral.get("fields")
+                if not isinstance(fields, list):
+                    continue
+                for field in fields:
+                    if not isinstance(field, dict):
+                        continue
+                    path = str(
+                        field.get("retained_field_path")
+                        or field.get("field_path")
+                        or ""
+                    ).strip()
+                    if not path:
+                        continue
+                    gaps[path] = {
+                        "value": field.get("value"),
+                        "reason": str(field.get("coverage_reason") or "Model not covered."),
+                        "scope": str(field.get("scope_statement") or default_scope),
+                    }
+
+        soft_goals = provenance.get("soft_goals")
+        if isinstance(soft_goals, dict):
+            for alias, value in soft_goals.items():
+                path = _UNSUPPORTED_SOFT_GOAL_PATHS.get(str(alias), str(alias))
+                if path not in _UNSUPPORTED_SOFT_GOAL_PATHS.values() or path in gaps:
+                    continue
+                gaps[path] = {
+                    "value": value,
+                    "reason": "Retained user goal has no registered applicable validation model.",
+                    "scope": "Retained as a specialty validation gap; excluded from the solved baseline.",
+                }
+
+        passed_gate = (
+            engineering.numerical_converged is True
+            and engineering.engineering_feasible is True
+            and engineering.blocking_failed_count == 0
+        )
+        if passed_gate and gaps:
+            conclusion = (
+                "覆盖范围内初步候选。当前实现模型的工程门通过，但下列专项要求未验证；"
+                "不得表述为整机无条件可行、可生产或可飞行。"
+            )
+        elif passed_gate:
+            conclusion = (
+                "当前实现模型范围内的初步工程门通过。该结论仍不代表详细设计、"
+                "生产就绪、适航认证或飞行安全。"
+            )
+        else:
+            conclusion = "当前结果未通过完整工程门，只能作为诊断与下一轮协商输入。"
+
+        def cell(value: Any) -> str:
+            if isinstance(value, (dict, list, tuple)):
+                rendered = json.dumps(value, ensure_ascii=False, sort_keys=True)
+            elif value is None:
+                rendered = "--"
+            else:
+                rendered = str(value)
+            return rendered.replace("|", "\\|").replace("\n", " ")
+
+        lines = [
+            "",
+            marker,
+            "",
+            conclusion,
+            "",
+            "| 工程判定 | 值 |",
+            "|---|---|",
+            f"| numerical_converged | `{engineering.numerical_converged}` |",
+            f"| engineering_feasible | `{engineering.engineering_feasible}` |",
+            f"| blocking_failed_count | `{engineering.blocking_failed_count}` |",
+        ]
+        if gaps:
+            lines.extend(
+                [
+                    "",
+                    "### 专项验证缺口",
+                    "",
+                    "| 字段 | 保留值 | 覆盖原因 | 范围说明 |",
+                    "|---|---|---|---|",
+                ]
+            )
+            for path, gap in sorted(gaps.items()):
+                lines.append(
+                    f"| `{cell(path)}` | {cell(gap['value'])} | "
+                    f"{cell(gap['reason'])} | {cell(gap['scope'])} |"
+                )
+
+        appendix = "\n".join(lines) + "\n"
+        for name in (
+            "design_report_unified.md",
+            "design_report_v2.md",
+            "design_report.md",
+            "technical_roadmap_report.md",
+            "advanced_design_report.md",
+        ):
             path = output_dir / name
             if not path.is_file():
                 continue

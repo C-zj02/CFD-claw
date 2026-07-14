@@ -20,6 +20,25 @@ from uuid import uuid4
 from src.agent import Session
 from src.config import get_provider_config, load_config
 from src.design_agents import AircraftDesignOrchestrator
+from src.design_intake.parser import (
+    looks_like_design_request,
+    looks_like_requirement_change,
+)
+from src.design_intake.preflight import diagnose_design_intent
+from src.design_intake.projection import intent_from_aircraft_request
+from src.design_intake.store import (
+    DesignRevisionStore,
+    IdempotencyConflictError,
+    RevisionConflictError,
+    RevisionNotFoundError,
+    SessionNotFoundError,
+    canonical_sha256,
+)
+from src.design_intake.workflow import (
+    DesignRequirementWorkflow,
+    WorkflowActionError,
+    WorkflowStateError,
+)
 from src.design_execution import (
     AircraftDesignJobManager,
     AircraftDesignRequest,
@@ -51,6 +70,8 @@ LEGACY_AIRCRAFT_DESIGN_SKILL_NAME = "aircraft-conceptual-design"
 AIRCRAFT_SKILL_DISPLAY_NAME = "飞行器总体设计"
 
 OUTPUT_PATH_RE = re.compile(r"(?:(?:\.{1,2}|~|/)[^\s`\"'<>，。；、)）\]]+)")
+REQUIREMENT_ACTION_ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,127}")
+REQUIREMENT_REVISION_HASH_RE = re.compile(r"[0-9a-f]{64}")
 
 
 BROWSER_CAPABILITY_PROFILES: dict[str, dict[str, str]] = {
@@ -130,6 +151,10 @@ class ClawdWebService:
         self._aircraft_orchestrator = AircraftDesignOrchestrator()
         self._aircraft_runner = AircraftDesignRunner(self.workspace_root)
         self._artifact_store = AircraftArtifactStore(self.workspace_root)
+        self._requirement_store = DesignRevisionStore(
+            self.workspace_root / ".clawd" / "generated" / "requirement_revisions"
+        )
+        self._requirement_workflow = DesignRequirementWorkflow(self._requirement_store)
         self._design_jobs = AircraftDesignJobManager(
             self._aircraft_runner,
             metadata_root=self.workspace_root / ".clawd" / "generated" / "design_jobs",
@@ -180,6 +205,20 @@ class ClawdWebService:
         request_payload = payload.get("request", payload)
         if not isinstance(request_payload, dict):
             raise ValueError("request must be an object")
+        provenance = request_payload.get("provenance")
+        if isinstance(provenance, dict) and "requirement_workflow" in provenance:
+            raise ValueError(
+                "requirement_workflow provenance is server-owned; submit a confirmed "
+                "revision through its submit_solver action"
+            )
+        preflight = self.preflight_design_job({"request": request_payload})
+        diagnosis = preflight.get("diagnosis")
+        if not isinstance(diagnosis, dict) or diagnosis.get("ready_for_solver") is not True:
+            status = diagnosis.get("status") if isinstance(diagnosis, dict) else "invalid"
+            raise ValueError(
+                "design request is not ready for the deterministic solver "
+                f"(preflight status: {status}); resolve it through the requirement workflow"
+            )
         request = AircraftDesignRequest.from_dict(request_payload)
         timeout = payload.get("timeout_seconds", 180.0) if "request" in payload else 180.0
         if isinstance(timeout, bool) or not isinstance(timeout, (int, float)):
@@ -292,26 +331,657 @@ class ClawdWebService:
         if assumptions:
             warnings.append(f"本次请求包含 {len(assumptions)} 个默认或推导字段，请在运行前确认。")
 
+        intent = intent_from_aircraft_request(request, field_sources=field_sources)
+        diagnosis = diagnose_design_intent(intent)
+        if diagnosis.status.value == "unsupported":
+            warnings.append("存在阻断型模型覆盖缺口；这表示当前模型未覆盖，不能据此判定物理不可行。")
+        elif diagnosis.status.value == "contradictory_requirements":
+            warnings.append("需求中存在相互矛盾的锁定字段，必须确认一个修改方案后才能求解。")
+        elif diagnosis.status.value == "needs_clarification":
+            warnings.append("存在高影响待确认字段，补充或确认后才能进入确定性求解。")
+        elif diagnosis.status.value == "repairable":
+            warnings.append("预检生成了有界修改建议；用户字段尚未改变，确认新需求版本后才能求解。")
+
+        intent_payload = intent.to_dict()
+        intent_payload["status"] = diagnosis.status.value
+
         return {
-            "ready": True,
+            "contract_version": 2,
+            "ready": diagnosis.ready_for_solver,
             "request": normalized,
             "field_sources": field_sources,
             "assumptions": assumptions,
             "warnings": warnings,
+            "intent": intent_payload,
+            "diagnosis": diagnosis.to_dict(),
+            "model_coverage": [item.to_dict() for item in diagnosis.coverage],
+            "workflow": {
+                "state": diagnosis.status.value,
+                "can_confirm": diagnosis.ready_for_solver,
+                "can_submit": diagnosis.ready_for_solver,
+                "requires_user_action": not diagnosis.ready_for_solver,
+            },
         }
+
+    def get_current_requirement_revision(self, session_id: str) -> dict[str, Any]:
+        """Return the current requirement revision as the browser interaction contract."""
+
+        state = self._require_session(session_id)
+        with state.lock:
+            snapshot = self._requirement_workflow.current(session_id)
+            return {
+                "session_id": session_id,
+                "interaction": (
+                    None if snapshot is None else self._requirement_interaction(snapshot)
+                ),
+            }
+
+    def apply_requirement_revision_action(
+        self,
+        session_id: str,
+        revision_id: str,
+        payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Apply one optimistic, idempotent requirement-workflow action."""
+
+        if not isinstance(payload, dict):
+            raise ValueError("requirement action payload must be an object")
+        state = self._require_session(session_id)
+        with state.lock:
+            action = self._requirement_action_name(payload.get("action"))
+            expected_hash = self._requirement_revision_hash(
+                payload.get("expected_revision_hash")
+            )
+            client_action_id = self._requirement_client_action_id(
+                payload.get("client_action_id")
+            )
+            target_revision = self._requirement_store.load_revision(session_id, revision_id)
+            if target_revision["revision_hash"] != expected_hash:
+                raise RevisionConflictError(
+                    f"revision '{revision_id}' does not match expected_revision_hash"
+                )
+            current = self._requirement_workflow.current(session_id)
+            if current is None:
+                raise SessionNotFoundError(
+                    f"design session '{session_id}' has no requirement revision"
+                )
+
+            decisions = payload.get("decisions")
+            if decisions is None:
+                decisions = {}
+            if not isinstance(decisions, dict):
+                raise WorkflowActionError("decisions must be an object")
+
+            job: dict[str, Any] | None = None
+            if action == "apply_change":
+                self._reject_unused_requirement_decisions(action, decisions)
+                self._check_requirement_action_fields(
+                    payload,
+                    {"proposal_id", "user_confirmed"},
+                )
+                proposal_id = payload.get("proposal_id")
+                if not isinstance(proposal_id, str) or not proposal_id.strip():
+                    raise WorkflowActionError("proposal_id must be a non-empty string")
+                snapshot = self._requirement_workflow.apply_change(
+                    session_id,
+                    proposal_id=proposal_id.strip(),
+                    expected_revision_hash=expected_hash,
+                    client_action_id=client_action_id,
+                    user_confirmed=payload.get("user_confirmed", False),
+                )
+            elif action == "answer_question":
+                unknown_decisions = sorted(set(decisions) - {"clarification_answers"})
+                if unknown_decisions:
+                    raise WorkflowActionError(
+                        "unsupported answer decisions: " + ", ".join(unknown_decisions)
+                    )
+                self._check_requirement_action_fields(
+                    payload,
+                    {"question_id", "answer", "field_path"},
+                )
+                answers = decisions.get("clarification_answers")
+                if answers is None and isinstance(payload.get("question_id"), str):
+                    answer: dict[str, Any] = {
+                        "question_id": payload["question_id"],
+                        "value": payload.get("answer"),
+                    }
+                    if payload.get("field_path"):
+                        answer["field_path"] = payload["field_path"]
+                    answers = [answer]
+                answers = self._normalize_browser_clarification_answers(answers)
+                snapshot = self._requirement_workflow.answer_questions(
+                    session_id,
+                    answers=answers,
+                    expected_revision_hash=expected_hash,
+                    client_action_id=client_action_id,
+                )
+            elif action == "defer_unsupported":
+                self._reject_unused_requirement_decisions(action, decisions)
+                self._check_requirement_action_fields(
+                    payload,
+                    {"field_paths", "scope_statement", "user_confirmed"},
+                )
+                snapshot = self._requirement_workflow.defer_unsupported(
+                    session_id,
+                    field_paths=payload.get("field_paths"),
+                    scope_statement=payload.get("scope_statement", ""),
+                    expected_revision_hash=expected_hash,
+                    client_action_id=client_action_id,
+                    user_confirmed=payload.get("user_confirmed", False),
+                )
+            elif action == "confirm_revision":
+                self._check_requirement_action_fields(payload, {"user_confirmed"})
+                snapshot = self._requirement_workflow.confirm_revision(
+                    session_id,
+                    expected_revision_hash=expected_hash,
+                    client_action_id=client_action_id,
+                    user_confirmed=payload.get("user_confirmed", False),
+                    decisions=decisions or None,
+                )
+            else:
+                self._reject_unused_requirement_decisions(action, decisions)
+                self._check_requirement_action_fields(payload, {"timeout_seconds"})
+                if revision_id != current["revision_id"] or expected_hash != current["revision_hash"]:
+                    raise RevisionConflictError(
+                        f"revision '{revision_id}' is not the current revision"
+                    )
+                snapshot = current
+                job = self._submit_confirmed_requirement_revision(
+                    session_id,
+                    snapshot,
+                    client_action_id=client_action_id,
+                    timeout_seconds=payload.get("timeout_seconds", 180.0),
+                )
+                refreshed = self._requirement_workflow.current(session_id)
+                if refreshed is None:  # pragma: no cover - revision was loaded above
+                    raise SessionNotFoundError(
+                        f"design session '{session_id}' has no requirement revision"
+                    )
+                snapshot = refreshed
+
+            interaction = self._requirement_interaction(snapshot)
+            event = self._persist_requirement_interaction(
+                state,
+                interaction,
+                client_action_id=client_action_id,
+                summary=self._requirement_action_summary(action, job=job),
+            )
+            return {
+                "session": self._serialize_session(state),
+                "interaction": interaction,
+                "event": event,
+                **({"job": job} if job is not None else {}),
+            }
+
+    @staticmethod
+    def _requirement_action_name(value: Any) -> str:
+        if not isinstance(value, str) or not value.strip():
+            raise WorkflowActionError("action must be a non-empty string")
+        aliases = {
+            "apply_change_proposal": "apply_change",
+            "answer_questions": "answer_question",
+        }
+        action = aliases.get(value.strip(), value.strip())
+        allowed = {
+            "apply_change",
+            "answer_question",
+            "defer_unsupported",
+            "confirm_revision",
+            "submit_solver",
+        }
+        if action not in allowed:
+            raise WorkflowActionError(f"unsupported requirement action: {action}")
+        return action
+
+    @staticmethod
+    def _requirement_revision_hash(value: Any) -> str:
+        if not isinstance(value, str) or not REQUIREMENT_REVISION_HASH_RE.fullmatch(value):
+            raise WorkflowActionError(
+                "expected_revision_hash must be a lowercase SHA-256 hex digest"
+            )
+        return value
+
+    @staticmethod
+    def _requirement_client_action_id(value: Any) -> str:
+        if not isinstance(value, str) or not REQUIREMENT_ACTION_ID_RE.fullmatch(value):
+            raise WorkflowActionError(
+                "client_action_id must contain 1-128 ASCII letters, numbers, '_' or '-'"
+            )
+        return value
+
+    @staticmethod
+    def _check_requirement_action_fields(
+        payload: dict[str, Any],
+        action_fields: set[str],
+    ) -> None:
+        common = {
+            "action",
+            "expected_revision_hash",
+            "client_action_id",
+            "decisions",
+        }
+        unknown = sorted(set(payload) - common - action_fields)
+        if unknown:
+            raise WorkflowActionError(
+                "unsupported requirement action fields: " + ", ".join(unknown)
+            )
+
+    @staticmethod
+    def _normalize_browser_clarification_answers(value: Any) -> list[dict[str, Any]]:
+        if not isinstance(value, list) or not value:
+            raise WorkflowActionError(
+                "decisions.clarification_answers must contain between one and three items"
+            )
+        normalized: list[dict[str, Any]] = []
+        for item in value:
+            if not isinstance(item, dict):
+                raise WorkflowActionError("each clarification answer must be an object")
+            answer = dict(item)
+            if answer.get("field_path") == "":
+                answer.pop("field_path")
+            normalized.append(answer)
+        return normalized
+
+    @staticmethod
+    def _reject_unused_requirement_decisions(
+        action: str,
+        decisions: dict[str, Any],
+    ) -> None:
+        if decisions:
+            raise WorkflowActionError(
+                f"decisions are not accepted by {action}; submit clarification answers "
+                "with answer_question first"
+            )
+
+    def _submit_confirmed_requirement_revision(
+        self,
+        session_id: str,
+        snapshot: dict[str, Any],
+        *,
+        client_action_id: str,
+        timeout_seconds: Any,
+    ) -> dict[str, Any]:
+        if isinstance(timeout_seconds, bool) or not isinstance(timeout_seconds, (int, float)):
+            raise WorkflowActionError("timeout_seconds must be a number")
+        timeout = float(timeout_seconds)
+        if timeout <= 0 or timeout > 3_600:
+            raise WorkflowActionError("timeout_seconds must be between 0 and 3600")
+
+        # Projection is deliberately performed before any idempotent job lookup.
+        # This keeps confirmation/current-revision checks authoritative even if a
+        # persisted job happens to carry matching provenance.
+        projected = self._requirement_workflow.project_solver_request(
+            session_id,
+            expected_revision_hash=snapshot["revision_hash"],
+        )
+
+        workflow_state = self._requirement_store.load_workflow(session_id)
+        prior_submission = self._requirement_store.load_solver_submission(
+            session_id,
+            client_action_id=client_action_id,
+        )
+        if prior_submission is not None:
+            if (
+                prior_submission.get("revision_id") == snapshot["revision_id"]
+                and prior_submission.get("revision_hash") == snapshot["revision_hash"]
+            ):
+                return self._job_for_requirement_submission(prior_submission)
+            raise IdempotencyConflictError(
+                f"client_action_id '{client_action_id}' was already used for another request"
+            )
+        prior_requirement_action = (
+            workflow_state.get("client_actions", {}).get(client_action_id)
+            if isinstance(workflow_state, dict)
+            else None
+        )
+        if prior_requirement_action is not None:
+            raise IdempotencyConflictError(
+                f"client_action_id '{client_action_id}' was already used for another request"
+            )
+
+        existing = self._find_requirement_revision_job(
+            session_id,
+            snapshot["revision_id"],
+            snapshot["revision_hash"],
+        )
+        if existing is not None:
+            return existing
+        request_payload = projected.to_dict()
+        provenance = dict(request_payload.get("provenance") or {})
+        confirmation = snapshot.get("confirmation")
+        provenance["requirement_workflow"] = {
+            "contract_version": 1,
+            "session_id": session_id,
+            "revision_id": snapshot["revision_id"],
+            "revision_hash": snapshot["revision_hash"],
+            "revision_number": snapshot["revision_number"],
+            "client_action_id": client_action_id,
+            "confirmed_at": (
+                confirmation.get("confirmed_at")
+                if isinstance(confirmation, dict)
+                else None
+            ),
+        }
+        request_payload.update(
+            {
+                "auto_repair_enabled": True,
+                "max_repair_attempts": 3,
+                "provenance": provenance,
+            }
+        )
+        request = AircraftDesignRequest.from_dict(request_payload)
+        job = self._design_jobs.submit(request, timeout_seconds=timeout)
+        job_id = job.get("job_id") if isinstance(job, dict) else None
+        persisted_request = job.get("request") if isinstance(job, dict) else None
+        if not isinstance(job_id, str) or not job_id:
+            raise WorkflowStateError("the job manager returned no solver job identifier")
+        if not isinstance(persisted_request, dict):
+            raise WorkflowStateError("the job manager returned no persisted solver request")
+        expected_request_hash = canonical_sha256(request.to_dict())
+        actual_request_hash = canonical_sha256(persisted_request)
+        if actual_request_hash != expected_request_hash:
+            raise WorkflowStateError(
+                "the job manager persisted a request that differs from the confirmed projection"
+            )
+        self._requirement_store.record_solver_submission(
+            session_id,
+            job_id=job_id,
+            revision_id=snapshot["revision_id"],
+            expected_revision_hash=snapshot["revision_hash"],
+            request_hash=actual_request_hash,
+            client_action_id=client_action_id,
+            actor="system",
+        )
+        return job
+
+    def _find_requirement_revision_job(
+        self,
+        session_id: str,
+        revision_id: str,
+        revision_hash: str,
+    ) -> dict[str, Any] | None:
+        submission = self._requirement_store.load_solver_submission(
+            session_id,
+            revision_id=revision_id,
+            revision_hash=revision_hash,
+        )
+        if submission is None:
+            return None
+        return self._job_for_requirement_submission(submission)
+
+    def _job_for_requirement_submission(
+        self,
+        submission: dict[str, Any],
+    ) -> dict[str, Any]:
+        job_id = submission["job_id"]
+        try:
+            job = self._design_jobs.get(job_id)
+        except KeyError as exc:
+            raise WorkflowStateError(
+                f"solver job '{job_id}' was already submitted but is no longer available"
+            ) from exc
+        request = job.get("request") if isinstance(job, dict) else None
+        if not isinstance(request, dict) or canonical_sha256(request) != submission["request_hash"]:
+            raise WorkflowStateError(
+                f"solver job '{job_id}' no longer matches its server-owned submission audit"
+            )
+        return self.get_design_job(job_id)["job"]
+
+    def _requirement_interaction(self, snapshot: dict[str, Any]) -> dict[str, Any]:
+        diagnosis = snapshot["diagnosis"]
+        allowed = set(snapshot.get("allowed_actions") or [])
+        actions: list[dict[str, Any]] = []
+        has_questions = bool(diagnosis.get("clarification_questions"))
+        if has_questions and (
+            "answer_questions" in allowed or "apply_change" in allowed
+        ):
+            # A contradictory diagnosis may expose both a prerequisite question
+            # and repair proposals.  The browser submits every visible answer with
+            # its button, so resolve the questions first and present proposals on
+            # the next immutable revision.
+            actions.append(
+                {
+                    "action": "answer_question",
+                    "label": "提交确认信息",
+                    "enabled": True,
+                    "primary": True,
+                    "payload": {},
+                }
+            )
+        elif "apply_change" in allowed:
+            actions.append(
+                {
+                    "action": "apply_change",
+                    "label": "采用选中的修改建议",
+                    "enabled": bool(diagnosis.get("change_proposals")),
+                    "primary": True,
+                    "payload": {"user_confirmed": True},
+                    "reason": (
+                        None
+                        if diagnosis.get("change_proposals")
+                        else "当前版本没有可应用的修改建议"
+                    ),
+                }
+            )
+        elif "answer_questions" in allowed:
+            actions.append(
+                {
+                    "action": "answer_question",
+                    "label": "提交确认信息",
+                    "enabled": bool(diagnosis.get("clarification_questions")),
+                    "primary": True,
+                    "payload": {},
+                }
+            )
+        if "defer_unsupported" in allowed:
+            unsupported_paths = [
+                item.get("field_path")
+                for item in diagnosis.get("coverage", [])
+                if item.get("status") == "unsupported" and item.get("blocking") is True
+            ]
+            actions.append(
+                {
+                    "action": "defer_unsupported",
+                    "label": "保留专项需求，先求解已覆盖范围",
+                    "enabled": bool(unsupported_paths),
+                    "primary": True,
+                    "payload": {
+                        "field_paths": unsupported_paths,
+                        "scope_statement": (
+                            "保留当前模型未覆盖的专项要求作为后续验证缺口，"
+                            "本轮只求解已覆盖的 Class I/II 范围。"
+                        ),
+                        "user_confirmed": True,
+                    },
+                }
+            )
+        if "confirm_revision" in allowed:
+            actions.append(
+                {
+                    "action": "confirm_revision",
+                    "label": "确认需求版本",
+                    "enabled": True,
+                    "primary": True,
+                    "payload": {"user_confirmed": True},
+                }
+            )
+        if "submit_solver" in allowed:
+            actions.append(
+                {
+                    "action": "submit_solver",
+                    "label": "开始总体设计求解",
+                    "enabled": bool(snapshot.get("can_submit")),
+                    "primary": True,
+                    "payload": {"timeout_seconds": 180.0},
+                }
+            )
+        return {
+            "contract_version": 1,
+            "type": "aircraft_requirement_review",
+            "session_id": snapshot["session_id"],
+            "revision": {
+                "revision_id": snapshot["revision_id"],
+                "revision_number": snapshot["revision_number"],
+                "revision_hash": snapshot["revision_hash"],
+                "status": diagnosis.get("status"),
+                "confirmed": bool(snapshot.get("confirmed")),
+                "submitted": bool(snapshot.get("submitted")),
+                "defaults_materialized": bool(snapshot.get("defaults_materialized")),
+                "can_submit": bool(snapshot.get("can_submit")),
+            },
+            "intent": snapshot["intent"],
+            "diagnosis": diagnosis,
+            "actions": actions,
+        }
+
+    def _persist_requirement_interaction(
+        self,
+        state: WebSessionState,
+        interaction: dict[str, Any],
+        *,
+        client_action_id: str,
+        summary: str,
+        on_tool_event: Any | None = None,
+    ) -> dict[str, Any]:
+        event = {
+            "kind": "requirement_interaction",
+            "tool_name": WEB_AIRCRAFT_SKILL_NAME,
+            "summary": summary,
+            "preview": {
+                "interaction": interaction,
+                "client_action_id": client_action_id,
+            },
+            "error": None,
+            "is_error": False,
+        }
+        already_persisted = any(
+            existing.get("kind") == "requirement_interaction"
+            and isinstance(existing.get("preview"), dict)
+            and existing["preview"].get("client_action_id") == client_action_id
+            for message in state.session.conversation.messages
+            for existing in (getattr(message, "events", None) or [])
+            if isinstance(existing, dict)
+        )
+        if not already_persisted:
+            state.session.conversation.add_assistant_message("")
+            state.session.conversation.messages[-1].events = [event]
+            state.session.save()
+            self._save_session_preferences(state)
+        if on_tool_event is not None:
+            try:
+                on_tool_event(event)
+            except Exception:
+                pass
+        return event
+
+    @staticmethod
+    def _requirement_action_summary(
+        action: str,
+        *,
+        job: dict[str, Any] | None = None,
+    ) -> str:
+        if action == "submit_solver":
+            return (
+                "已从确认需求版本启动总体设计任务"
+                if job is not None
+                else "需求版本已确认，可进入总体设计求解"
+            )
+        return {
+            "apply_change": "已按用户确认生成新的需求版本",
+            "answer_question": "已记录澄清信息并重新诊断需求",
+            "defer_unsupported": "已保留专项验证缺口并生成新的求解范围",
+            "confirm_revision": "已确认当前需求版本",
+        }[action]
 
     def list_design_jobs(self) -> dict[str, Any]:
         return {"jobs": self._design_jobs.list()}
 
     def get_design_job(self, job_id: str) -> dict[str, Any]:
         job = self._design_jobs.get(job_id)
+        interaction = self._sync_requirement_solver_outcome(job)
         artifact = self._ensure_design_job_artifact(job)
         if artifact is not None:
             job["artifacts"] = [artifact]
         else:
             job["artifacts"] = []
         job["result_files"] = self._design_job_files(job)
+        if interaction is not None:
+            job["requirement_interaction"] = interaction
         return {"job": job}
+
+    def _sync_requirement_solver_outcome(
+        self,
+        job: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        """Feed a trusted failed terminal job back into requirement negotiation."""
+
+        if job.get("terminal") is not True:
+            return None
+        result = job.get("result")
+        if not isinstance(result, dict) or result.get("status") not in {
+            "engineering_infeasible",
+            "nonconverged",
+        }:
+            return None
+        job_id = job.get("job_id")
+        request = job.get("request")
+        provenance = request.get("provenance") if isinstance(request, dict) else None
+        workflow_hint = (
+            provenance.get("requirement_workflow")
+            if isinstance(provenance, dict)
+            else None
+        )
+        session_id = (
+            workflow_hint.get("session_id")
+            if isinstance(workflow_hint, dict)
+            else None
+        )
+        if (
+            not isinstance(job_id, str)
+            or not REQUIREMENT_ACTION_ID_RE.fullmatch(job_id)
+            or not isinstance(session_id, str)
+            or not REQUIREMENT_ACTION_ID_RE.fullmatch(session_id)
+            or not isinstance(request, dict)
+        ):
+            return None
+
+        trusted = self._requirement_workflow_for_session(job, session_id)
+        if trusted is None:
+            return None
+        try:
+            state = self._require_session(session_id)
+        except KeyError:
+            return None
+        with state.lock:
+            before = self._requirement_workflow.current(session_id)
+            if before is None:
+                return None
+            try:
+                after = self._requirement_workflow.ingest_solver_outcome(
+                    session_id,
+                    revision_id=trusted["revision_id"],
+                    expected_revision_hash=trusted["revision_hash"],
+                    job_id=job_id,
+                    request_hash=canonical_sha256(request),
+                    result=result,
+                )
+            except RevisionConflictError:
+                # A user-created child revision supersedes a late job result.
+                return None
+            interaction = self._requirement_interaction(after)
+            if after["revision_id"] == before["revision_id"]:
+                return interaction
+            action_id = (
+                "system-outcome-"
+                + canonical_sha256({"job_id": job_id, "result": result})[:32]
+            )
+            self._persist_requirement_interaction(
+                state,
+                interaction,
+                client_action_id=action_id,
+                summary="总体设计求解未通过，已生成待确认的诊断版本",
+            )
+            return interaction
 
     def list_design_job_files(self, job_id: str) -> dict[str, Any]:
         """Return safe preview metadata for one deterministic design run."""
@@ -364,12 +1034,21 @@ class ClawdWebService:
                 self._design_job_artifacts[job_id] = artifact
         return artifact
 
-    def _design_job_files(self, job: dict[str, Any]) -> list[dict[str, Any]]:
+    def _design_job_files(
+        self,
+        job: dict[str, Any],
+        *,
+        url_base: str | None = None,
+    ) -> list[dict[str, Any]]:
         job_id = str(job.get("job_id") or "")
         output_dir = self._design_job_output_dir(job)
         if not job_id or output_dir is None:
             return []
-        return self._artifact_store.list_result_files(job_id, output_dir)
+        return self._artifact_store.list_result_files(
+            job_id,
+            output_dir,
+            url_base=url_base,
+        )
 
     def _design_job_output_dir(self, job: dict[str, Any]) -> Path | None:
         result = job.get("result")
@@ -399,14 +1078,14 @@ class ClawdWebService:
         with state.lock:
             entries = self._session_design_result_entries(state)
         for result, source_dir in entries:
-            if result.get("job_id") == result_id:
+            if result.get("job_id") == result_id and source_dir is not None:
                 return self._artifact_store.resolve_result_file(source_dir, relative_path)
         raise KeyError(f"Unknown session design result: {result_id}")
 
     def _session_design_result_entries(
         self,
         state: WebSessionState,
-    ) -> list[tuple[dict[str, Any], Path]]:
+    ) -> list[tuple[dict[str, Any], Path | None]]:
         session_id = state.session.session_id
         session_root = self._aircraft_session_output_root(session_id).resolve()
         result_sources: dict[Path, dict[str, Any]] = {}
@@ -431,7 +1110,7 @@ class ClawdWebService:
                     continue
                 result_sources[result_dir] = artifact
 
-        entries: list[tuple[dict[str, Any], Path]] = []
+        entries: list[tuple[dict[str, Any], Path | None]] = []
         for result_dir, artifact in result_sources.items():
             data_path = result_dir / "design_data.json"
             try:
@@ -458,14 +1137,151 @@ class ClawdWebService:
                 )
             )
 
+        deterministic_entries = self._session_design_job_entries(state)
+        deterministic_dirs = {
+            source_dir
+            for _, source_dir in deterministic_entries
+            if source_dir is not None
+        }
+        if deterministic_dirs:
+            entries = [
+                item
+                for item in entries
+                if item[1] not in deterministic_dirs
+            ]
+        entries.extend(deterministic_entries)
+
         entries.sort(
             key=lambda item: (
                 str(item[0].get("finished_at") or ""),
-                item[1].stat().st_mtime_ns,
+                (
+                    item[1].stat().st_mtime_ns
+                    if item[1] is not None and item[1].exists()
+                    else 0
+                ),
             ),
             reverse=True,
         )
         return entries
+
+    def _session_design_job_entries(
+        self,
+        state: WebSessionState,
+    ) -> list[tuple[dict[str, Any], Path | None]]:
+        """Project terminal requirement-workflow jobs into one conversation."""
+        entries: list[tuple[dict[str, Any], Path | None]] = []
+        for summary in self._design_jobs.list():
+            job_id = summary.get("job_id") if isinstance(summary, dict) else None
+            if not isinstance(job_id, str) or not job_id:
+                continue
+            try:
+                job = self._design_jobs.get(job_id)
+            except KeyError:
+                # A history-prune operation can race with session serialization.
+                continue
+            workflow = self._requirement_workflow_for_session(
+                job,
+                state.session.session_id,
+            )
+            if workflow is None:
+                continue
+            # Filter ownership before outcome synchronization. Session payload
+            # serialization already holds this session's RLock; acquiring a
+            # foreign session lock here would invert lock order across requests.
+            self._sync_requirement_solver_outcome(job)
+            if job.get("terminal") is not True:
+                continue
+            serialized, source_dir = self._serialize_session_design_job(
+                state,
+                job=job,
+                workflow=workflow,
+            )
+            entries.append((serialized, source_dir))
+        return entries
+
+    def _requirement_workflow_for_session(
+        self,
+        job: dict[str, Any],
+        session_id: str,
+    ) -> dict[str, str] | None:
+        job_id = job.get("job_id")
+        request = job.get("request")
+        if (
+            not isinstance(job_id, str)
+            or not REQUIREMENT_ACTION_ID_RE.fullmatch(job_id)
+            or not isinstance(request, dict)
+        ):
+            return None
+        submission = self._requirement_store.load_solver_submission(
+            session_id,
+            job_id=job_id,
+        )
+        if submission is None:
+            return None
+        if canonical_sha256(request) != submission["request_hash"]:
+            return None
+        return {
+            "session_id": submission["session_id"],
+            "revision_id": submission["revision_id"],
+            "revision_hash": submission["revision_hash"],
+        }
+
+    def _serialize_session_design_job(
+        self,
+        state: WebSessionState,
+        *,
+        job: dict[str, Any],
+        workflow: dict[str, str],
+    ) -> tuple[dict[str, Any], Path | None]:
+        """Reuse a deterministic job payload with session-scoped result URLs."""
+        serialized = dict(job)
+        job_id = str(serialized.get("job_id") or "")
+        output_dir = self._design_job_output_dir(serialized)
+        encoded_session = quote(state.session.session_id, safe="")
+        encoded_result = quote(job_id, safe="")
+        url_base = f"/api/sessions/{encoded_session}/design-results/{encoded_result}"
+        result_files = self._design_job_files(serialized, url_base=url_base)
+
+        artifact = self._ensure_design_job_artifact(serialized)
+        serialized["artifacts"] = [artifact] if artifact is not None else []
+        serialized["result_files"] = result_files
+        serialized["source"] = "conversation"
+        serialized["execution_source"] = "deterministic_job"
+        serialized["session_id"] = state.session.session_id
+        serialized["requirement_workflow"] = dict(workflow)
+
+        result = serialized.get("result")
+        if isinstance(result, dict):
+            serialized["result"] = dict(result)
+        else:
+            status = str(serialized.get("status") or "failed")
+            error = serialized.get("error")
+            message = str(error or serialized.get("message") or "设计任务未生成结果")
+            serialized["result"] = {
+                "run_id": job_id,
+                "status": status,
+                "output_dir": None,
+                "duration_seconds": 0.0,
+                "converged": None,
+                "engineering": {
+                    "numerical_converged": None,
+                    "engineering_feasible": None,
+                    "overall_status": status,
+                    "blocking_failed_count": 0,
+                    "constraints": [],
+                    "stage_status": {},
+                },
+                "summary": {},
+                "artifacts": [],
+                "issues": [
+                    {
+                        "code": f"job_{status}",
+                        "message": message,
+                        "severity": "error",
+                    }
+                ],
+            }
+        return serialized, output_dir
 
     def _session_design_artifact_sources(
         self,
@@ -610,6 +1426,7 @@ class ClawdWebService:
             "fuselage_length_m": geometry.get("fuselage_length_m"),
             "iterations": outputs.get("iterations"),
             "actual_range_m": performance.get("actual_range_m"),
+            "range_metric_kind": performance.get("range_metric_kind"),
             "takeoff_distance_m": performance.get("takeoff_distance_m"),
             "landing_distance_m": performance.get("landing_distance_m"),
             "artifact_count": artifact.get("file_count", len(result_files)),
@@ -720,10 +1537,23 @@ class ClawdWebService:
             if not locked:
                 raise ValueError("会话正在运行，请先停止后再删除。")
             try:
+                current_requirement = self._requirement_workflow.current(session_id)
+                if current_requirement is not None:
+                    self._requirement_store.delete(
+                        session_id,
+                        expected_revision_hash=current_requirement["revision_hash"],
+                    )
                 with self._lock:
                     self._sessions.pop(session_id, None)
             finally:
                 state.lock.release()
+        else:
+            current_requirement = self._requirement_workflow.current(session_id)
+            if current_requirement is not None:
+                self._requirement_store.delete(
+                    session_id,
+                    expected_revision_hash=current_requirement["revision_hash"],
+                )
 
         self._session_store.delete(session_id)
 
@@ -789,6 +1619,14 @@ class ClawdWebService:
             state.tool_context.outbox.clear()
             state.tool_context.ask_user = None
             state.tool_context.permission_handler = self._build_permission_handler(state, events)
+            requirement_result = self._maybe_handle_requirement_turn(
+                state,
+                cleaned,
+                events,
+                on_tool_event=on_tool_event,
+            )
+            if requirement_result is not None:
+                return requirement_result
             turn_started_at = time.time()
             result_snapshot = self._snapshot_aircraft_result_dirs(state.session.session_id)
             active_skill = self._load_active_skill_context(cleaned, state, events, on_tool_event)
@@ -858,6 +1696,73 @@ class ClawdWebService:
                 },
                 "session": self._serialize_session(state),
             }
+
+    def _maybe_handle_requirement_turn(
+        self,
+        state: WebSessionState,
+        message: str,
+        events: list[dict[str, Any]],
+        *,
+        on_tool_event: Any | None = None,
+    ) -> dict[str, Any] | None:
+        """Keep design creation, edits, and solver commands behind revision review."""
+
+        current = self._requirement_workflow.current(state.session.session_id)
+        pending = current is not None and not current.get("submitted")
+        workflow_active = state.auto_skill == WEB_AIRCRAFT_SKILL_NAME
+        if not workflow_active and not pending:
+            return None
+        client_action_id: str
+        summary: str
+        if looks_like_design_request(message):
+            client_action_id = f"web-start-{uuid4().hex}"
+            snapshot = self._requirement_workflow.start(
+                state.session.session_id,
+                message,
+                client_action_id=client_action_id,
+            )
+            summary = "已完成需求解析和求解前诊断，等待用户确认"
+        elif (
+            current is not None
+            and (workflow_active or pending)
+            and looks_like_requirement_change(message)
+        ):
+            client_action_id = f"web-change-{uuid4().hex}"
+            snapshot = self._requirement_workflow.propose_text_changes(
+                state.session.session_id,
+                message,
+                expected_revision_hash=current["revision_hash"],
+                client_action_id=client_action_id,
+            )
+            summary = "已将对话中的参数修改整理为待确认差异"
+        elif pending:
+            client_action_id = f"web-pending-{uuid4().hex}"
+            snapshot = current
+            summary = "当前需求版本仍需完成卡片中的确认操作"
+        else:
+            return None
+
+        interaction = self._requirement_interaction(snapshot)
+        state.session.conversation.add_user_message(message)
+        event = self._persist_requirement_interaction(
+            state,
+            interaction,
+            client_action_id=client_action_id,
+            summary=summary,
+            on_tool_event=on_tool_event,
+        )
+        events.append(event)
+        return {
+            "reply": {
+                "text": "",
+                "usage": {"input_tokens": 0, "output_tokens": 0},
+                "num_turns": 0,
+                "events": events,
+                "artifacts": [],
+                "outbox": [],
+            },
+            "session": self._serialize_session(state),
+        }
 
     def search_rag(
         self,
@@ -1164,6 +2069,22 @@ class ClawdWebService:
         if active_skill is None:
             return state.tool_registry
         allowed = active_skill.get("allowed_tools")
+        if active_skill.get("name") == WEB_AIRCRAFT_SKILL_NAME:
+            allowed_names = {
+                str(name).lower()
+                for name in allowed
+                if isinstance(name, str)
+            } if isinstance(allowed, list) else set()
+            read_only = [
+                spec.name
+                for spec in state.tool_registry.list_specs()
+                if spec.is_read_only and spec.name.lower() in allowed_names
+            ]
+            return (
+                state.tool_registry.filtered(read_only)
+                if read_only
+                else ToolRegistry()
+            )
         if not isinstance(allowed, list) or not allowed:
             return state.tool_registry
         # Write is required to construct sizing_input.json before the upstream run.
@@ -1594,7 +2515,7 @@ class ClawdWebService:
                         f"- Use this upstream source root as PYTHONPATH: {source_root}\n"
                         f"- Pass this exact base output directory to --output-dir: {output_root}\n"
                         "- Use module aircraft_design.class2_preliminary.run_sizing and include --no-viz.\n"
-                        "- If an 80 m landing constraint produces zero feasible wing loading, retry once with a clearly disclosed 300 m preliminary-design assumption.\n"
+                        "- If a declared field-length constraint has no feasible design point, preserve the failed requirement and propose a revised value for explicit user confirmation; never rerun with a silently relaxed distance.\n"
                         "- Never edit files under the upstream source root during a design request. If the solver fails, report the failure and preserve the log for diagnosis.\n"
                         "- Do not claim success unless the new run directory contains design_data.json and design_report.md.\n"
                         "- In the final answer, state the new run directory and summarize the generated files.\n\n"
@@ -1666,7 +2587,9 @@ class ClawdWebService:
             text = "".join(text_parts).strip()
             if message.role == "user" and "User request:\n" in text:
                 text = text.rsplit("User request:\n", 1)[-1].strip()
-            if not text and not blocks:
+            message_events = list(getattr(message, "events", []) or [])
+            message_artifacts = list(getattr(message, "artifacts", []) or [])
+            if not text and not blocks and not message_events and not message_artifacts:
                 continue
 
             serialized.append(
@@ -1674,8 +2597,8 @@ class ClawdWebService:
                     "role": message.role,
                     "text": text,
                     "blocks": blocks,
-                    "events": list(getattr(message, "events", []) or []),
-                    "artifacts": list(getattr(message, "artifacts", []) or []),
+                    "events": message_events,
+                    "artifacts": message_artifacts,
                     "timestamp": message.timestamp,
                 }
             )
@@ -1915,6 +2838,30 @@ class ClawdWebRequestHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/api/sessions":
             self._send_json(HTTPStatus.OK, self.server.service.list_sessions_payload())
+            return
+        if (
+            parsed.path.startswith("/api/sessions/")
+            and parsed.path.endswith("/requirement-revisions/current")
+        ):
+            session_id = (
+                parsed.path.removeprefix("/api/sessions/")
+                .removesuffix("/requirement-revisions/current")
+                .rstrip("/")
+            )
+            if not session_id or "/" in session_id:
+                self._send_error_json(HTTPStatus.NOT_FOUND, "未知会话")
+                return
+            try:
+                payload = self.server.service.get_current_requirement_revision(
+                    unquote(session_id)
+                )
+            except KeyError as exc:
+                self._send_error_json(HTTPStatus.NOT_FOUND, str(exc))
+                return
+            except ValueError as exc:
+                self._send_error_json(HTTPStatus.BAD_REQUEST, str(exc))
+                return
+            self._send_json(HTTPStatus.OK, payload)
             return
         if parsed.path.startswith("/api/sessions/") and "/design-results/" in parsed.path and "/files/" in parsed.path:
             session_and_result = parsed.path.removeprefix("/api/sessions/")
@@ -2200,6 +3147,51 @@ class ClawdWebRequestHandler(BaseHTTPRequestHandler):
                 self._send_error_json(HTTPStatus.CONFLICT, str(exc))
                 return
             self._send_json(HTTPStatus.ACCEPTED, result)
+            return
+
+        if (
+            parsed.path.startswith("/api/sessions/")
+            and "/requirement-revisions/" in parsed.path
+            and parsed.path.endswith("/actions")
+        ):
+            session_and_revision = parsed.path.removeprefix("/api/sessions/")
+            session_id, marker, revision_and_action = session_and_revision.partition(
+                "/requirement-revisions/"
+            )
+            revision_id = revision_and_action.removesuffix("/actions").rstrip("/")
+            if (
+                not marker
+                or not session_id
+                or "/" in session_id
+                or not revision_id
+                or "/" in revision_id
+            ):
+                self._send_error_json(HTTPStatus.NOT_FOUND, "未知需求版本操作")
+                return
+            try:
+                result = self.server.service.apply_requirement_revision_action(
+                    unquote(session_id),
+                    unquote(revision_id),
+                    payload,
+                )
+            except DesignJobQueueFullError as exc:
+                self._send_error_json(HTTPStatus.TOO_MANY_REQUESTS, str(exc))
+                return
+            except (
+                RevisionConflictError,
+                IdempotencyConflictError,
+                WorkflowStateError,
+                PermissionError,
+            ) as exc:
+                self._send_error_json(HTTPStatus.CONFLICT, str(exc))
+                return
+            except (SessionNotFoundError, RevisionNotFoundError, KeyError) as exc:
+                self._send_error_json(HTTPStatus.NOT_FOUND, str(exc))
+                return
+            except (WorkflowActionError, ValueError) as exc:
+                self._send_error_json(HTTPStatus.BAD_REQUEST, str(exc))
+                return
+            self._send_json(HTTPStatus.OK, result)
             return
 
         if parsed.path.startswith("/api/sessions/") and parsed.path.endswith("/messages/stream"):

@@ -1,145 +1,51 @@
 ---
 name: aircraft-design-skill
-description: 接入 BaiSongt/aircraft-design-skill 的可交付固定翼总体设计工具包。用于 Class I/II 重量、分段任务燃油、结构与几何闭合，有界自动修正与完整复验、阻断约束验收、气动/推进/操稳分析、外形参数化和设计报告生成。
+description: 面向固定翼飞行器总体设计的 feasibility-first 交互技能. 用于自然语言需求抽取, Class I/II 重量与任务闭合, 约束诊断, 模型覆盖检查, 用户确认后的有界修正, 完整复验, 参数化几何, 报告和可视化. 当用户要求设计飞机或无人机, 判断参数是否可行, 协商修改矛盾指标, 比较候选方案, 或解释总体设计结果时使用.
 allowed-tools:
   - Bash
   - Read
   - Glob
 ---
 
-# Aircraft Design Skill 项目入口
+# Aircraft Design Skill
 
-本技能是当前项目对 GitHub 仓库 `BaiSongt/aircraft-design-skill` 的集成入口。上游代码已同步到：
+本技能以项目 `src/design_intake` 的版本化需求契约为入口, 以 `src/design_execution` 和 `external/aircraft-design-skill` 的确定性求解器为计算后端. 不允许跳过预检直接用求解器结果回答可行性问题.
 
-```text
-${CLAUDE_PROJECT_DIR}/external/aircraft-design-skill
-```
+## 强制流程
 
-上游 Trae 风格子技能位于：
+对设计请求严格执行以下顺序:
 
-```text
-${CLAUDE_PROJECT_DIR}/external/aircraft-design-skill/.trae/skills
-```
+1. 将自然语言抽取为 `DesignIntent`, 统一 SI 单位, 保留原文和字段来源.
+2. 将字段分类为 `hard_constraint`, `soft_goal`, `design_variable` 或 `technology_assumption`, 并标记 `locked`.
+3. 执行 deterministic preflight, 同时检查缺失信息, 跨字段矛盾和模型覆盖.
+4. 按诊断状态行动. `needs_clarification` 时提问; `unsupported` 时报告模型缺口; `contradictory_requirements` 或 `repairable` 时展示修正提案和影响; `infeasible` 仅用于已收敛模型的有界搜索耗尽结果.
+5. `diagnosis.ready_for_solver=true` 只表示预检具备确认条件. 只有当前 revision 得到用户确认, 且服务端状态为 `confirmed=true` 和 `can_submit=true` 时, 才能提交确定性求解.
+6. 每次接受修正后创建新 revision, 重新 preflight. 用户在对话中说“把某参数改为某值”时, 基于当前 revision 生成逐字段 diff, 不得丢弃旧约束后创建残缺的新 intent.
+7. 每次求解器内修正后从 Class I 开始完整复验所有阻断阶段和约束. 求解失败时将失败约束, 实际值和裕度回灌为未确认 child revision; 只生成白名单内有证据的修改提案.
+8. 按验证证据报告结果等级, 未满足交付门槛时不得称为可行方案.
 
-## 能力边界
+完整状态机和执行入口见 [workflow.md](references/workflow.md).
 
-该工具包主要面向固定翼飞机设计，覆盖：
+## 不可违反的规则
 
-- Class I / Class II 总体重量估算与闭合；
-- 起飞、着陆、爬升、巡航、机动等约束分析；
-- 固定翼总体设计点选择；
-- 气动、推进、性能、稳定操纵、结构载荷等初步分析；
-- 参数化几何、外形建模、OpenVSP 桥接和可视化；
-- 设计报告、设计数据和图表输出。
+- 用户硬约束和任何 `locked=true` 字段不得静默修改. 修改必须形成 `ChangeProposal`, 由用户明确确认.
+- `unsupported` 表示当前模型缺失或超出适用域, 不等于 `infeasible`, 也不能作为物理不可行的证据.
+- `diagnosis.ready_for_solver` 只表示预检通过, 不构成求解授权, 更不表示已经工程可行.
+- 未经来源和适用域证明, 不得通过降低 `cd0`, 提高 `oswald_e`, 降低 TSFC/BSFC 或提高材料性能制造乐观解.
+- 搜索耗尽时报告未找到可行解和失败约束, 不得删除约束, 篡改报告或把最后一次迭代值包装为方案.
+- “继续”, “直接计算”或类似文本不是 revision 确认. 只有服务端记录的确认与 solver submission 审计可以授权求解和工作台归属.
+- `geometry.obj`, `geometry_3d.html` 和配套图片只是展示资产. 它们不证明已执行 OpenVSP/VSPAERO, 高保真气动, 结构, 疲劳, 气动弹性, 制造或适航验证.
 
-当前项目中原有的 `aircraft-conceptual-design` 仍然是本项目自己的 RAG 增强总体设计 Skill；本技能用于调用和参考外部 `BaiSongt/aircraft-design-skill` 工具包，两者不要混淆。
+## 按需读取
 
-## 首要动作
+- 先读取 [workflow.md](references/workflow.md) 执行总体状态机.
+- 构建或修改 intent 时读取 [input-schema.md](references/input-schema.md).
+- 判断某项需求是否有模型支持时读取 [model-coverage-matrix.md](references/model-coverage-matrix.md).
+- 发生提问, 修改或确认时读取 [dialogue-policy.md](references/dialogue-policy.md).
+- 声明结果可行性或交付等级前读取 [validation-levels.md](references/validation-levels.md).
 
-收到 `$ARGUMENTS` 后，先判断用户需要哪类能力：
+按阶段加载对应 reference; 不要在需求尚未进入该阶段时加载无关细节.
 
-1. 若用户只是问“这个 skill 是什么、怎么用”，读取上游 `README.md` 和 `.trae/skills/README.md` 后说明。
-2. 若用户要运行固定翼总体设计闭环，优先读取：
-   - `external/aircraft-design-skill/.trae/skills/00_entry/overall_sizing_runbook/SKILL.md`
-   - `external/aircraft-design-skill/.trae/skills/00_entry/overall_sizing_spec/SKILL.md`
-3. 若用户要查某个子模块，按上游 `.trae/skills/README.md` 的阶段分类读取对应 `SKILL.md`。
-4. 若用户要直接执行代码，先做环境检查，不要直接假设完整 GUI/可视化依赖已经安装。
+## 输出
 
-## 环境检查
-
-该上游仓库需要 Python 3.10+。当前 macOS 系统自带 `/usr/bin/python3` 可能是 Python 3.9，不能直接运行该仓库全部代码。执行前先检查：
-
-```bash
-python3 --version
-```
-
-若系统 Python 低于 3.10，使用项目可用的高版本 Python，例如 Codex bundled Python 或用户虚拟环境。
-
-检查导入：
-
-```bash
-PYTHONPATH="${CLAUDE_PROJECT_DIR}/external/aircraft-design-skill" python3 - <<'PY'
-from aircraft_design.class2_preliminary.design_loop_orchestrator import DesignRequirements, InitialGuess, sizing_loop
-print("aircraft-design-skill core import ok")
-PY
-```
-
-完整 `run_sizing` 入口还需要 `numpy`、`scipy`、`matplotlib`，可视化模式还需要 `PySide6`、`PySide6-Addons`、`pyvista`、`pyvistaqt`。若缺依赖，先说明缺失项，再建议安装方式。
-
-## 推荐命令
-
-在项目根目录运行：
-
-```bash
-cd "${CLAUDE_PROJECT_DIR}/external/aircraft-design-skill"
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-```
-
-如果只做纯计算、不启用 GUI，可先从核心模块和测试级输入开始，减少 GUI 依赖风险。
-
-运行固定翼总体设计闭环的上游入口是：
-
-```bash
-PYTHONPATH="${CLAUDE_PROJECT_DIR}/external/aircraft-design-skill" python3 -m aircraft_design.class2_preliminary.run_sizing <input.json> --project-name "<project_name>" --output-dir "<output_dir>" --no-viz
-```
-
-注意：上游 README 中部分命令写作 `python -m aircraft_design.run_sizing`，但当前同步版本实际存在的入口是：
-
-```text
-aircraft_design/class2_preliminary/run_sizing.py
-```
-
-因此优先使用：
-
-```bash
-python3 -m aircraft_design.class2_preliminary.run_sizing
-```
-
-## 输出要求
-
-回答用户时应给出：
-
-- 使用了哪个上游子技能或代码模块；
-- 输入 JSON 或关键字段如何构造；
-- 是否实际运行了工具；
-- 若运行成功，列出输出目录、`design_data.json`、`design_report.md` 等结果；
-- 若运行失败，说明是 Python 版本、依赖缺失、输入不合法，还是上游代码问题；
-- 不要把外部工具包输出与本项目 RAG 增强总体设计输出混为一谈。
-
-## 可交付门槛
-
-只在以下条件同时成立时，将结果称为“可交付的初步设计候选”：
-
-- `design_data.json.engineering_feasible` 为 `true`；
-- `status.numerical_converged` 为 `true`；
-- 所有 `blocking=true` 的约束均为 `passed=true`；
-- 所有阻断阶段的 `stage_status.status` 均为 `completed`；
-- CLI 退出码为 `0`。
-
-退出码 `2` 表示计算完成但未收敛或工程不可行，只能作为下一轮诊断输入。不得把最后迭代值、仅通过 Class I 的结果或 Stage 7 降阶筛选候选表述为最终方案。
-
-报告时必须列出 `design_adjustments`、约束裕度和仍未覆盖的高保真气动、详细结构/疲劳/气动弹性、系统安装、制造与适航验证缺口。
-
-## 自动修正规则
-
-- 用户启用 `auto_repair_enabled` 后，对未通过的阻断约束最多执行 `max_repair_attempts` 轮修正。
-- 只调整 `initial_guess` 中声明的设计变量和求解设置；不得修改航程、载荷、速度、高度、起降距离等用户任务需求。
-- 根据失败约束有界调整翼载、推重比、展弦比、厚度比、阻力/效率、推进耗油、重心位置和平尾容积系数。
-- 每轮修正后必须从 Class I 重量闭合开始重新执行完整 Class I/II 阶段门，禁止只修改报告或结果 JSON。
-- 保存每轮触发约束、原值、新值、边界、原因和复验结果。
-- 搜索耗尽仍不可行时，明确输出“未找到可行解”；不得放宽约束、删除失败项或声称保证可行。
-- 对尚未建模的火箭助推、伞降回收、RCS、气动弹性和适航需求，标记验证缺口，不得用自动修正代替专项模型。
-
-## 重要文件
-
-```text
-external/aircraft-design-skill/README.md
-external/aircraft-design-skill/.trae/skills/README.md
-external/aircraft-design-skill/.trae/skills/00_entry/overall_sizing_runbook/SKILL.md
-external/aircraft-design-skill/.trae/skills/00_entry/overall_sizing_spec/SKILL.md
-external/aircraft-design-skill/aircraft_design/class2_preliminary/run_sizing.py
-external/aircraft-design-skill/aircraft_design/class2_preliminary/design_loop_orchestrator.py
-external/aircraft-design-skill/examples/
-```
+向用户明确列出当前需求 revision, 硬约束, 可调整变量, 技术假设, 模型缺口, 用户已接受的修改, 求解状态, 阻断约束裕度, 验证等级和剩余验证缺口. 结果文件必须给出实际路径; 未实际运行的工具不得声称已运行.

@@ -404,9 +404,14 @@ class ReportGeneratorV2:
 
     def _chapter_14_conclusion(self, ac: SizedAircraft) -> str:
         status = "成功" if ac.converged else "未收敛"
+        gate_statement = (
+            "当前实现的 Class I 约束筛选通过。由项目编排器运行时，最终 Class II 工程门、需求范围和专项验证缺口以其追加的交付判定为准；直接 upstream CLI 输出仍是低层诊断，不构成交付结论。"
+            if ac.engineering_feasible
+            else "当前实现的 Class I 约束筛选未全部通过，不能作为可行方案交付。"
+        )
         return f"""## 14. 结论与建议
 ### 14.1 设计总结
-本阶段总体设计方案迭代{status}。设计结果满足主要性能指标要求。
+本阶段总体设计方案迭代{status}。{gate_statement}
 
 ### 14.3 后续工作建议
 - 进一步优化气动外形，提高升阻比。

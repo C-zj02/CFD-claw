@@ -855,6 +855,379 @@
       margin-right: 8px;
     }
 
+    .requirement-interaction {
+      width: 100%;
+      min-width: 0;
+      margin-top: 10px;
+      padding: 14px 0 2px;
+      border-top: 1px solid #d9e2e8;
+      border-bottom: 1px solid #d9e2e8;
+      background: #fafcfd;
+      color: #17202a;
+    }
+
+    .requirement-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 0 14px;
+    }
+
+    .requirement-heading {
+      display: flex;
+      align-items: baseline;
+      flex-wrap: wrap;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .requirement-heading strong {
+      color: #17202a;
+      font-size: 14px;
+      line-height: 1.35;
+    }
+
+    .requirement-heading span {
+      color: #6b7785;
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .requirement-status,
+    .requirement-lock,
+    .requirement-coverage {
+      display: inline-flex;
+      align-items: center;
+      width: fit-content;
+      min-height: 22px;
+      padding: 3px 7px;
+      border: 1px solid #d5dee5;
+      border-radius: 4px;
+      background: #f3f6f8;
+      color: #52606d;
+      font-size: 11px;
+      font-weight: 800;
+      line-height: 1.2;
+      white-space: nowrap;
+    }
+
+    .requirement-status.is-pass,
+    .requirement-coverage.is-pass {
+      border-color: #b9d7cc;
+      background: #eef8f4;
+      color: #176451;
+    }
+
+    .requirement-status.is-warn,
+    .requirement-coverage.is-warn {
+      border-color: #e8cba9;
+      background: #fff8ed;
+      color: #8a4b0f;
+    }
+
+    .requirement-status.is-blocked,
+    .requirement-coverage.is-blocked,
+    .requirement-lock.is-locked {
+      border-color: #e4b9b5;
+      background: #fff3f1;
+      color: #a33126;
+    }
+
+    .requirement-summary {
+      margin: 8px 14px 0;
+      color: #344452;
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .requirement-blockers {
+      margin: 12px 14px 0;
+      padding: 9px 0 9px 12px;
+      border-left: 3px solid #c34a3d;
+      color: #7b2e27;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .requirement-blockers strong {
+      display: block;
+      margin-bottom: 3px;
+      font-size: 12px;
+    }
+
+    .requirement-blockers ul {
+      margin: 0;
+      padding-left: 18px;
+    }
+
+    .requirement-section {
+      min-width: 0;
+      margin-top: 12px;
+      padding: 11px 14px 0;
+      border-top: 1px solid #e1e7ec;
+    }
+
+    .requirement-section-title {
+      margin-bottom: 8px;
+      color: #4a5967;
+      font-size: 11px;
+      font-weight: 800;
+      line-height: 1.35;
+      text-transform: uppercase;
+      letter-spacing: 0;
+    }
+
+    .requirement-table-wrap {
+      width: 100%;
+      max-width: 100%;
+      overflow-x: auto;
+      border: 1px solid #dce4ea;
+      border-radius: 6px;
+      background: #ffffff;
+      overscroll-behavior-inline: contain;
+    }
+
+    .requirement-table {
+      width: 100%;
+      min-width: 780px;
+      border-collapse: collapse;
+      table-layout: auto;
+      color: #273643;
+      font-size: 11px;
+      line-height: 1.4;
+    }
+
+    .requirement-table th,
+    .requirement-table td {
+      padding: 8px 9px;
+      border-bottom: 1px solid #e5eaee;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    .requirement-table th {
+      background: #f3f6f8;
+      color: #536271;
+      font-size: 10px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .requirement-table tbody tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .requirement-table td:first-child {
+      max-width: 220px;
+      color: #334e68;
+      font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
+      overflow-wrap: anywhere;
+    }
+
+    .requirement-table td:nth-child(2) {
+      max-width: 200px;
+      overflow-wrap: anywhere;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .requirement-table td:last-child small {
+      display: block;
+      max-width: 170px;
+      margin-top: 4px;
+      color: #6b7785;
+      overflow-wrap: anywhere;
+    }
+
+    .requirement-question {
+      min-width: 0;
+      margin: 0;
+      padding: 10px 0;
+      border: 0;
+      border-bottom: 1px solid #e5eaee;
+    }
+
+    .requirement-question:last-child {
+      border-bottom: 0;
+    }
+
+    .requirement-question legend {
+      width: 100%;
+      padding: 0;
+      color: #263746;
+      font-size: 13px;
+      font-weight: 750;
+      line-height: 1.45;
+      overflow-wrap: anywhere;
+    }
+
+    .requirement-question-meta,
+    .requirement-question-consequence {
+      margin-top: 4px;
+      color: #6b7785;
+      font-size: 11px;
+      line-height: 1.45;
+      overflow-wrap: anywhere;
+    }
+
+    .requirement-question-consequence {
+      color: #8a4b0f;
+    }
+
+    .requirement-question-input {
+      display: block;
+      width: min(100%, 420px);
+      min-width: 0;
+      margin-top: 8px;
+      padding: 8px 9px;
+      border-radius: 6px;
+      background: #ffffff;
+      font-size: 12px;
+    }
+
+    .requirement-options {
+      display: flex;
+      align-items: stretch;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 8px;
+    }
+
+    .requirement-option {
+      display: inline-flex;
+      align-items: flex-start;
+      gap: 6px;
+      max-width: 100%;
+      padding: 6px 8px;
+      border: 1px solid #dce4ea;
+      border-radius: 6px;
+      background: #ffffff;
+      color: #384957;
+      font-size: 11px;
+      font-weight: 650;
+      line-height: 1.35;
+      cursor: pointer;
+    }
+
+    .requirement-option input,
+    .requirement-proposal > input {
+      width: 14px;
+      height: 14px;
+      margin: 1px 0 0;
+      flex: 0 0 auto;
+      accent-color: var(--primary);
+    }
+
+    .requirement-option span {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .requirement-proposal {
+      display: grid;
+      grid-template-columns: 16px minmax(0, 1fr);
+      align-items: flex-start;
+      gap: 8px;
+      padding: 9px 0;
+      border-bottom: 1px solid #e5eaee;
+      color: #344452;
+      cursor: pointer;
+    }
+
+    .requirement-proposal:last-child {
+      border-bottom: 0;
+    }
+
+    .requirement-proposal-copy {
+      display: flex;
+      min-width: 0;
+      flex-direction: column;
+      gap: 3px;
+      font-size: 12px;
+      font-weight: 500;
+      line-height: 1.45;
+    }
+
+    .requirement-proposal-copy strong {
+      color: #263746;
+      font-size: 12px;
+      overflow-wrap: anywhere;
+    }
+
+    .requirement-proposal-copy small {
+      color: #657483;
+      font-size: 11px;
+      overflow-wrap: anywhere;
+    }
+
+    .requirement-proposal-copy em {
+      color: #a33126;
+      font-size: 11px;
+      font-style: normal;
+      font-weight: 750;
+    }
+
+    .requirement-actions {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 8px 12px;
+      margin-top: 10px;
+      padding: 10px 14px 12px;
+      border-top: 1px solid #e1e7ec;
+    }
+
+    .requirement-action-group {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 7px;
+    }
+
+    .requirement-action {
+      min-height: 34px;
+      padding: 7px 11px;
+      border: 1px solid #cbd7df;
+      border-radius: 6px;
+      background: #ffffff;
+      color: #234f49;
+      box-shadow: none;
+      font-size: 12px;
+      font-weight: 750;
+    }
+
+    .requirement-action.is-primary,
+    .requirement-action:first-child:not(:disabled) {
+      border-color: #0b625c;
+      background: #0b625c;
+      color: #ffffff;
+    }
+
+    .requirement-history-note {
+      color: #6b7785;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .requirement-action-error {
+      flex-basis: 100%;
+      padding-top: 2px;
+      color: #a33126;
+      font-size: 12px;
+      line-height: 1.45;
+      overflow-wrap: anywhere;
+    }
+
+    .requirement-interaction.is-historical {
+      background: #f7f8f9;
+    }
+
+    .requirement-interaction.is-historical .requirement-action,
+    .requirement-interaction.is-historical input {
+      cursor: not-allowed;
+    }
+
     details.process-panel,
     details.tool-events {
       width: 100%;
@@ -3464,6 +3837,43 @@
 
       .design-image-thumbnails {
         grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .requirement-header {
+        align-items: flex-start;
+        flex-wrap: wrap;
+        padding-inline: 10px;
+      }
+
+      .requirement-summary,
+      .requirement-blockers {
+        margin-inline: 10px;
+      }
+
+      .requirement-section,
+      .requirement-actions {
+        padding-inline: 10px;
+      }
+
+      .requirement-options {
+        align-items: stretch;
+        flex-direction: column;
+      }
+
+      .requirement-option {
+        width: 100%;
+      }
+
+      .requirement-actions,
+      .requirement-action-group {
+        align-items: stretch;
+        flex-direction: column;
+        width: 100%;
+      }
+
+      .requirement-action {
+        width: 100%;
+        min-height: 40px;
       }
 
       .settings-panel {

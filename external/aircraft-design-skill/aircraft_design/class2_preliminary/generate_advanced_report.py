@@ -2,17 +2,26 @@ import json
 from datetime import datetime
 
 
-def generate_advanced_design_report(result_file: str, output_file: str):
-    with open(result_file, "r") as f:
+def generate_advanced_design_report(
+    result_file: str,
+    output_file: str,
+    *,
+    project_name: str = "Aircraft Design Project",
+) -> None:
+    with open(result_file, "r", encoding="utf-8") as f:
         data = json.load(f)
 
     report = []
 
-    report.append("# 超音速飞机二阶段高级设计报告")
+    display_project_name = " ".join(str(project_name).split()) or "Aircraft Design Project"
+    report.append("# 固定翼飞行器二阶段分析报告")
     report.append("")
-    report.append("**项目名称**: Supersonic4Mach")
+    report.append(f"**项目名称**: {display_project_name}")
     report.append(f"**生成日期**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     report.append("**版本**: V3.1 (Advanced Design - Stage 2-7 - Dynamic)")
+    report.append(
+        "**报告范围**: 本文件记录阶段 2-7 分析结果，不独立构成整机可行性或交付结论。"
+    )
     report.append("")
     report.append("---")
     report.append("")

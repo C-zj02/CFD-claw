@@ -538,9 +538,17 @@ def main():
                 "weight_breakdown": result.weight_breakdown,
                 "performance": {
                     "actual_range_m": result.actual_range_m,
+                    "range_metric_kind": result.range_metric_kind,
+                    "range_capability_independently_predicted": (
+                        result.range_metric_kind == "independent_capability_prediction"
+                    ),
                     "takeoff_distance_m": result.takeoff_distance_m,
                     "landing_distance_m": result.landing_distance_m,
-                    "values_are_predictions": True,
+                    "values_are_predictions": {
+                        "range": result.range_metric_kind == "independent_capability_prediction",
+                        "takeoff_distance": True,
+                        "landing_distance": True,
+                    },
                 },
                 "iterations": result.iterations,
                 "iteration_history": result.iteration_history,
@@ -1078,7 +1086,11 @@ def main():
                 print(f"Advanced design results saved to {adv_json}")
                 adv_report = run_dir / "advanced_design_report.md"
                 try:
-                    generate_advanced_design_report(str(adv_json), str(adv_report))
+                    generate_advanced_design_report(
+                        str(adv_json),
+                        str(adv_report),
+                        project_name=args.project_name,
+                    )
                 except Exception as report_error:
                     print(f"Advanced report generation failed: {report_error}")
                     output_data["stage_status"]["reporting"] = stage_record(

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import http.client
+import json
 import threading
 from pathlib import Path
 from unittest.mock import patch
@@ -46,6 +47,14 @@ def test_design_preflight_reports_user_default_and_derived_sources(tmp_path: Pat
         assert assumptions["initial_guess.mtow_kg"]["source"] == "derived"
         assert assumptions["solver.auto_repair_enabled"]["source"] == "default"
         assert any("默认或推导字段" in warning for warning in payload["warnings"])
+        assert payload["contract_version"] == 2
+        assert payload["diagnosis"]["status"] == "ready_for_solver"
+        assert payload["workflow"] == {
+            "state": "ready_for_solver",
+            "can_confirm": True,
+            "can_submit": True,
+            "requires_user_action": False,
+        }
     finally:
         service._design_jobs.shutdown()
 
@@ -80,6 +89,135 @@ def test_design_preflight_surfaces_engineering_risk_warnings(tmp_path: Path) -> 
         assert "起降距离小于 100 m" in warnings
         assert "超过 1000 km" in warnings
         assert payload["field_sources"]["initial_guess.mtow_kg"] == "user"
+        assert payload["ready"] is False
+        assert payload["diagnosis"]["status"] == "repairable"
+        assert payload["workflow"]["requires_user_action"] is True
+        assert payload["workflow"]["can_submit"] is False
+        assert {
+            proposal["proposal_id"] for proposal in payload["diagnosis"]["change_proposals"]
+        } >= {"mass.increase_mtow_allowance", "mass.reduce_payload"}
+    finally:
+        service._design_jobs.shutdown()
+
+
+def test_design_preflight_distinguishes_model_gap_from_infeasibility(tmp_path: Path) -> None:
+    fake_home = tmp_path / "home"
+    workspace = tmp_path / "workspace"
+    fake_home.mkdir()
+    workspace.mkdir()
+    with patch("src.agent.session.Path.home", return_value=fake_home):
+        service = ClawdWebService(workspace_root=workspace)
+
+    try:
+        payload = service.preflight_design_job(
+            {
+                "request": {
+                    "project_name": "special_mission_gap",
+                    "requirements": {"range_m": 650_000.0, "payload_kg": 60.0},
+                    "provenance": {
+                        "user_requirements": {
+                            "max_flight_mach": 0.8,
+                            "launch_mode": "rocket_assist",
+                            "recovery_mode": "parachute",
+                        }
+                    },
+                }
+            }
+        )
+
+        assert payload["ready"] is False
+        assert payload["diagnosis"]["status"] == "unsupported"
+        assert payload["workflow"]["requires_user_action"] is True
+        assert payload["workflow"]["can_submit"] is False
+        blocking_paths = {
+            item["field_path"]
+            for item in payload["model_coverage"]
+            if item["status"] == "unsupported" and item["blocking"]
+        }
+        assert blocking_paths >= {
+            "performance.max_flight_mach",
+            "launch.mode",
+            "recovery.mode",
+        }
+        assert not any("物理不可行" in reason for reason in payload["diagnosis"]["blocking_reasons"])
+    finally:
+        service._design_jobs.shutdown()
+
+
+def test_legacy_design_job_http_rejects_nonready_request(tmp_path: Path) -> None:
+    fake_home = tmp_path / "home"
+    workspace = tmp_path / "workspace"
+    fake_home.mkdir()
+    workspace.mkdir()
+    with patch("src.agent.session.Path.home", return_value=fake_home):
+        service = ClawdWebService(workspace_root=workspace)
+
+    server = _ClawdHTTPServer(("127.0.0.1", 0), service)
+    server_thread = threading.Thread(target=server.serve_forever, daemon=True)
+    server_thread.start()
+    connection = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=5)
+    try:
+        body = json.dumps(
+            {
+                "request": {
+                    "project_name": "legacy_nonready_request",
+                    "requirements": {
+                        "range_m": 1_200_000.0,
+                        "payload_kg": 90.0,
+                    },
+                    "initial_guess": {"mtow_kg": 150.0},
+                }
+            }
+        )
+        connection.request(
+            "POST",
+            "/api/design-jobs",
+            body=body,
+            headers={"Content-Type": "application/json"},
+        )
+        response = connection.getresponse()
+        payload = json.loads(response.read())
+
+        assert response.status == 400
+        assert "not ready" in payload["error"]
+        assert "repairable" in payload["error"]
+    finally:
+        connection.close()
+        server.shutdown()
+        server.server_close()
+        server_thread.join(timeout=5)
+        service._design_jobs.shutdown()
+
+
+def test_design_preflight_prioritizes_cross_field_contradiction(tmp_path: Path) -> None:
+    fake_home = tmp_path / "home"
+    workspace = tmp_path / "workspace"
+    fake_home.mkdir()
+    workspace.mkdir()
+    with patch("src.agent.session.Path.home", return_value=fake_home):
+        service = ClawdWebService(workspace_root=workspace)
+
+    try:
+        payload = service.preflight_design_job(
+            {
+                "request": {
+                    "project_name": "mach_contradiction",
+                    "requirements": {
+                        "range_m": 300_000.0,
+                        "payload_kg": 20.0,
+                        "cruise_mach": 0.7,
+                    },
+                    "provenance": {"user_requirements": {"max_flight_mach": 0.6}},
+                }
+            }
+        )
+
+        assert payload["diagnosis"]["status"] == "contradictory_requirements"
+        assert set(payload["diagnosis"]["conflicting_fields"]) == {
+            "requirements.cruise_mach",
+            "performance.max_flight_mach",
+        }
+        assert payload["workflow"]["can_submit"] is False
     finally:
         service._design_jobs.shutdown()
 

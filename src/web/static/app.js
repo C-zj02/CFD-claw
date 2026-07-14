@@ -213,17 +213,19 @@
 
     function setDesignRunBusy(isBusy, message = "") {
       state.designJobRunning = isBusy;
-      designRunBtn.disabled = isBusy || !designPreflightConfirm.checked;
-      designCancelBtn.disabled = !isBusy || !state.designJobId;
-      designRetryBtn.disabled = isBusy || !state.designJobId;
-      designPreflightBtn.disabled = isBusy;
-      for (const input of designRunForm.querySelectorAll("input, select")) {
-        input.disabled = isBusy || (input.hasAttribute("data-design-advanced") && !designUseAdvanced.checked);
+      if (designRunBtn) designRunBtn.disabled = isBusy || !designPreflightConfirm?.checked;
+      if (designCancelBtn) designCancelBtn.disabled = !isBusy || !state.designJobId;
+      if (designRetryBtn) designRetryBtn.disabled = isBusy || !state.designJobId;
+      if (designPreflightBtn) designPreflightBtn.disabled = isBusy;
+      for (const input of designRunForm?.querySelectorAll("input, select") || []) {
+        input.disabled = isBusy || (input.hasAttribute("data-design-advanced") && !designUseAdvanced?.checked);
       }
-      syncDesignEnergyMode();
-      syncAutoRepairInputs();
-      designPreflightConfirm.disabled = isBusy || !state.preflightFingerprint;
-      if (message) designRunStatus.textContent = message;
+      if (designRunForm) {
+        syncDesignEnergyMode();
+        syncAutoRepairInputs();
+      }
+      if (designPreflightConfirm) designPreflightConfirm.disabled = isBusy || !state.preflightFingerprint;
+      if (message && designRunStatus) designRunStatus.textContent = message;
       if (isBusy) {
         statusBadge.textContent = "计算中";
         statusBadge.className = "badge is-busy";
@@ -877,6 +879,49 @@
       return options || {};
     }
 
+    function mergeMessageEvents(...groups) {
+      const merged = [];
+      const seen = new Set();
+      for (const group of groups) {
+        if (!Array.isArray(group)) continue;
+        for (const event of group) {
+          if (!event || typeof event !== "object") continue;
+          let key = "";
+          if (event.event_id != null) key = "event:" + event.event_id;
+          else if (event.sequence != null) key = "sequence:" + event.sequence + ":" + (event.kind || "");
+          else {
+            try { key = "value:" + JSON.stringify(event); } catch (_err) { key = ""; }
+          }
+          if (key && seen.has(key)) continue;
+          if (key) seen.add(key);
+          merged.push(event);
+        }
+      }
+      return merged;
+    }
+
+    function requirementInteractionFromEvents(events = []) {
+      for (let index = events.length - 1; index >= 0; index -= 1) {
+        const event = events[index];
+        const interaction = event?.kind === "requirement_interaction" ? event.preview?.interaction : null;
+        if (interaction && typeof interaction === "object") return interaction;
+      }
+      return null;
+    }
+
+    function requirementRevisionId(interaction) {
+      return String(interaction?.revision?.revision_id || "");
+    }
+
+    function latestRequirementRevisionId(messages = []) {
+      let revisionId = "";
+      for (const message of messages) {
+        const interaction = requirementInteractionFromEvents(message?.events || []);
+        if (interaction) revisionId = requirementRevisionId(interaction) || revisionId;
+      }
+      return revisionId;
+    }
+
     function eventTitle(event) {
       if (event.kind === "agent_step") return cleanUiText(event.agent_name || event.tool_name || "智能体");
       if (event.kind === "planning") return "开始分析";
@@ -904,7 +949,7 @@
     }
 
     function extractPreviewText(event) {
-      if (event.rag) return "";
+      if (event.rag || event.kind === "requirement_interaction") return "";
       const preview = renderPreview(event.preview);
       return compactEventSummary(preview, 360);
     }
@@ -1326,6 +1371,540 @@
       return details;
     }
 
+    function requirementStatusMeta(status) {
+      const statuses = {
+        needs_clarification: ["待澄清", "warn"],
+        unsupported: ["模型未覆盖", "blocked"],
+        contradictory_requirements: ["需求冲突", "blocked"],
+        infeasible: ["当前不可行", "blocked"],
+        repairable: ["可协商修正", "warn"],
+        ready_for_solver: ["可进入求解", "pass"],
+        conceptually_feasible: ["概念可行", "pass"],
+        preliminary_feasible: ["初步可行", "pass"],
+        robust_preliminary_feasible: ["稳健初步可行", "pass"],
+      };
+      const normalized = String(status || "needs_clarification");
+      const [label, tone] = statuses[normalized] || [normalized.replaceAll("_", " "), "neutral"];
+      return { label, tone };
+    }
+
+    function requirementRoleLabel(role) {
+      return ({
+        hard_constraint: "硬约束",
+        soft_goal: "软目标",
+        design_variable: "设计变量",
+        technology_assumption: "技术假设",
+      })[role] || role || "--";
+    }
+
+    function requirementSourceLabel(source) {
+      return ({
+        user: "用户",
+        derived: "推导",
+        default: "默认",
+        reference: "参考",
+      })[source] || source || "--";
+    }
+
+    function requirementCoverageMeta(record, requirement) {
+      const status = record?.status || (requirement?.applicable_model ? "covered" : "unknown");
+      const labels = {
+        covered: ["已覆盖", "pass"],
+        partial: ["部分覆盖", "warn"],
+        unsupported: ["未覆盖", "blocked"],
+        unknown: ["未声明", "neutral"],
+      };
+      const [label, tone] = labels[status] || [status, "neutral"];
+      return {
+        label,
+        tone,
+        model: record?.model_id || requirement?.applicable_model || "",
+        reason: record?.reason || "",
+      };
+    }
+
+    function formatRequirementValue(value) {
+      if (value == null || value === "") return "--";
+      if (typeof value === "boolean") return value ? "是" : "否";
+      if (typeof value === "number") return Number.isInteger(value) ? String(value) : String(Number(value.toPrecision(8)));
+      if (typeof value === "string") return value;
+      try { return JSON.stringify(value); } catch (_err) { return String(value); }
+    }
+
+    function requirementOptionLabel(option) {
+      if (option && typeof option === "object" && !Array.isArray(option)) {
+        return formatRequirementValue(option.label ?? option.value ?? option.id ?? option);
+      }
+      return formatRequirementValue(option);
+    }
+
+    function requirementActionId() {
+      if (globalThis.crypto && typeof globalThis.crypto.randomUUID === "function") {
+        return globalThis.crypto.randomUUID();
+      }
+      return "requirement-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 12);
+    }
+
+    function collectRequirementDecisions(panel) {
+      const answers = [];
+      for (const input of panel.querySelectorAll("input[data-requirement-question]")) {
+        const isChoice = input.type === "radio" || input.type === "checkbox";
+        if (isChoice && !input.checked) continue;
+        if (!isChoice && !input.value.trim()) continue;
+        let value = input.value.trim();
+        if (isChoice) {
+          value = input.dataset.optionValue ?? input.value;
+          try { value = JSON.parse(value); } catch (_err) { /* Keep the choice label unchanged. */ }
+        } else if (input.type === "number" && Number.isFinite(Number(input.value))) {
+          value = Number(input.value);
+        }
+        answers.push({
+          question_id: input.dataset.requirementQuestion,
+          field_path: input.dataset.fieldPath || "",
+          value,
+        });
+      }
+      return answers.length ? { clarification_answers: answers } : {};
+    }
+
+    function setRequirementControlsPending(panel, isPending, activeButton = null) {
+      for (const control of panel.querySelectorAll("button, input")) {
+        if (isPending) {
+          control.dataset.requirementWasDisabled = control.disabled ? "true" : "false";
+          control.disabled = true;
+        } else if (control.dataset.requirementWasDisabled === "false") {
+          control.disabled = false;
+        }
+        if (!isPending) delete control.dataset.requirementWasDisabled;
+      }
+      if (activeButton) {
+        if (isPending) {
+          activeButton.dataset.requirementLabel = activeButton.textContent;
+          activeButton.textContent = "提交中...";
+        } else if (activeButton.dataset.requirementLabel) {
+          activeButton.textContent = activeButton.dataset.requirementLabel;
+          delete activeButton.dataset.requirementLabel;
+        }
+      }
+      panel.setAttribute("aria-busy", isPending ? "true" : "false");
+    }
+
+    function markHistoricalRequirementCards(currentRevisionId = "") {
+      const cards = Array.from(chatLog.querySelectorAll(".requirement-interaction"));
+      const effectiveCurrentId = currentRevisionId || cards.at(-1)?.dataset.revisionId || "";
+      for (const card of cards) {
+        const historical = Boolean(effectiveCurrentId && card.dataset.revisionId && card.dataset.revisionId !== effectiveCurrentId);
+        card.classList.toggle("is-historical", historical);
+        card.dataset.current = historical ? "false" : "true";
+        const note = card.querySelector(".requirement-history-note");
+        if (note) note.hidden = !historical;
+        for (const control of card.querySelectorAll("button, input")) {
+          if (historical) control.disabled = true;
+        }
+      }
+    }
+
+    async function refreshRequirementActionSession(sessionId) {
+      try {
+        const payload = await api("/api/sessions/" + encodeURIComponent(sessionId));
+        if (!payload.session || state.sessionId !== sessionId) return;
+        updateMeta(payload.session);
+        if (state.view === "design") renderDesignWorkspace();
+      } catch (_err) {
+        // The monitored job remains available even if the session refresh is temporarily unavailable.
+      }
+    }
+
+    function registerRequirementActionJob(job, sessionId) {
+      if (!job?.job_id) return;
+      state.designStreamController?.abort();
+      state.designStreamController = null;
+      if (state.designJobMessage) state.designJobMessage.remove();
+      state.designJobMessage = null;
+      state.designJobId = job.job_id;
+      state.activeDesignJob = job;
+      state.designJobDetails[job.job_id] = job;
+      state.designJobs = [job, ...state.designJobs.filter((item) => item.job_id !== job.job_id)];
+      state.designJobSequence = job.last_sequence || 0;
+      state.designJobEvents = (job.events || []).map(designProgressEvent);
+      state.renderedDesignJobId = null;
+      state.selectedResultFile = null;
+      designWorkspaceBtn.hidden = false;
+      designWorkspaceBtn.disabled = state.busy;
+      designWorkspaceBtn.setAttribute("aria-hidden", "false");
+      saveLocalState();
+      renderDesignWorkspace();
+
+      if (job.terminal) {
+        state.designJobRunning = false;
+        if (state.view === "design") setDesignTab("results");
+        void refreshRequirementActionSession(sessionId);
+        return;
+      }
+
+      setDesignRunBusy(true, job.message || "总体设计任务已启动");
+      refreshDesignJobMessage();
+      void monitorDesignJob(job.job_id).finally(() => refreshRequirementActionSession(sessionId));
+    }
+
+    async function submitRequirementAction(panel, interaction, actionSpec, button) {
+      if (panel.dataset.current === "false" || panel.getAttribute("aria-busy") === "true") return;
+      const sessionId = String(interaction.session_id || state.sessionId || "");
+      const revision = interaction.revision || {};
+      const revisionId = String(revision.revision_id || "");
+      const revisionHash = String(revision.revision_hash || "");
+      const errorBox = panel.querySelector(".requirement-action-error");
+      if (errorBox) {
+        errorBox.hidden = true;
+        errorBox.textContent = "";
+      }
+      if (!sessionId || !revisionId || !revisionHash) {
+        if (errorBox) {
+          errorBox.textContent = "此需求版本缺少会话或修订标识，无法提交操作。";
+          errorBox.hidden = false;
+        }
+        return;
+      }
+
+      const actionPayload = actionSpec?.payload && typeof actionSpec.payload === "object"
+        ? { ...actionSpec.payload }
+        : {};
+      const selectedProposal = panel.querySelector("input[data-requirement-proposal]:checked")?.value || "";
+      const proposalId = actionPayload.proposal_id || actionSpec.proposal_id || selectedProposal;
+      const collectedDecisions = collectRequirementDecisions(panel);
+      const configuredDecisions = actionPayload.decisions;
+      delete actionPayload.decisions;
+      const decisions = configuredDecisions && typeof configuredDecisions === "object" && !Array.isArray(configuredDecisions)
+        ? { ...configuredDecisions, ...collectedDecisions }
+        : (Object.keys(collectedDecisions).length ? collectedDecisions : configuredDecisions);
+      const request = {
+        ...actionPayload,
+        action: actionSpec.action,
+        expected_revision_hash: revisionHash,
+        client_action_id: requirementActionId(),
+      };
+      if (decisions != null && (typeof decisions !== "object" || Object.keys(decisions).length)) {
+        request.decisions = decisions;
+      }
+      if (proposalId) request.proposal_id = proposalId;
+
+      setRequirementControlsPending(panel, true, button);
+      try {
+        const response = await api(
+          "/api/sessions/" + encodeURIComponent(sessionId)
+            + "/requirement-revisions/" + encodeURIComponent(revisionId) + "/actions",
+          { method: "POST", body: JSON.stringify(request) },
+        );
+        if (response.session) updateMeta(response.session);
+        const responseMessages = response.session?.messages;
+        if (Array.isArray(responseMessages)) {
+          renderMessages(responseMessages);
+        } else if (response.interaction) {
+          const replacement = createRequirementInteraction(response.interaction, { isCurrent: true });
+          panel.replaceWith(replacement);
+        } else {
+          setRequirementControlsPending(panel, false, button);
+        }
+        const responseRevisionId = requirementRevisionId(response.interaction)
+          || latestRequirementRevisionId(responseMessages || []);
+        if (responseRevisionId) markHistoricalRequirementCards(responseRevisionId);
+        if (response.job) registerRequirementActionJob(response.job, sessionId);
+        setStatus(response.job && !response.job.terminal
+          ? "需求版本已确认，总体设计任务已启动。"
+          : "需求版本操作已提交。" );
+      } catch (error) {
+        setRequirementControlsPending(panel, false, button);
+        if (errorBox) {
+          errorBox.textContent = error.message;
+          errorBox.hidden = false;
+        }
+        setStatus(error.message, true);
+      }
+    }
+
+    function createRequirementInteraction(interaction, options = {}) {
+      const diagnosis = interaction?.diagnosis || {};
+      const intent = interaction?.intent || {};
+      const revision = interaction?.revision || {};
+      const revisionId = requirementRevisionId(interaction);
+      const requirements = Array.isArray(intent.requirements) ? intent.requirements : [];
+      const coverage = Array.isArray(diagnosis.coverage) ? diagnosis.coverage : [];
+      const coverageByPath = new Map(coverage.map((item) => [item.field_path, item]));
+      const questions = Array.isArray(diagnosis.clarification_questions)
+        ? diagnosis.clarification_questions.slice(0, 3)
+        : [];
+      const proposals = Array.isArray(diagnosis.change_proposals) ? diagnosis.change_proposals : [];
+      const actions = Array.isArray(interaction.actions) ? interaction.actions : [];
+      const historical = options.isCurrent === false;
+
+      const panel = document.createElement("section");
+      panel.className = "requirement-interaction" + (historical ? " is-historical" : "");
+      panel.dataset.revisionId = revisionId;
+      panel.dataset.revisionHash = String(revision.revision_hash || "");
+      panel.dataset.current = historical ? "false" : "true";
+      panel.dataset.testid = "requirement-interaction";
+      panel.setAttribute("aria-label", "飞行器需求诊断");
+
+      const header = document.createElement("header");
+      header.className = "requirement-header";
+      const heading = document.createElement("div");
+      heading.className = "requirement-heading";
+      const title = document.createElement("strong");
+      title.textContent = "需求诊断";
+      const revisionLabel = document.createElement("span");
+      const revisionBits = [];
+      if (revision.revision_number != null) revisionBits.push("版本 " + revision.revision_number);
+      if (revision.confirmed) revisionBits.push("已确认");
+      revisionLabel.textContent = revisionBits.join(" · ") || "待建立版本";
+      heading.appendChild(title);
+      heading.appendChild(revisionLabel);
+      const statusMeta = requirementStatusMeta(diagnosis.status || revision.status);
+      const status = document.createElement("span");
+      status.className = "requirement-status is-" + statusMeta.tone;
+      status.dataset.status = String(diagnosis.status || revision.status || "");
+      status.textContent = statusMeta.label;
+      if (statusMeta.tone === "blocked") status.setAttribute("role", "status");
+      header.appendChild(heading);
+      header.appendChild(status);
+      panel.appendChild(header);
+
+      if (diagnosis.summary) {
+        const summary = document.createElement("p");
+        summary.className = "requirement-summary";
+        summary.textContent = diagnosis.summary;
+        panel.appendChild(summary);
+      }
+
+      const blockingReasons = Array.isArray(diagnosis.blocking_reasons) ? diagnosis.blocking_reasons : [];
+      if (blockingReasons.length) {
+        const blockers = document.createElement("div");
+        blockers.className = "requirement-blockers";
+        const blockersTitle = document.createElement("strong");
+        blockersTitle.textContent = "阻断原因";
+        blockers.appendChild(blockersTitle);
+        const list = document.createElement("ul");
+        for (const reason of blockingReasons) {
+          const item = document.createElement("li");
+          item.textContent = reason;
+          list.appendChild(item);
+        }
+        blockers.appendChild(list);
+        panel.appendChild(blockers);
+      }
+
+      if (requirements.length) {
+        const fields = document.createElement("div");
+        fields.className = "requirement-section";
+        const fieldsTitle = document.createElement("div");
+        fieldsTitle.className = "requirement-section-title";
+        fieldsTitle.textContent = "需求字段（" + requirements.length + "）";
+        fields.appendChild(fieldsTitle);
+        const tableWrap = document.createElement("div");
+        tableWrap.className = "requirement-table-wrap";
+        const table = document.createElement("table");
+        table.className = "requirement-table";
+        const thead = document.createElement("thead");
+        const headingRow = document.createElement("tr");
+        for (const label of ["字段", "值", "单位", "类型", "锁定", "来源", "模型支持"]) {
+          const cell = document.createElement("th");
+          cell.scope = "col";
+          cell.textContent = label;
+          headingRow.appendChild(cell);
+        }
+        thead.appendChild(headingRow);
+        table.appendChild(thead);
+        const tbody = document.createElement("tbody");
+        for (const requirement of requirements) {
+          const row = document.createElement("tr");
+          row.dataset.fieldPath = requirement.path || "";
+          const values = [
+            requirement.path || "--",
+            formatRequirementValue(requirement.value),
+            requirement.unit || "--",
+            requirementRoleLabel(requirement.role),
+          ];
+          for (const value of values) {
+            const cell = document.createElement("td");
+            cell.textContent = value;
+            row.appendChild(cell);
+          }
+          const lockCell = document.createElement("td");
+          const lock = document.createElement("span");
+          lock.className = "requirement-lock" + (requirement.locked ? " is-locked" : "");
+          lock.textContent = requirement.locked ? "已锁定" : "可调整";
+          lockCell.appendChild(lock);
+          row.appendChild(lockCell);
+          const sourceCell = document.createElement("td");
+          sourceCell.textContent = requirementSourceLabel(requirement.source);
+          row.appendChild(sourceCell);
+          const coverageCell = document.createElement("td");
+          const coverageMeta = requirementCoverageMeta(coverageByPath.get(requirement.path), requirement);
+          const coverageStatus = document.createElement("span");
+          coverageStatus.className = "requirement-coverage is-" + coverageMeta.tone;
+          coverageStatus.textContent = coverageMeta.label;
+          coverageStatus.title = coverageMeta.reason;
+          coverageCell.appendChild(coverageStatus);
+          if (coverageMeta.model) {
+            const model = document.createElement("small");
+            model.textContent = coverageMeta.model;
+            coverageCell.appendChild(model);
+          }
+          row.appendChild(coverageCell);
+          tbody.appendChild(row);
+        }
+        table.appendChild(tbody);
+        tableWrap.appendChild(table);
+        fields.appendChild(tableWrap);
+        panel.appendChild(fields);
+      }
+
+      if (questions.length) {
+        const questionSection = document.createElement("div");
+        questionSection.className = "requirement-section";
+        const questionTitle = document.createElement("div");
+        questionTitle.className = "requirement-section-title";
+        questionTitle.textContent = "需要确认（最多 3 项）";
+        questionSection.appendChild(questionTitle);
+        questions.forEach((question, questionIndex) => {
+          const fieldset = document.createElement("fieldset");
+          fieldset.className = "requirement-question";
+          const legend = document.createElement("legend");
+          legend.textContent = (questionIndex + 1) + ". " + (question.question || question.field_path || "确认需求");
+          fieldset.appendChild(legend);
+          const meta = document.createElement("div");
+          meta.className = "requirement-question-meta";
+          meta.textContent = [question.field_path, question.reason].filter(Boolean).join(" · ");
+          fieldset.appendChild(meta);
+          const questionOptions = Array.isArray(question.options) ? question.options : [];
+          if (questionOptions.length) {
+            const optionList = document.createElement("div");
+            optionList.className = "requirement-options";
+            questionOptions.forEach((option, optionIndex) => {
+              const optionLabel = document.createElement("label");
+              optionLabel.className = "requirement-option";
+              const input = document.createElement("input");
+              input.type = "radio";
+              input.name = "requirement-question-" + revisionId + "-" + questionIndex;
+              input.dataset.requirementQuestion = question.question_id || String(questionIndex);
+              input.dataset.fieldPath = question.field_path || "";
+              input.dataset.optionValue = JSON.stringify(option);
+              input.checked = JSON.stringify(option) === JSON.stringify(question.recommended_option);
+              input.disabled = historical;
+              const optionText = document.createElement("span");
+              optionText.textContent = requirementOptionLabel(option)
+                + (input.checked ? "（推荐）" : "");
+              optionLabel.appendChild(input);
+              optionLabel.appendChild(optionText);
+              optionList.appendChild(optionLabel);
+            });
+            fieldset.appendChild(optionList);
+          } else {
+            const input = document.createElement("input");
+            const questionPath = String(question.field_path || "");
+            const numeric = typeof question.recommended_option === "number"
+              || /(?:_kg|_m|_s|_pa|mach)$/.test(questionPath.toLowerCase());
+            input.type = numeric ? "number" : "text";
+            input.className = "requirement-question-input";
+            input.dataset.requirementQuestion = question.question_id || String(questionIndex);
+            input.dataset.fieldPath = question.field_path || "";
+            input.placeholder = numeric ? "请输入数值" : "请输入回答";
+            if (numeric) input.step = "any";
+            if (question.recommended_option != null) input.value = formatRequirementValue(question.recommended_option);
+            input.disabled = historical;
+            fieldset.appendChild(input);
+          }
+          if (question.consequence_if_unanswered) {
+            const consequence = document.createElement("div");
+            consequence.className = "requirement-question-consequence";
+            consequence.textContent = "未确认影响：" + question.consequence_if_unanswered;
+            fieldset.appendChild(consequence);
+          }
+          questionSection.appendChild(fieldset);
+        });
+        panel.appendChild(questionSection);
+      }
+
+      if (proposals.length) {
+        const proposalSection = document.createElement("div");
+        proposalSection.className = "requirement-section";
+        const proposalTitle = document.createElement("div");
+        proposalTitle.className = "requirement-section-title";
+        proposalTitle.textContent = "参数修改建议（" + proposals.length + "）";
+        proposalSection.appendChild(proposalTitle);
+        proposals.forEach((proposal, proposalIndex) => {
+          const proposalRow = document.createElement("label");
+          proposalRow.className = "requirement-proposal";
+          const input = document.createElement("input");
+          input.type = "radio";
+          input.name = "requirement-proposal-" + revisionId;
+          input.value = proposal.proposal_id || "";
+          input.dataset.requirementProposal = proposal.proposal_id || "";
+          input.checked = proposals.length === 1 && proposalIndex === 0;
+          input.disabled = historical;
+          const copy = document.createElement("span");
+          copy.className = "requirement-proposal-copy";
+          const change = document.createElement("strong");
+          change.textContent = (proposal.field_path || "参数") + "："
+            + formatRequirementValue(proposal.old_value) + " → " + formatRequirementValue(proposal.proposed_value);
+          const reason = document.createElement("span");
+          reason.textContent = proposal.reason || "";
+          copy.appendChild(change);
+          copy.appendChild(reason);
+          const details = [proposal.expected_benefit, proposal.engineering_cost].filter(Boolean).join(" · ");
+          if (details) {
+            const detail = document.createElement("small");
+            detail.textContent = details;
+            copy.appendChild(detail);
+          }
+          if (proposal.target_locked) {
+            const warning = document.createElement("em");
+            warning.textContent = "涉及已锁定需求，须由用户确认";
+            copy.appendChild(warning);
+          }
+          proposalRow.appendChild(input);
+          proposalRow.appendChild(copy);
+          proposalSection.appendChild(proposalRow);
+        });
+        panel.appendChild(proposalSection);
+      }
+
+      const footer = document.createElement("div");
+      footer.className = "requirement-actions";
+      const actionGroup = document.createElement("div");
+      actionGroup.className = "requirement-action-group";
+      for (const action of actions) {
+        if (!action?.action) continue;
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "requirement-action" + (action.primary ? " is-primary" : "");
+        button.textContent = action.label || action.action.replaceAll("_", " ");
+        button.disabled = historical || action.enabled === false || !revisionId || !revision.revision_hash;
+        if (action.enabled === false && action.reason) button.title = action.reason;
+        button.addEventListener("click", () => submitRequirementAction(panel, interaction, action, button));
+        actionGroup.appendChild(button);
+      }
+      footer.appendChild(actionGroup);
+      const historyNote = document.createElement("span");
+      historyNote.className = "requirement-history-note";
+      historyNote.textContent = "历史需求版本，仅供查看";
+      historyNote.hidden = !historical;
+      footer.appendChild(historyNote);
+      const error = document.createElement("div");
+      error.className = "requirement-action-error";
+      error.setAttribute("role", "alert");
+      error.hidden = true;
+      footer.appendChild(error);
+      panel.appendChild(footer);
+
+      return panel;
+    }
+
+    function designRangeMetricLabel(kind) {
+      if (kind === "independent_capability_prediction") return "预测最大航程";
+      if (kind === "evaluated_mission_distance") return "评估任务航程";
+      return "航程指标（证据未声明）";
+    }
+
     function createDesignResultPanel(job) {
       if (!job?.result) return null;
       const summary = job.result.summary || {};
@@ -1352,7 +1931,7 @@
         ["推重比", summary.thrust_to_weight, "", 3],
         ["海平面推力", summary.thrust_sl_n, "N", 0],
         ["翼展", summary.span_m, "m", 2],
-        ["实际航程", Number(summary.actual_range_m) / 1000, "km", 0],
+        [designRangeMetricLabel(summary.range_metric_kind), Number(summary.actual_range_m) / 1000, "km", 0],
         ["迭代次数", summary.iterations, "次", 0],
       ];
       const metrics = document.createElement("div");
@@ -1425,6 +2004,7 @@
     function createMessage(role, text, options = {}) {
       const normalized = normalizeMessageOptions(options);
       const events = normalized.events || [];
+      const requirementInteraction = role === "assistant" ? requirementInteractionFromEvents(events) : null;
       const artifacts = Array.isArray(normalized.artifacts) ? normalized.artifacts : [];
       const wrapper = document.createElement("article");
       wrapper.className = "message " + role;
@@ -1436,17 +2016,27 @@
 
       const bubble = document.createElement("div");
       bubble.className = "bubble";
-      const fallbackText = role === "assistant" && !normalized.isRunning ? "[没有文本响应]" : "";
+      const fallbackText = role === "assistant" && !normalized.isRunning && !requirementInteraction ? "[没有文本响应]" : "";
       renderMarkdownInto(bubble, text || fallbackText);
+      bubble.hidden = Boolean(requirementInteraction && !text && !fallbackText);
       wrapper.appendChild(bubble);
 
       if (role === "assistant") {
-        updateProcessPanel(wrapper, events, {
-          elapsedMs: normalized.elapsedMs,
-          isRunning: Boolean(normalized.isRunning),
-          isError: Boolean(normalized.isError),
-          open: Boolean(normalized.openProcess && events.length),
-        });
+        const processEvents = events.filter((event) => event?.kind !== "requirement_interaction");
+        if (processEvents.length || normalized.isRunning || !requirementInteraction) {
+          updateProcessPanel(wrapper, processEvents, {
+            elapsedMs: normalized.elapsedMs,
+            isRunning: Boolean(normalized.isRunning),
+            isError: Boolean(normalized.isError),
+            open: Boolean(normalized.openProcess && processEvents.length),
+          });
+        }
+        if (requirementInteraction) {
+          const currentRevisionId = normalized.currentRequirementRevisionId || requirementRevisionId(requirementInteraction);
+          wrapper.appendChild(createRequirementInteraction(requirementInteraction, {
+            isCurrent: !currentRevisionId || currentRevisionId === requirementRevisionId(requirementInteraction),
+          }));
+        }
         const answerEvidence = createAnswerEvidence(events);
         if (answerEvidence) wrapper.appendChild(answerEvidence);
         const designResult = createDesignResultPanel(normalized.designJob);
@@ -1499,8 +2089,10 @@
         return;
       }
 
+      const currentRequirementRevisionId = latestRequirementRevisionId(messages);
       for (const message of messages) {
-        if (!message.text && !message.blocks?.length && !message.artifacts?.length) {
+        const hasRequirementInteraction = Boolean(requirementInteractionFromEvents(message.events || []));
+        if (!message.text && !message.blocks?.length && !message.artifacts?.length && !hasRequirementInteraction) {
           continue;
         }
         let text = message.text || "";
@@ -1510,8 +2102,10 @@
         chatLog.appendChild(createMessage(message.role, text, {
           events: message.events || [],
           artifacts: message.artifacts || [],
+          currentRequirementRevisionId,
         }));
       }
+      markHistoricalRequirementCards(currentRequirementRevisionId);
       chatLog.scrollTop = chatLog.scrollHeight;
     }
 
@@ -1529,7 +2123,10 @@
         designJob: options.designJob,
         elapsedMs: options.elapsedMs,
         openProcess: Boolean(options.openProcess),
+        currentRequirementRevisionId: options.currentRequirementRevisionId,
       }));
+      const currentRequirementRevisionId = requirementRevisionId(requirementInteractionFromEvents(events));
+      if (currentRequirementRevisionId) markHistoricalRequirementCards(currentRequirementRevisionId);
       chatLog.scrollTop = chatLog.scrollHeight;
     }
 
@@ -2044,33 +2641,142 @@
       return job?.result?.engineering || {};
     }
 
+    function designValidationGaps(job) {
+      const provenance = job?.request?.provenance;
+      if (!provenance || typeof provenance !== "object") return [];
+      const requirementIntent = provenance.requirement_intent;
+      const gaps = new Map();
+      const fieldPathAliases = {
+        max_mtow_kg: "weights.max_mtow_kg",
+        max_aspect_ratio: "geometry.max_aspect_ratio",
+        min_cruise_endurance_s: "performance.min_cruise_endurance_s",
+        max_flight_mach: "performance.max_flight_mach",
+        launch_mode: "launch.mode",
+        launch_field_altitude_m: "launch.field_altitude_m",
+        booster_end_mach: "launch.booster_end_mach",
+        booster_end_relative_altitude_m: "launch.booster_end_relative_altitude_m",
+        recovery_mode: "recovery.mode",
+        parachute_open_mach: "recovery.parachute_open_mach",
+        parachute_open_relative_altitude_m: "recovery.parachute_open_relative_altitude_m",
+        engine_count: "propulsion.engine_count",
+        configuration_reference: "configuration.reference",
+        stealth_requirement: "configuration.stealth_requirement",
+      };
+      const normalizedPath = (value) => {
+        const rawPath = String(value || "").trim();
+        const path = rawPath.startsWith("deferred.")
+          ? rawPath.slice("deferred.".length)
+          : rawPath;
+        return fieldPathAliases[path] || path;
+      };
+      const addGap = ({ path: rawPath, value, reason, source, scopeStatement = "", preferReason = false }) => {
+        const path = normalizedPath(rawPath);
+        if (!path) return;
+        const existing = gaps.get(path);
+        if (!existing) {
+          gaps.set(path, { path, value, reason, source, scopeStatement });
+          return;
+        }
+        gaps.set(path, {
+          ...existing,
+          value: existing.value === undefined ? value : existing.value,
+          reason: preferReason && reason ? reason : existing.reason || reason,
+          source: preferReason && source ? source : existing.source || source,
+          scopeStatement: preferReason && scopeStatement
+            ? scopeStatement
+            : existing.scopeStatement || scopeStatement,
+        });
+      };
+
+      for (const requirement of requirementIntent?.requirements || []) {
+        const path = String(requirement?.path || "");
+        if (!path.startsWith("deferred.")) continue;
+        addGap({
+          path,
+          value: requirement.value,
+          reason: "该要求已从当前求解范围延后，仍需完成对应专项验证。",
+          source: "延后需求",
+        });
+      }
+
+      const scopeDeferrals = requirementIntent?.metadata?.requirement_workflow?.scope_deferrals;
+      for (const deferral of Array.isArray(scopeDeferrals) ? scopeDeferrals : []) {
+        for (const field of Array.isArray(deferral?.fields) ? deferral.fields : []) {
+          addGap({
+            path: field?.field_path || field?.retained_field_path,
+            value: field?.value,
+            reason: field?.coverage_reason || field?.scope_statement || deferral?.scope_statement
+              || "当前总体模型尚未覆盖该专项要求。",
+            source: "范围协商记录",
+            scopeStatement: field?.scope_statement || deferral?.scope_statement || "",
+            preferReason: true,
+          });
+        }
+      }
+
+      const softGoals = provenance.soft_goals;
+      if (softGoals && typeof softGoals === "object" && !Array.isArray(softGoals)) {
+        for (const [path, value] of Object.entries(softGoals)) {
+          addGap({
+            path,
+            value,
+            reason: "保留的专项目标，当前求解未完成专项验证。",
+            source: "保留软目标",
+          });
+        }
+      }
+      return Array.from(gaps.values());
+    }
+
     function designOutcome(job) {
       if (!job) return { tone: "warn", label: "尚未选择任务", detail: "选择任务后查看工程状态。" };
       const engineering = designEngineering(job);
       const overall = String(engineering.overall_status || "").toLowerCase();
       const numerical = engineering.numerical_converged ?? job.result?.converged ?? null;
       const feasible = engineering.engineering_feasible ?? null;
+      const blockingFailedCount = engineering.blocking_failed_count;
+      const validationGaps = designValidationGaps(job);
+      const outcome = (value) => ({
+        ...value,
+        limitedScope: validationGaps.length > 0,
+        validationGaps,
+      });
       const failedStatuses = ["failed", "cancelled", "timed_out", "interrupted"];
       if (failedStatuses.includes(job.status)) {
-        return { tone: "fail", label: designJobStatusLabel(job.status), detail: job.error || job.message || "任务未完成。" };
+        return outcome({ tone: "fail", label: designJobStatusLabel(job.status), detail: job.error || job.message || "任务未完成。" });
       }
       if (job.status === "nonconverged" || overall === "nonconverged" || numerical === false) {
-        return { tone: "fail", label: "数值未收敛", detail: "当前结果不能作为工程可行方案。" };
+        return outcome({ tone: "fail", label: "数值未收敛", detail: "当前结果不能作为工程可行方案。" });
       }
-      if (job.status === "engineering_infeasible" || overall === "infeasible" || feasible === false) {
-        return { tone: "fail", label: "工程不可行", detail: "计算已完成，但至少一个阻断约束或阶段门未通过。" };
+      if (job.status === "engineering_infeasible" || overall === "infeasible" || feasible === false || blockingFailedCount > 0) {
+        const detail = blockingFailedCount > 0
+          ? `计算已完成，但仍有 ${blockingFailedCount} 个阻断约束或阶段门未通过。`
+          : "计算已完成，但至少一个阻断约束或阶段门未通过。";
+        return outcome({ tone: "fail", label: "工程不可行", detail });
       }
-      if ((overall === "feasible" || feasible === true) && numerical !== false) {
-        return { tone: "pass", label: "工程可行", detail: "数值已收敛，阻断约束和阶段门均通过。" };
+      const hardGatesPass = numerical === true && feasible === true && blockingFailedCount === 0;
+      if (hardGatesPass && validationGaps.length) {
+        return outcome({
+          tone: "pass",
+          label: "覆盖范围内初步通过",
+          detail: `数值已收敛，当前覆盖范围内的阻断约束和阶段门均通过。这是当前模型覆盖范围内的初步候选，仍有 ${validationGaps.length} 项专项验证缺口。`,
+        });
+      }
+      if (hardGatesPass) {
+        return outcome({
+          tone: "pass",
+          label: "初步可行候选",
+          detail: "数值已收敛，阻断约束和阶段门均通过。该结论仅代表当前初步模型结论，不代表生产就绪或飞行安全。",
+        });
       }
       if (["queued", "running", "preparing", "validating"].includes(job.status) || !job.terminal) {
-        return { tone: "warn", label: designJobStatusLabel(job.status), detail: job.message || "工程校验尚未完成。" };
+        return outcome({ tone: "warn", label: designJobStatusLabel(job.status), detail: job.message || "工程校验尚未完成。" });
       }
-      return {
+      return outcome({
         tone: "warn",
         label: job.status === "completed" ? "计算完成，待工程判定" : designJobStatusLabel(job.status),
-        detail: "结果缺少完整工程可行性字段，不能标记为通过。",
-      };
+        detail: "结果缺少数值收敛、工程可行性或阻断项计数中的完整判定字段，不能标记为通过。",
+      });
     }
 
     function normalizeDesignStages(value) {
@@ -2120,6 +2826,7 @@
     }
 
     function renderDesignRunTimeline() {
+      if (!designRunTimeline) return;
       designRunTimeline.innerHTML = "";
       const events = state.designJobEvents || [];
       if (!events.length) {
@@ -2785,10 +3492,43 @@
       const headlineStates = designNode("div", "design-outcome-states");
       const numerical = engineering.numerical_converged ?? job.result?.converged ?? null;
       const feasible = engineering.engineering_feasible ?? null;
+      const blockingFailedCount = engineering.blocking_failed_count;
       headlineStates.appendChild(designStatusChip(numerical === true ? "数值已收敛" : numerical === false ? "数值未收敛" : "收敛状态未知", numerical === true ? "pass" : numerical === false ? "fail" : "warn"));
-      headlineStates.appendChild(designStatusChip(feasible === true ? "约束已通过" : feasible === false ? "约束未通过" : "可行性待判定", feasible === true ? "pass" : feasible === false ? "fail" : "warn"));
+      const blockingPass = feasible === true && blockingFailedCount === 0;
+      const blockingLabel = blockingPass
+        ? "阻断约束已通过"
+        : blockingFailedCount > 0
+          ? `阻断项 ${blockingFailedCount} 项未通过`
+          : feasible === false
+            ? "工程约束未通过"
+            : feasible === true
+              ? "阻断项数量未知"
+              : "可行性待判定";
+      headlineStates.appendChild(designStatusChip(blockingLabel, blockingPass ? "pass" : feasible === false || blockingFailedCount > 0 ? "fail" : "warn"));
+      if (outcome.validationGaps?.length) {
+        headlineStates.appendChild(designStatusChip(`专项验证缺口 ${outcome.validationGaps.length} 项`, "warn"));
+      }
       headline.appendChild(headlineStates);
       designResultsContent.appendChild(headline);
+
+      if (outcome.validationGaps?.length) {
+        const gapSection = createDesignSection(
+          "专项验证缺口",
+          "以下要求仍保留在需求基线中，但当前总体模型尚未完成对应专项验证。",
+        );
+        gapSection.dataset.testid = "design-validation-gaps";
+        const rows = outcome.validationGaps.map((gap) => ({
+          className: "is-warn",
+          cells: [
+            gap.path,
+            formatDesignValue(gap.value),
+            gap.reason || "--",
+            [gap.scopeStatement, gap.source ? "来源：" + gap.source : ""].filter(Boolean).join(" · ") || "--",
+          ],
+        }));
+        gapSection.appendChild(createDesignTable(["字段", "保留值", "覆盖原因", "范围说明 / 来源"], rows));
+        designResultsContent.appendChild(gapSection);
+      }
 
       const metricSection = createDesignSection("关键设计点");
       const metricData = [
@@ -2798,7 +3538,7 @@
         ["推重比", engineering.design_point?.thrust_to_weight ?? summary.thrust_to_weight, "", 3],
         ["海平面推力", summary.thrust_sl_n, "N", 0],
         ["翼展", summary.span_m, "m", 2],
-        ["实际航程", finiteDesignNumber(summary.actual_range_m) === null ? null : Number(summary.actual_range_m) / 1000, "km", 1],
+        [designRangeMetricLabel(summary.range_metric_kind), finiteDesignNumber(summary.actual_range_m) === null ? null : Number(summary.actual_range_m) / 1000, "km", 1],
         ["迭代次数", summary.iterations, "次", 0],
       ];
       const metrics = designNode("div", "design-result-metrics workspace-metrics");
@@ -3043,6 +3783,10 @@
       headline.appendChild(createDesignTable(["项目", ...jobs.map((job, index) => (index === 0 ? "基准 · " : "") + (job.request?.project_name || job.job_id))], outcomeRows));
       designCompareContent.appendChild(headline);
 
+      const rangeKinds = jobs.map((job) => job.result?.summary?.range_metric_kind);
+      const rangeLabel = rangeKinds.every((kind) => kind === rangeKinds[0])
+        ? designRangeMetricLabel(rangeKinds[0])
+        : "航程指标（证据类型不同）";
       const metrics = [
         ["mtow_kg", "最大起飞重量", "kg", 1],
         ["empty_weight_kg", "空重", "kg", 1],
@@ -3051,7 +3795,7 @@
         ["wing_loading_pa", "翼载", "Pa", 0],
         ["thrust_to_weight", "推重比", "", 3],
         ["span_m", "翼展", "m", 2],
-        ["actual_range_km", "实际航程", "km", 1],
+        ["actual_range_km", rangeLabel, "km", 1],
       ];
       const metricRows = metrics.map(([key, label, unit, digits]) => {
         const values = jobs.map((job) => compareMetricValue(job, key));
@@ -3239,6 +3983,10 @@
     }
 
     function renderDesignJobHistory() {
+      if (!designJobHistoryList) {
+        renderDesignCompareSelector();
+        return;
+      }
       designJobHistoryList.innerHTML = "";
       if (!state.designJobs.length) {
         const empty = document.createElement("div");
@@ -3467,8 +4215,8 @@
           if (parsed.event === "progress") {
             if ((parsed.data.sequence || 0) <= state.designJobSequence) continue;
             state.designJobSequence = parsed.data.sequence || state.designJobSequence;
-            designProgress.value = parsed.data.progress || 0;
-            designRunStatus.textContent = parsed.data.message || "正在计算";
+            if (designProgress) designProgress.value = parsed.data.progress || 0;
+            if (designRunStatus) designRunStatus.textContent = parsed.data.message || "正在计算";
             state.designJobEvents.push(designProgressEvent(parsed.data));
             refreshDesignJobMessage();
             renderDesignRunTimeline();
@@ -3515,14 +4263,14 @@
           state.designJobDetails[job.job_id] = job;
           state.designJobSequence = job.last_sequence || state.designJobSequence;
           state.designJobEvents = (job.events || []).map(designProgressEvent);
-          designProgress.value = job.progress || 0;
-          designRunStatus.textContent = job.message || designJobStatusLabel(job.status);
+          if (designProgress) designProgress.value = job.progress || 0;
+          if (designRunStatus) designRunStatus.textContent = job.message || designJobStatusLabel(job.status);
           renderDesignRunTimeline();
           if (job.terminal) return { job };
         } catch (error) {
           if (signal.aborted) throw error;
           transientFailures += 1;
-          designRunStatus.textContent = "任务仍在服务端运行，正在重新查询" + (transientFailures > 1 ? "（" + transientFailures + "）" : "");
+          if (designRunStatus) designRunStatus.textContent = "任务仍在服务端运行，正在重新查询" + (transientFailures > 1 ? "（" + transientFailures + "）" : "");
         }
         await waitForDesignPoll(Math.min(1000 + transientFailures * 500, 5000), signal);
       }
@@ -3532,7 +4280,9 @@
     function designResultText(job) {
       const outcome = designOutcome(job);
       const issueText = (job.result?.issues || []).map((issue) => "- " + issue.message).join("\n");
-      const title = outcome.tone === "pass" ? "总体设计方案工程可行" : outcome.tone === "fail" ? "总体设计方案未通过工程判定" : "总体设计计算已完成";
+      const title = outcome.tone === "pass"
+        ? outcome.limitedScope ? "总体设计：覆盖范围内初步通过" : "总体设计：初步可行候选（当前模型）"
+        : outcome.tone === "fail" ? "总体设计方案未通过工程判定" : "总体设计计算已完成";
       return "### " + title + "\n\n" + outcome.detail + (issueText ? "\n\n" + issueText : "");
     }
 
@@ -3549,11 +4299,11 @@
             if (controller.signal.aborted || state.designJobId !== jobId) return;
             reconnects += 1;
             if (reconnects > 3) {
-              designRunStatus.textContent = "实时进度连接不可用，已切换为任务状态查询";
+              if (designRunStatus) designRunStatus.textContent = "实时进度连接不可用，已切换为任务状态查询";
               payload = await pollDesignJobUntilTerminal(jobId, controller.signal);
               break;
             }
-            designRunStatus.textContent = "进度连接中断，正在继续接收...";
+            if (designRunStatus) designRunStatus.textContent = "进度连接中断，正在继续接收...";
             await new Promise((resolve) => setTimeout(resolve, reconnects * 350));
           }
         }
@@ -3574,10 +4324,10 @@
           { events: state.designJobEvents, artifacts: job.artifacts || [], designJob: job, openProcess: false },
         );
         state.renderedDesignJobId = job.job_id;
-        designProgress.value = 100;
-        designRunStatus.textContent = job.message || job.status;
+        if (designProgress) designProgress.value = 100;
+        if (designRunStatus) designRunStatus.textContent = job.message || job.status;
         setDesignRunBusy(false);
-        designRetryBtn.disabled = false;
+        if (designRetryBtn) designRetryBtn.disabled = false;
         const outcome = designOutcome(job);
         setStatus("总体设计任务结束：" + outcome.label + "。", outcome.tone === "fail");
         renderDesignWorkspace();
@@ -3774,9 +4524,10 @@
         if (liveAssistant) liveAssistant.remove();
 
         updateMeta(payload.session);
+        const finalEvents = mergeMessageEvents(liveEvents, payload.reply.events || []);
         appendAssistantReply(payload.reply, {
           elapsedMs: performance.now() - turnStartedAt,
-          events: liveEvents.length ? liveEvents : payload.reply.events,
+          events: finalEvents,
           artifacts: payload.reply.artifacts,
         });
         await refreshSessions();

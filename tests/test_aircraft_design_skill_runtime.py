@@ -16,6 +16,7 @@ sys.path.insert(0, str(UPSTREAM_ROOT))
 from aircraft_design.class2_preliminary.design_loop_orchestrator import (  # noqa: E402
     DesignRequirements,
     InitialGuess,
+    SizedAircraft,
     sizing_loop,
 )
 from aircraft_design.class2_preliminary import advanced_design as advanced_design_module  # noqa: E402
@@ -28,10 +29,68 @@ from aircraft_design.class2_preliminary.advanced_design import (  # noqa: E402
     execute_advanced_design,
 )
 from aircraft_design.class2_preliminary.run_sizing import setup_output_directory  # noqa: E402
+from aircraft_design.class2_preliminary.server import SizingResponse  # noqa: E402
 from aircraft_design.class2_preliminary.result_contract import (  # noqa: E402
     normalized_advanced_constraints,
 )
 from aircraft_design.utils.report_generator_unified import UnifiedReportGenerator  # noqa: E402
+
+
+def test_sizing_api_response_preserves_range_evidence_kind() -> None:
+    response = SizingResponse(
+        converged=True,
+        mtow_kg=250.0,
+        empty_weight_kg=130.0,
+        fuel_weight_kg=60.0,
+        wing_area_m2=8.0,
+        thrust_sl_n=1_800.0,
+        geometry={},
+        weight_breakdown={},
+        performance={
+            "actual_range_m": 500_000.0,
+            "range_metric_kind": "evaluated_mission_distance",
+            "takeoff_distance_m": 300.0,
+            "landing_distance_m": 250.0,
+        },
+        iterations=12,
+    )
+
+    assert response.performance.range_metric_kind == "evaluated_mission_distance"
+    assert response.model_dump()["performance"]["range_metric_kind"] == (
+        "evaluated_mission_distance"
+    )
+
+
+def test_sized_aircraft_range_evidence_defaults_to_unknown() -> None:
+    result = SizedAircraft(
+        mtow_kg=1.0,
+        empty_weight_kg=0.5,
+        fuel_weight_kg=0.25,
+        wing_area_m2=1.0,
+        thrust_sl_n=10.0,
+        weight_breakdown={},
+        geometry={},
+        actual_range_m=1_000.0,
+        takeoff_distance_m=10.0,
+        landing_distance_m=10.0,
+        converged=True,
+        iterations=1,
+    )
+
+    assert result.range_metric_kind == "unknown"
+
+
+def test_unified_report_fails_closed_for_unknown_range_evidence() -> None:
+    section = UnifiedReportGenerator(project_name="unknown-range")._section_requirements_analysis(
+        {},
+        {},
+        {"actual_range_m": 500_000.0, "range_metric_kind": "unknown"},
+    )
+
+    assert "航程指标（证据类型未声明）" in section
+    assert "不得解释为实际、已达或最大航程能力" in section
+    assert "预测最大航程" not in section
+    assert "评估任务航程" not in section
 
 
 def test_medium_uav_sizing_initializes_scale_classification() -> None:
@@ -68,6 +127,7 @@ def test_medium_uav_sizing_initializes_scale_classification() -> None:
 
     assert result.iterations == 1
     assert result.mtow_kg > 0.0
+    assert result.range_metric_kind == "evaluated_mission_distance"
 
 
 def test_infeasible_landing_distance_preserves_finite_design_state() -> None:

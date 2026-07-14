@@ -217,7 +217,6 @@ class StaticPlotter:
 
         # --- TOP VIEW (X-Y) ---
         ax = fig.add_subplot(111)
-        ax.set_aspect("equal")
 
         # Fuselage
         fl, fd = fus.get("length_m", 10), fus.get("diameter_m", 1)
@@ -267,15 +266,18 @@ class StaticPlotter:
         ax.set_ylabel("Y (m)")
         ax.grid(True)
         ax.legend()
+        ax.relim()
+        ax.autoscale_view()
+        ax.margins(x=0.08, y=0.08)
+        ax.set_aspect("equal", adjustable="box")
 
         path_top = self.output_dir / "view_top_static.png"
-        plt.savefig(path_top, bbox_inches="tight")
-        plt.close()
+        fig.savefig(path_top, bbox_inches="tight")
+        plt.close(fig)
 
         # --- SIDE VIEW (X-Z) ---
         fig = plt.figure(figsize=(10, 6))
         ax = fig.add_subplot(111)
-        ax.set_aspect("equal")
 
         # Fuselage
         ax.add_patch(plt.Rectangle((fx, -fd / 2), fl, fd, fill=False, edgecolor="black", linewidth=2))
@@ -302,13 +304,14 @@ class StaticPlotter:
         ax.set_xlabel("X (m)")
         ax.set_ylabel("Z (m)")
         ax.grid(True)
-        ax.invert_yaxis()  # Z down? Standard Aero is Z down, but for plot Z up is better for humans.
-        # Let's keep Z up (positive up).
-        ax.set_ylim(-5, 5)  # Adjust
+        ax.relim()
+        ax.autoscale_view()
+        ax.margins(x=0.08, y=0.08)
+        ax.set_aspect("equal", adjustable="box")
 
         path_side = self.output_dir / "view_side_static.png"
-        plt.savefig(path_side, bbox_inches="tight")
-        plt.close()
+        fig.savefig(path_side, bbox_inches="tight")
+        plt.close(fig)
 
         # Iso view is hard in 2D static plotter without 3D projection, skipping for now or using side/top
         # Return paths
